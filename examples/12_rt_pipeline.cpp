@@ -90,7 +90,7 @@ namespace {
 		      blas_ci.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
 		      blas_ci.size = blas_size_info.accelerationStructureSize; // Will be used to allocate memory.
 		      blas_buf_alloc =
-		          *vuk::allocate_buffer(allocator, { .mem_usage = vuk::MemoryUsage::eGPUonly, .size = blas_size_info.accelerationStructureSize, .alignment = 256 });
+		          *vuk::allocate_buffer(allocator, { .memory_usage = vuk::MemoryUsage::eGPUonly, .size = blas_size_info.accelerationStructureSize, .alignment = 256 });
 		      blas_ci.buffer = blas_buf_alloc->buffer;
 		      blas_ci.offset = blas_buf_alloc->offset;
 
@@ -100,7 +100,7 @@ namespace {
 		      // Allocate the scratch memory for the BLAS build
 		      auto blas_scratch_buffer =
 		          *vuk::allocate_buffer(allocator,
-		                                vuk::BufferCreateInfo{ .mem_usage = vuk::MemoryUsage::eGPUonly,
+		                                vuk::BufferCreateInfo{ .memory_usage = vuk::MemoryUsage::eGPUonly,
 		                                                       .size = blas_size_info.buildScratchSize,
 		                                                       .alignment = ctx.as_properties.minAccelerationStructureScratchOffsetAlignment });
 
@@ -152,7 +152,7 @@ namespace {
 		      tlas_ci.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
 		      tlas_ci.size = tlas_size_info.accelerationStructureSize;
 		      tlas_buf_alloc =
-		          *vuk::allocate_buffer(allocator, { .mem_usage = vuk::MemoryUsage::eGPUonly, .size = tlas_size_info.accelerationStructureSize, .alignment = 256 });
+		          *vuk::allocate_buffer(allocator, { .memory_usage = vuk::MemoryUsage::eGPUonly, .size = tlas_size_info.accelerationStructureSize, .alignment = 256 });
 		      tlas_ci.buffer = tlas_buf_alloc->buffer;
 		      tlas_ci.offset = tlas_buf_alloc->offset;
 
@@ -162,7 +162,7 @@ namespace {
 		      // Allocate the scratch memory
 		      tlas_scratch_buffer_alloc =
 		          *vuk::allocate_buffer(allocator,
-		                                vuk::BufferCreateInfo{ .mem_usage = vuk::MemoryUsage::eGPUonly,
+		                                vuk::BufferCreateInfo{ .memory_usage = vuk::MemoryUsage::eGPUonly,
 		                                                       .size = tlas_size_info.buildScratchSize,
 		                                                       .alignment = ctx.as_properties.minAccelerationStructureScratchOffsetAlignment });
 

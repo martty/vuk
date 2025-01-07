@@ -132,11 +132,9 @@ namespace vuk {
 	};
 
 	using namespace std::literals;
-	std::vector<std::string_view> arg_names(Type* t) {
+	std::vector<std::string_view> arg_names(Type* t) { // TODO: decommission
 		if (t->hash_value == current_module->types.builtin_image) {
 			return { "width"sv, "height"sv, "depth"sv, "format"sv, "samples"sv, "base_layer"sv, "layer_count"sv, "base_level"sv, "level_count"sv };
-		} else if (t->hash_value == current_module->types.builtin_buffer) {
-			return { "size"sv };
 		} else {
 			assert(0);
 			return {};
@@ -1302,6 +1300,10 @@ namespace vuk {
 			// we run nodes twice - first time we reenqueue at the front and then put all deps before it
 			// second time we see it, we know that all deps have run, so we can run the node itself
 			switch (node->kind) {
+			case Node::CONSTANT: {
+				sched.done(node, host_stream, node->constant.value);
+				break;
+			}
 			case Node::MATH_BINARY: {
 				auto do_op = [&]<class T>(T, Node* node) -> T {
 					T& a = sched.get_value<T>(node->math_binary.a);
@@ -1551,7 +1553,7 @@ namespace vuk {
 					if (auto res = allocator.allocate_memory(std::span{ static_cast<ptr_base*>(&buf), 1 }, std::span{ &bci, 1 }); !res) {
 						return res;
 					}
-
+					allocator.deallocate(std::span{ static_cast<ptr_base*>(&buf), 1 });
 #ifdef VUK_DUMP_EXEC
 					print_results(node);
 					fmt::print(" = allocate<{}> ", Type::to_string(node->type[0].get()));
@@ -1707,10 +1709,8 @@ namespace vuk {
 							break;
 						case DescriptorType::eUniformBuffer:
 						case DescriptorType::eStorageBuffer:
-							auto& v = *reinterpret_cast<view<BufferLike<void>>*>(val);
-							auto& ae = alloc.get_context().resolve_ptr(v.data());
-							Buffer buf{ nullptr, ae.buffer.buffer, ae.buffer.offset, v.size() };
-							cobuf.bind_buffer(set, binding->binding, buf);
+							auto& v = *reinterpret_cast<view<BufferLike<byte>>*>(val);
+							cobuf.bind_buffer(set, binding->binding, v);
 							break;
 						case DescriptorType::eSampler:
 							cobuf.bind_sampler(set, binding->binding, *reinterpret_cast<SamplerCreateInfo*>(val));

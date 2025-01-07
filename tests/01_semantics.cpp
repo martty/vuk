@@ -35,7 +35,7 @@ TEST_CASE("conversion to SSA") {
 	std::string trace = "";
 	[[maybe_unused]] auto& oa = current_module;
 
-	auto decl = declare_buf("_a", { .size = sizeof(uint32_t) * 4, .memory_usage = MemoryUsage::eGPUonly });
+	auto decl = declare_buf("_a", { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
 	make_unary_void("a", trace)(decl);
 	make_unary_void("b", trace)(decl);
 	make_unary_void<Access::eTransferRead>("c", trace)(decl);
@@ -52,8 +52,8 @@ TEST_CASE("minimal graph is submitted") {
 		fmt::println("{}\n", current_module->op_arena.size());
 		std::string trace = "";
 
-		auto a = make_unary_computation("a", trace)(declare_buf("_a", { .size = sizeof(uint32_t) * 4, .memory_usage = MemoryUsage::eGPUonly }));
-		auto b = make_unary_computation("b", trace)(declare_buf("_b", { .size = sizeof(uint32_t) * 4, .memory_usage = MemoryUsage::eGPUonly }));
+		auto a = make_unary_computation("a", trace)(declare_buf("_a", { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 }));
+		auto b = make_unary_computation("b", trace)(declare_buf("_b", { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 }));
 
 		auto d = make_binary_computation("d", trace)(a, b); // d->a, d->b
 		auto e = make_unary_computation("e", trace)(a);     // e->a
@@ -69,8 +69,8 @@ TEST_CASE("graph is cleaned up after submit") {
 	[[maybe_unused]] auto& oa = current_module->op_arena;
 	CHECK(current_module->op_arena.size() == 0);
 
-	auto a = make_unary_computation("a", trace)(declare_buf("_a", { .size = sizeof(uint32_t) * 4, .memory_usage = MemoryUsage::eGPUonly }));
-	// auto b = make_unary_computation("b", trace)(declare_buf("_b", { .size = sizeof(uint32_t) * 4, .memory_usage = MemoryUsage::eGPUonly }));
+	auto a = make_unary_computation("a", trace)(declare_buf("_a", { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 }));
+	// auto b = make_unary_computation("b", trace)(declare_buf("_b", { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 }));
 
 	// auto d = make_binary_computation("d", trace)(a, b); // d->a, d->b
 	auto e = make_unary_computation("e", trace)(a); // e->a
@@ -88,8 +88,8 @@ TEST_CASE("graph is cleaned up after submit") {
 TEST_CASE("computation is never duplicated") {
 	std::string trace = "";
 
-	auto a = make_unary_computation("a", trace)(declare_buf("_a", { .size = sizeof(uint32_t) * 4, .memory_usage = MemoryUsage::eGPUonly }));
-	auto b = make_unary_computation("b", trace)(declare_buf("_b", { .size = sizeof(uint32_t) * 4, .memory_usage = MemoryUsage::eGPUonly }));
+	auto a = make_unary_computation("a", trace)(declare_buf("_a", { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 }));
+	auto b = make_unary_computation("b", trace)(declare_buf("_b", { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 }));
 
 	auto d = make_binary_computation("d", trace)(a, b); // d->a, d->b
 	auto e = make_unary_computation("e", trace)(a);     // e->a
@@ -103,8 +103,8 @@ TEST_CASE("computation is never duplicated") {
 TEST_CASE("computation is never duplicated 2") {
 	std::string trace = "";
 
-	auto a = make_unary_computation("a", trace)(declare_buf("_a", { .size = sizeof(uint32_t) * 4, .memory_usage = MemoryUsage::eGPUonly }));
-	auto b = make_unary_computation("b", trace)(declare_buf("_b", { .size = sizeof(uint32_t) * 4, .memory_usage = MemoryUsage::eGPUonly }));
+	auto a = make_unary_computation("a", trace)(declare_buf("_a", { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 }));
+	auto b = make_unary_computation("b", trace)(declare_buf("_b", { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 }));
 
 	auto d = make_binary_computation("d", trace)(a, b); // d->a, d->b
 	d.submit(*test_context.allocator, test_context.compiler);
@@ -117,8 +117,8 @@ TEST_CASE("computation is never duplicated 2") {
 TEST_CASE("computation is never duplicated 3") {
 	std::string trace = "";
 
-	auto a = make_unary_computation("a", trace)(declare_buf("_a", { .size = sizeof(uint32_t) * 4, .memory_usage = MemoryUsage::eGPUonly }));
-	auto b = make_unary_computation("b", trace)(declare_buf("_b", { .size = sizeof(uint32_t) * 4, .memory_usage = MemoryUsage::eGPUonly }));
+	auto a = make_unary_computation("a", trace)(declare_buf("_a", { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 }));
+	auto b = make_unary_computation("b", trace)(declare_buf("_b", { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 }));
 
 	auto [ap, bp] = make_pass("d", [=, &trace](CommandBuffer& cbuf, VUK_BA(Access::eTransferWrite) a, VUK_BA(Access::eTransferWrite) b) {
 		trace += "d";
@@ -136,8 +136,8 @@ TEST_CASE("computation is never duplicated 3") {
 TEST_CASE("not moving Values will emit splices") {
 	std::string trace = "";
 
-	auto a = make_unary_computation("a", trace)(declare_buf("_a", { .size = sizeof(uint32_t) * 4, .memory_usage = MemoryUsage::eGPUonly }));
-	auto b = make_unary_computation("b", trace)(declare_buf("_b", { .size = sizeof(uint32_t) * 4, .memory_usage = MemoryUsage::eGPUonly }));
+	auto a = make_unary_computation("a", trace)(declare_buf("_a", { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 }));
+	auto b = make_unary_computation("b", trace)(declare_buf("_b", { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 }));
 
 	auto d = make_binary_computation("d", trace)(a, b); // d->a, d->b
 	d.submit(*test_context.allocator, test_context.compiler);
@@ -149,8 +149,8 @@ TEST_CASE("not moving Values will emit splices") {
 TEST_CASE("moving Values allows for more efficient building (but no semantic change)") {
 	std::string trace = "";
 
-	auto a = make_unary_computation("a", trace)(declare_buf("_a", { .size = sizeof(uint32_t) * 4, .memory_usage = MemoryUsage::eGPUonly }));
-	auto b = make_unary_computation("b", trace)(declare_buf("_b", { .size = sizeof(uint32_t) * 4, .memory_usage = MemoryUsage::eGPUonly }));
+	auto a = make_unary_computation("a", trace)(declare_buf("_a", { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 }));
+	auto b = make_unary_computation("b", trace)(declare_buf("_b", { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 }));
 
 	auto d = make_binary_computation("d", trace)(std::move(a), std::move(b)); // d->a, d->b
 	d.submit(*test_context.allocator, test_context.compiler);
@@ -162,8 +162,8 @@ TEST_CASE("moving Values allows for more efficient building (but no semantic cha
 TEST_CASE("moving Values doesn't help if it was leaked before") {
 	std::string trace = "";
 
-	auto a = make_unary_computation("a", trace)(declare_buf("_a", { .size = sizeof(uint32_t) * 4, .memory_usage = MemoryUsage::eGPUonly }));
-	auto b = make_unary_computation("b", trace)(declare_buf("_b", { .size = sizeof(uint32_t) * 4, .memory_usage = MemoryUsage::eGPUonly }));
+	auto a = make_unary_computation("a", trace)(declare_buf("_a", { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 }));
+	auto b = make_unary_computation("b", trace)(declare_buf("_b", { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 }));
 
 	auto d = make_binary_computation("d", trace)(a, b);        // d->a, d->b
 	auto e = make_unary_computation("e", trace)(std::move(a)); // e->a <--- a cannot be consumed here! since previously we made d depend on a
@@ -176,7 +176,7 @@ TEST_CASE("moving Values doesn't help if it was leaked before") {
 TEST_CASE("scheduling single-queue") {
 	std::string execution;
 
-	auto buf0 = allocate_buffer(*test_context.allocator, { .mem_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
+	auto buf0 = allocate_memory(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
 
 	auto write = make_pass("write", [&](CommandBuffer& cbuf, VUK_BA(Access::eTransferWrite) dst) {
 		execution += "w";
@@ -220,9 +220,9 @@ TEST_CASE("write-read-write") {
 	std::string execution;
 
 	for (int i = 0; i < 32; i++) {
-		auto buf0 = allocate_buffer(*test_context.allocator, { .mem_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
-		auto buf1 = allocate_buffer(*test_context.allocator, { .mem_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
-		auto buf2 = allocate_buffer(*test_context.allocator, { .mem_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
+		auto buf0 = allocate_memory(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
+		auto buf1 = allocate_memory(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
+		auto buf2 = allocate_memory(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
 
 		auto write = make_pass("write", [&](CommandBuffer& cbuf, VUK_BA(Access::eTransferWrite) dst) {
 			execution += "w";
@@ -256,8 +256,8 @@ TEST_CASE("write-read-write") {
 TEST_CASE("scheduling with submitted") {
 	std::string execution;
 
-	auto buf0 = allocate_buffer(*test_context.allocator, { .mem_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
-	auto buf1 = allocate_buffer(*test_context.allocator, { .mem_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
+	auto buf0 = allocate_memory(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
+	auto buf1 = allocate_memory(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
 
 	auto write = make_pass("write", [&](CommandBuffer& cbuf, VUK_BA(Access::eTransferWrite) dst) {
 		execution += "w";
@@ -315,7 +315,7 @@ TEST_CASE("scheduling with submitted") {
 TEST_CASE("multi-queue buffers") {
 	std::string execution;
 
-	auto buf0 = allocate_buffer(*test_context.allocator, { .mem_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
+	auto buf0 = allocate_memory(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
 
 	auto write = make_pass(
 	    "write_A",
@@ -338,8 +338,8 @@ TEST_CASE("multi-queue buffers") {
 	auto read = make_pass(
 	    "read_B",
 	    [&](CommandBuffer& cbuf, VUK_BA(Access::eTransferRead) dst) {
-		    auto dummy = allocate_buffer(*test_context.allocator, { .mem_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
-		    cbuf.copy_buffer(**dummy, dst);
+		    auto dummy = allocate_memory<uint32_t>(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
+		    cbuf.copy_buffer(Buffer<uint32_t>{ **dummy, 4 }.to_byte_view(), dst);
 		    execution += "r";
 		    CHECK((cbuf.get_scheduled_domain() & DomainFlagBits::eGraphicsQueue).m_mask != 0);
 		    return dst;
@@ -411,7 +411,7 @@ TEST_CASE("multi-queue buffers") {
 TEST_CASE("queue inference") {
 	std::string execution;
 
-	auto buf0 = allocate_buffer(*test_context.allocator, { .mem_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
+	auto buf0 = allocate_memory(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
 
 	auto transfer = make_pass(
 	    "transfer",
@@ -433,8 +433,8 @@ TEST_CASE("queue inference") {
 	auto gfx = make_pass(
 	    "gfx",
 	    [&](CommandBuffer& cbuf, VUK_BA(Access::eTransferWrite) dst) {
-		    auto dummy = allocate_buffer(*test_context.allocator, { .mem_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
-		    cbuf.copy_buffer(**dummy, dst);
+		    auto dummy = allocate_memory<uint32_t>(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
+		    cbuf.copy_buffer(Buffer<uint32_t>{ **dummy, 4 }.to_byte_view(), dst);
 		    execution += "g";
 		    CHECK((cbuf.get_scheduled_domain() & DomainFlagBits::eGraphicsQueue).m_mask != 0);
 		    return dst;
@@ -450,38 +450,41 @@ TEST_CASE("queue inference") {
 }
 
 TEST_CASE("multi return pass") {
-	auto buf0 = allocate_buffer(*test_context.allocator, { .mem_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
-	auto buf1 = allocate_buffer(*test_context.allocator, { .mem_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
-	auto buf2 = allocate_buffer(*test_context.allocator, { .mem_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
+	auto buf0 = allocate_memory<uint32_t>(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
+	auto buf1 = allocate_memory<uint32_t>(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
+	auto buf2 = allocate_memory<uint32_t>(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
 
-	auto fills = make_pass(
-	    "fills", [](CommandBuffer& cbuf, VUK_BA(Access::eTransferWrite) dst0, VUK_BA(Access::eTransferWrite) dst1, VUK_BA(Access::eTransferWrite) dst2) {
-		    cbuf.fill_buffer(dst0, 0xfc);
-		    cbuf.fill_buffer(dst1, 0xfd);
-		    cbuf.fill_buffer(dst2, 0xfe);
-		    return std::tuple{ dst0, dst1, dst2 };
-	    });
+	auto fills = make_pass("fills",
+	                       [](CommandBuffer& cbuf,
+	                          VUK_ARG(Buffer<uint32_t>, Access::eTransferWrite) dst0,
+	                          VUK_ARG(Buffer<uint32_t>, Access::eTransferWrite) dst1,
+	                          VUK_ARG(Buffer<uint32_t>, Access::eTransferWrite) dst2) {
+		                       cbuf.fill_buffer(dst0->to_byte_view(), 0xfcu);
+		                       cbuf.fill_buffer(dst1->to_byte_view(), 0xfdu);
+		                       cbuf.fill_buffer(dst2->to_byte_view(), 0xfeu);
+		                       return std::tuple{ dst0, dst1, dst2 };
+	                       });
 
 	auto [buf0p, buf1p, buf2p] = fills(discard_buf("src0", **buf0), discard_buf("src1", **buf1), discard_buf("src2", **buf2));
 	{
 		auto data = { 0xfcu, 0xfcu, 0xfcu, 0xfcu };
 		auto res = download_buffer(buf0p).get(*test_context.allocator, test_context.compiler);
-		CHECK(std::span((uint32_t*)res->mapped_ptr, 4) == std::span(data));
+		CHECK(res->to_span() == std::span(data));
 	}
 	{
 		auto data = { 0xfdu, 0xfdu, 0xfdu, 0xfdu };
 		auto res = download_buffer(buf1p).get(*test_context.allocator, test_context.compiler);
-		CHECK(std::span((uint32_t*)res->mapped_ptr, 4) == std::span(data));
+		CHECK(res->to_span() == std::span(data));
 	}
 	{
 		auto data = { 0xfeu, 0xfeu, 0xfeu, 0xfeu };
 		auto res = download_buffer(buf2p).get(*test_context.allocator, test_context.compiler);
-		CHECK(std::span((uint32_t*)res->mapped_ptr, 4) == std::span(data));
+		CHECK(res->to_span() == std::span(data));
 	}
 }
 
 TEST_CASE("multi fn calls") {
-	auto buf0 = allocate_buffer(*test_context.allocator, { .mem_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
+	auto buf0 = allocate_memory(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
 
 	std::unique_ptr<int> a = std::make_unique<int>(5);
 	auto p = make_pass("fills", [ab = std::move(a)](CommandBuffer& cbuf, VUK_BA(Access::eTransferWrite) dst0) {
@@ -489,7 +492,7 @@ TEST_CASE("multi fn calls") {
 		return dst0;
 	});
 
-	p(p(discard_buf("src0", **buf0))).get(*test_context.allocator, test_context.compiler);
+	p(p(discard_buf("src0", **buf0))).wait(*test_context.allocator, test_context.compiler);
 }
 
 TEST_CASE("release sync") {

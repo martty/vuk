@@ -42,7 +42,8 @@ namespace vuk {
 	}
 
 	template<class T>
-	void RadixTree<T>::insert(uint64_t key, size_t size, T value) {
+	bool RadixTree<T>::insert(uint64_t key, size_t size, T value) {
+		bool already_exists = false;
 		uint64_t bit = first_bit;
 		auto width = std::bit_width(size);
 		uint64_t mask = ~((1 << (width - 1)) - 1);
@@ -50,6 +51,11 @@ namespace vuk {
 		RadixTreeNode<T>* next = reinterpret_cast<RadixTreeNode<T>*>(root);
 
 		while (bit & mask) {
+			if (node->present) {
+				already_exists = true;
+			}
+			node->present = false;
+
 			if (key & bit) {
 				next = node->right;
 			} else {
@@ -67,7 +73,7 @@ namespace vuk {
 		if (next) { // the tree nodes exist to the depth needed, set value and done
 			node->value = value;
 			node->present = true;
-			return;
+			return already_exists;
 		}
 
 		// tree nodes need insertion
@@ -84,6 +90,10 @@ namespace vuk {
 			}
 
 			bit >>= 1;
+			if (node->present) {
+				already_exists = true;
+			}
+			node->present = false;
 			node = next;
 		}
 		// no contention possible here
@@ -91,18 +101,21 @@ namespace vuk {
 		node->present = true;
 		// at this point there is a value present here, so readers cannot descend below this node
 		// TODO: clean up any nodes below
+		return already_exists;
 	}
 
 	template<class T>
 	template<class F, F f, class... Args>
-	void RadixTree<T>::handle_unaligned(size_t base, size_t size, Args... values) {
+	bool RadixTree<T>::handle_unaligned(size_t base, size_t size, Args... values) {
+		bool value = false;
 		// fmt::println("unaligned: {}->{} {}", base, base + size - 1, size);
 		auto p2size = previous_pow2(size);
 		// move the beginning of the allocation up
 		auto start_up = align_up(base, p2size);
 
 		if (start_up > base) {
-			handle_unaligned<F, f>(base, start_up - base, values...);
+			bool r = handle_unaligned<F, f>(base, start_up - base, values...);
+			value |= r;
 		}
 		size -= (start_up - base);
 		p2size = previous_pow2(size);
@@ -110,29 +123,33 @@ namespace vuk {
 		auto size_sliver = size - p2size;
 		// if size is unaligned, align it and the unaligned bit send separately
 		if (size_sliver > 0) {
-			handle_unaligned<F, f>(start_up + size - size_sliver, size_sliver, values...);
+			bool r = handle_unaligned<F, f>(start_up + size - size_sliver, size_sliver, values...);
+			value |= r;
 		}
 		size = p2size;
 		// middle part is now aligned
 		if (size > 0) {
-			(this->*f)(start_up, size, values...);
+			bool r = (this->*f)(start_up, size, values...);
+			value |= r;
 		}
+
+		return value;
 	}
 
 	template<class T>
-	void RadixTree<T>::insert_unaligned(size_t base, size_t size, T value) {
-		handle_unaligned<decltype(&RadixTree::insert), &RadixTree::insert>(base, size, value);
+	bool RadixTree<T>::insert_unaligned(size_t base, size_t size, T value) {
+		return handle_unaligned<decltype(&RadixTree::insert), &RadixTree::insert>(base, size, value);
 	}
 
 	template<class T>
-	void RadixTree<T>::erase(uint64_t base, size_t size) {
+	bool RadixTree<T>::erase(uint64_t base, size_t size) {
 		uint64_t bit = first_bit;
 		RadixTreeNode<T>* node = reinterpret_cast<RadixTreeNode<T>*>(root);
 
 		while (node) {
 			if (node->present) {
 				node->present = false;
-				return;
+				return false;
 			}
 
 			if (base & bit) {
@@ -143,6 +160,8 @@ namespace vuk {
 
 			bit >>= 1;
 		}
+
+		return false;
 	}
 
 	template<class T>
@@ -152,6 +171,7 @@ namespace vuk {
 
 	template class RadixTree<int>;
 	template class RadixTree<std::pair<size_t, size_t>>;
+	template class RadixTree<bool>;
 	template class RadixTree<AllocationEntry>;
 	template class RadixTree<ViewEntry>;
 } // namespace vuk

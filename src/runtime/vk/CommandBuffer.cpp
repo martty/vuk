@@ -298,7 +298,7 @@ namespace vuk {
 		return bind_ray_tracing_pipeline(ctx.get_named_pipeline(p));
 	}
 
-	CommandBuffer& CommandBuffer::bind_vertex_buffer(unsigned binding, const Buffer& buf, unsigned first_attribute, Packed format, VertexInputRate input_rate) {
+	CommandBuffer& CommandBuffer::bind_vertex_buffer(unsigned binding, const Buffer<>& buf, unsigned first_attribute, Packed format, VertexInputRate input_rate) {
 		VUK_EARLY_RET();
 		assert(binding < VUK_MAX_ATTRIBUTES && "Vertex buffer binding must be smaller than VUK_MAX_ATTRIBUTES.");
 		uint32_t location = first_attribute;
@@ -326,15 +326,15 @@ namespace vuk {
 		binding_descriptions[binding] = vibd;
 		VUK_SB_SET(set_binding_descriptions, binding, true);
 
-		if (buf.buffer) {
-			const VkDeviceSize len = static_cast<VkDeviceSize>(buf.offset);
-			ctx.vkCmdBindVertexBuffers(command_buffer, binding, 1, &buf.buffer, &len);
+		if (buf) {
+			auto& ae = allocator->get_context().resolve_ptr(buf.ptr);
+			ctx.vkCmdBindVertexBuffers(command_buffer, binding, 1, &ae.buffer.buffer, &ae.buffer.offset);
 		}
 		return *this;
 	}
 
 	CommandBuffer& CommandBuffer::bind_vertex_buffer(unsigned binding,
-	                                                 const Buffer& buf,
+	                                                 const Buffer<>& buf,
 	                                                 std::span<VertexInputAttributeDescription> viads,
 	                                                 uint32_t stride,
 	                                                 VertexInputRate input_rate) {
@@ -352,16 +352,17 @@ namespace vuk {
 		binding_descriptions[binding] = vibd;
 		VUK_SB_SET(set_binding_descriptions, binding, true);
 
-		if (buf.buffer) {
-			const VkDeviceSize len = static_cast<VkDeviceSize>(buf.offset);
-			ctx.vkCmdBindVertexBuffers(command_buffer, binding, 1, &buf.buffer, &len);
+		if (buf) {
+			auto& ae = allocator->get_context().resolve_ptr(buf.ptr);
+			ctx.vkCmdBindVertexBuffers(command_buffer, binding, 1, &ae.buffer.buffer, &ae.buffer.offset);
 		}
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::bind_index_buffer(const Buffer& buf, IndexType type) {
+	CommandBuffer& CommandBuffer::bind_index_buffer(const Buffer<>& buffer, IndexType type) {
 		VUK_EARLY_RET();
-		ctx.vkCmdBindIndexBuffer(command_buffer, buf.buffer, buf.offset, (VkIndexType)type);
+		auto& ae = allocator->get_context().resolve_ptr(buffer.ptr);
+		ctx.vkCmdBindIndexBuffer(command_buffer, ae.buffer.buffer, ae.buffer.offset, (VkIndexType)type);
 		return *this;
 	}
 
@@ -395,13 +396,14 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::bind_buffer(unsigned set, unsigned binding, const Buffer& buffer) {
+	CommandBuffer& CommandBuffer::bind_buffer(unsigned set, unsigned binding, const Buffer<>& buffer) {
 		VUK_EARLY_RET();
 		assert(set < VUK_MAX_SETS);
 		assert(binding < VUK_MAX_BINDINGS);
 		sets_to_bind.set(set, true);
 		set_bindings[set].bindings[binding].type = DescriptorType::eUniformBuffer; // just means buffer
-		set_bindings[set].bindings[binding].buffer = VkDescriptorBufferInfo{ buffer.buffer, buffer.offset, buffer.size };
+		auto& ae = allocator->get_context().resolve_ptr(buffer.ptr);
+		set_bindings[set].bindings[binding].buffer = VkDescriptorBufferInfo{ ae.buffer.buffer, ae.buffer.offset, buffer.sz_bytes };
 		set_bindings[set].used.set(binding);
 		return *this;
 	}
@@ -487,14 +489,14 @@ namespace vuk {
 			return nullptr;
 		}
 
-		auto res = allocate_buffer(*allocator, { MemoryUsage::eCPUtoGPU, size, 1 });
+		auto res = allocate_memory(*allocator, { MemoryUsage::eCPUtoGPU, size });
 		if (!res) {
 			current_error = std::move(res);
 			return nullptr;
 		} else {
 			auto& buf = res->get();
-			bind_buffer(set, binding, buf);
-			return buf.mapped_ptr;
+			bind_buffer(set, binding, { buf, size });
+			return &*buf;
 		}
 	}
 
@@ -520,12 +522,13 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::draw_indirect(size_t command_count, const Buffer& indirect_buffer) {
+	CommandBuffer& CommandBuffer::draw_indirect(size_t command_count, const Buffer<>& indirect_buffer) {
 		VUK_EARLY_RET();
 		if (!_bind_graphics_pipeline_state()) {
 			return *this;
 		}
-		ctx.vkCmdDrawIndirect(command_buffer, indirect_buffer.buffer, (uint32_t)indirect_buffer.offset, (uint32_t)command_count, sizeof(DrawIndirectCommand));
+		auto& ae = allocator->get_context().resolve_ptr(indirect_buffer.ptr);
+		ctx.vkCmdDrawIndirect(command_buffer, ae.buffer.buffer, (uint32_t)ae.buffer.offset, (uint32_t)command_count, sizeof(DrawIndirectCommand));
 		return *this;
 	}
 
@@ -535,28 +538,31 @@ namespace vuk {
 			return *this;
 		}
 
-		auto res = allocate_buffer(*allocator, { MemoryUsage::eCPUtoGPU, commands.size_bytes(), 1 });
+		auto res = allocate_memory(*allocator, { MemoryUsage::eCPUtoGPU, commands.size_bytes(), 1 });
 		if (!res) {
 			current_error = std::move(res);
 			return *this;
 		}
 
 		auto& buf = *res;
-		memcpy(buf->mapped_ptr, commands.data(), commands.size_bytes());
-		ctx.vkCmdDrawIndirect(command_buffer, buf->buffer, (uint32_t)buf->offset, (uint32_t)commands.size(), sizeof(DrawIndirectCommand));
+		memcpy(&*buf, commands.data(), commands.size_bytes());
+		auto& ae = allocator->get_context().resolve_ptr(buf.get());
+		ctx.vkCmdDrawIndirect(command_buffer, ae.buffer.buffer, (uint32_t)ae.buffer.offset, (uint32_t)commands.size(), sizeof(DrawIndirectCommand));
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::draw_indirect_count(size_t max_draw_count, const Buffer& indirect_buffer, const Buffer& count_buffer) {
+	CommandBuffer& CommandBuffer::draw_indirect_count(size_t max_draw_count, const Buffer<>& indirect_buffer, const Buffer<>& count_buffer) {
 		VUK_EARLY_RET();
 		if (!_bind_graphics_pipeline_state()) {
 			return *this;
 		}
+		auto& ae_indir = allocator->get_context().resolve_ptr(indirect_buffer.ptr);
+		auto& ae_count = allocator->get_context().resolve_ptr(count_buffer.ptr);
 		ctx.vkCmdDrawIndirectCount(command_buffer,
-		                           indirect_buffer.buffer,
-		                           indirect_buffer.offset,
-		                           count_buffer.buffer,
-		                           count_buffer.offset,
+		                           ae_indir.buffer.buffer,
+		                           ae_indir.buffer.offset,
+		                           ae_count.buffer.buffer,
+		                           ae_count.buffer.offset,
 		                           (uint32_t)max_draw_count,
 		                           sizeof(DrawIndirectCommand));
 		return *this;
@@ -572,13 +578,13 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::draw_indexed_indirect(size_t command_count, const Buffer& indirect_buffer) {
+	CommandBuffer& CommandBuffer::draw_indexed_indirect(size_t command_count, const Buffer<>& indirect_buffer) {
 		VUK_EARLY_RET();
 		if (!_bind_graphics_pipeline_state()) {
 			return *this;
 		}
-		ctx.vkCmdDrawIndexedIndirect(
-		    command_buffer, indirect_buffer.buffer, (uint32_t)indirect_buffer.offset, (uint32_t)command_count, sizeof(DrawIndexedIndirectCommand));
+		auto& ae = allocator->get_context().resolve_ptr(indirect_buffer.ptr);
+		ctx.vkCmdDrawIndexedIndirect(command_buffer, ae.buffer.buffer, (uint32_t)ae.buffer.offset, (uint32_t)command_count, sizeof(DrawIndexedIndirectCommand));
 		return *this;
 	}
 
@@ -588,28 +594,31 @@ namespace vuk {
 			return *this;
 		}
 
-		auto res = allocate_buffer(*allocator, { MemoryUsage::eCPUtoGPU, cmds.size_bytes(), 1 });
+		auto res = allocate_memory(*allocator, { MemoryUsage::eCPUtoGPU, cmds.size_bytes(), 1 });
 		if (!res) {
 			current_error = std::move(res);
 			return *this;
 		}
 
 		auto& buf = *res;
-		memcpy(buf->mapped_ptr, cmds.data(), cmds.size_bytes());
-		ctx.vkCmdDrawIndexedIndirect(command_buffer, buf->buffer, (uint32_t)buf->offset, (uint32_t)cmds.size(), sizeof(DrawIndexedIndirectCommand));
+		memcpy(&*buf, cmds.data(), cmds.size_bytes());
+		auto& ae = allocator->get_context().resolve_ptr(buf.get());
+		ctx.vkCmdDrawIndexedIndirect(command_buffer, ae.buffer.buffer, (uint32_t)ae.buffer.offset, (uint32_t)cmds.size(), sizeof(DrawIndexedIndirectCommand));
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::draw_indexed_indirect_count(size_t max_draw_count, const Buffer& indirect_buffer, const Buffer& count_buffer) {
+	CommandBuffer& CommandBuffer::draw_indexed_indirect_count(size_t max_draw_count, const Buffer<>& indirect_buffer, const Buffer<>& count_buffer) {
 		VUK_EARLY_RET();
 		if (!_bind_graphics_pipeline_state()) {
 			return *this;
 		}
+		auto& ae_indir = allocator->get_context().resolve_ptr(indirect_buffer.ptr);
+		auto& ae_count = allocator->get_context().resolve_ptr(count_buffer.ptr);
 		ctx.vkCmdDrawIndexedIndirectCount(command_buffer,
-		                                  indirect_buffer.buffer,
-		                                  indirect_buffer.offset,
-		                                  count_buffer.buffer,
-		                                  count_buffer.offset,
+		                                  ae_indir.buffer.buffer,
+		                                  ae_indir.buffer.offset,
+		                                  ae_count.buffer.buffer,
+		                                  ae_count.buffer.offset,
 		                                  (uint32_t)max_draw_count,
 		                                  sizeof(DrawIndexedIndirectCommand));
 		return *this;
@@ -683,18 +692,19 @@ namespace vuk {
 		                            (uint32_t)std::ceil(invocations_per_pixel_scale_z * extent.depth));
 	}
 
-	CommandBuffer& CommandBuffer::dispatch_invocations_per_element(const Buffer& buffer, size_t element_size, float invocations_per_element_scale) {
-		auto count = (uint32_t)std::ceil(invocations_per_element_scale * idivceil(buffer.size, element_size));
+	CommandBuffer& CommandBuffer::dispatch_invocations_per_element(const Buffer<>& buffer, size_t element_size, float invocations_per_element_scale) {
+		auto count = (uint32_t)std::ceil(invocations_per_element_scale * idivceil(buffer.sz_bytes, element_size));
 
 		return dispatch_invocations(count, 1, 1);
 	}
 
-	CommandBuffer& CommandBuffer::dispatch_indirect(const Buffer& indirect_buffer) {
+	CommandBuffer& CommandBuffer::dispatch_indirect(const Buffer<>& indirect_buffer) {
 		VUK_EARLY_RET();
 		if (!_bind_compute_pipeline_state()) {
 			return *this;
 		}
-		ctx.vkCmdDispatchIndirect(command_buffer, indirect_buffer.buffer, indirect_buffer.offset);
+		auto& ae = allocator->get_context().resolve_ptr(indirect_buffer.ptr);
+		ctx.vkCmdDispatchIndirect(command_buffer, ae.buffer.buffer, ae.buffer.offset);
 		return *this;
 	}
 
@@ -879,42 +889,45 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::copy_buffer_to_image(const Buffer& src, const ImageAttachment& dst, BufferImageCopy bic) {
+	CommandBuffer& CommandBuffer::copy_buffer_to_image(const Buffer<>& src, const ImageAttachment& dst, BufferImageCopy bic) {
 		VUK_EARLY_RET();
-
-		ctx.vkCmdCopyBufferToImage(command_buffer, src.buffer, dst.image.image, (VkImageLayout)dst.layout, 1, (VkBufferImageCopy*)&bic);
+		auto& ae = allocator->get_context().resolve_ptr(src.ptr);
+		ctx.vkCmdCopyBufferToImage(command_buffer, ae.buffer.buffer, dst.image.image, (VkImageLayout)dst.layout, 1, (VkBufferImageCopy*)&bic);
 
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::copy_image_to_buffer(const ImageAttachment& src, const Buffer& dst, BufferImageCopy bic) {
+	CommandBuffer& CommandBuffer::copy_image_to_buffer(const ImageAttachment& src, const Buffer<>& dst, BufferImageCopy bic) {
 		VUK_EARLY_RET();
-
-		ctx.vkCmdCopyImageToBuffer(command_buffer, src.image.image, (VkImageLayout)src.layout, dst.buffer, 1, (VkBufferImageCopy*)&bic);
+		auto& ae = allocator->get_context().resolve_ptr(dst.ptr);
+		ctx.vkCmdCopyImageToBuffer(command_buffer, src.image.image, (VkImageLayout)src.layout, ae.buffer.buffer, 1, (VkBufferImageCopy*)&bic);
 
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::copy_buffer(const Buffer& src, const Buffer& dst) {
+	CommandBuffer& CommandBuffer::copy_buffer(const Buffer<>& src, const Buffer<>& dst) {
 		VUK_EARLY_RET();
-
 		assert(src.size == dst.size);
 		if (src.size == 0) {
 			return *this;
 		}
+		auto& ae_src = allocator->get_context().resolve_ptr(src.ptr);
+		auto& ae_dst = allocator->get_context().resolve_ptr(dst.ptr);
 
-		if (src.buffer == dst.buffer) {
-			bool overlap_a = src.offset > dst.offset && src.offset < (dst.offset + dst.size);
-			bool overlap_b = dst.offset > src.offset && dst.offset < (src.offset + src.size);
+		assert(src.sz_bytes == dst.sz_bytes);
+
+		if (ae_src.buffer.buffer == ae_dst.buffer.buffer) { // the given views potentially alias
+			bool overlap_a = ae_src.buffer.offset > ae_dst.buffer.offset && ae_src.buffer.offset < (ae_dst.buffer.offset + dst.sz_bytes);
+			bool overlap_b = ae_dst.buffer.offset > ae_src.buffer.offset && ae_dst.buffer.offset < (ae_src.buffer.offset + src.sz_bytes);
 			assert(!overlap_a && !overlap_b);
 		}
 
 		VkBufferCopy bc{};
-		bc.srcOffset += src.offset;
-		bc.dstOffset += dst.offset;
-		bc.size = src.size;
+		bc.srcOffset = ae_src.buffer.offset;
+		bc.dstOffset = ae_dst.buffer.offset;
+		bc.size = src.sz_bytes;
 
-		ctx.vkCmdCopyBuffer(command_buffer, src.buffer, dst.buffer, 1, &bc);
+		ctx.vkCmdCopyBuffer(command_buffer, ae_src.buffer.buffer, ae_dst.buffer.buffer, 1, &bc);
 		return *this;
 	}
 
@@ -927,11 +940,12 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::update_buffer(const Buffer& dst, const void* data) {
+	CommandBuffer& CommandBuffer::update_buffer(const Buffer<>& dst, const void* data) {
 		if (dst.size == 0) {
 			return *this;
 		}
-		ctx.vkCmdUpdateBuffer(command_buffer, dst.buffer, dst.offset, dst.size, data);
+		auto& ae = allocator->get_context().resolve_ptr(dst.ptr).buffer;
+		ctx.vkCmdUpdateBuffer(command_buffer, ae.buffer, ae.offset, dst.sz_bytes, data);
 		return *this;
 	}
 

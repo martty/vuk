@@ -1,6 +1,6 @@
 #pragma once
 
-#include "vuk/Buffer.hpp"
+#include "vuk/ErasedTupleAdaptor.hpp"
 #include "vuk/Hash.hpp"
 #include "vuk/ImageAttachment.hpp"
 #include "vuk/IR.hpp"
@@ -11,7 +11,6 @@
 #include "vuk/SourceLocation.hpp"
 #include "vuk/Value.hpp"
 #include "vuk/vuk_fwd.hpp"
-#include "vuk/ErasedTupleAdaptor.hpp"
 
 #include <deque>
 #include <functional>
@@ -32,7 +31,7 @@ namespace vuk {
 	struct tag_type {};
 }; // namespace vuk
 #define VUK_IA(access)        vuk::Arg<vuk::ImageAttachment, access, vuk::tag_type<__COUNTER__>>
-#define VUK_BA(access)        vuk::Arg<vuk::Buffer, access, vuk::tag_type<__COUNTER__>>
+#define VUK_BA(access)        vuk::Arg<vuk::Buffer<>, access, vuk::tag_type<__COUNTER__>>
 #define VUK_ARG(type, access) vuk::Arg<type, access, vuk::tag_type<__COUNTER__>>
 #endif
 
@@ -307,6 +306,8 @@ public:
 
 		template<class Ret, class F>
 		static auto make_lam(Name name, F&& body, SchedulingInfo scheduling_info, VUK_CALLSTACK) {
+			size_t hash_code = typeid(body).hash_code();
+
 			auto callback = [typed_cb = std::move(body)](CommandBuffer& cb, std::span<void*> args, std::span<void*> meta, std::span<void*> rets) mutable {
 				// we do type recovery here -> convert untyped args to typed ones
 				alignas(alignof(std::tuple<CommandBuffer&, T...>)) char storage[sizeof(std::tuple<CommandBuffer&, T...>)];
@@ -327,8 +328,8 @@ public:
 			std::shared_ptr<Type> opaque_fn_ty;
 
 			// when this function is called, we weave in this call into the IR
-			return [untyped_cb = std::move(callback), name, scheduling_info, opaque_fn_ty, inner_scope = VUK_CALL](Value<typename T::type>... args,
-			                                                                                                       VUK_CALLSTACK) mutable {
+			return [untyped_cb = std::move(callback), name, scheduling_info, hash_code, opaque_fn_ty, inner_scope = VUK_CALL](Value<typename T::type>... args,
+			                                                                                                                  VUK_CALLSTACK) mutable {
 				auto& first = First(args...);
 
 				bool reuse_node = first.node.use_count() == 1 && first.node->acqrel->status == Signal::Status::eDisarmed;
@@ -337,7 +338,6 @@ public:
 				std::tuple arg_tuple_as_a = { T{ nullptr, args.get_head() }... };
 				constexpr size_t arg_count = std::tuple_size_v<decltype(arg_tuple_as_a)>;
 
-				size_t hash_code = typeid(untyped_cb).hash_code();
 				if (!opaque_fn_ty) {
 					std::array<std::shared_ptr<Type>, arg_count> arg_types = { current_module->types.make_imbued_ty(T{ nullptr, args.get_head() }.src.type(),
 						                                                                                              T::access)... };
@@ -435,11 +435,8 @@ public:
 		    name, std::forward<F>(body), scheduling_info, VUK_CALL);
 	}
 
-	template<class... Args>
-	using Buffer2 = view<BufferLike<Args...>>;
-
-	ADAPT_TEMPLATED_STRUCT_FOR_IR(Buffer2, ptr, sz_bytes);
-	ADAPT_STRUCT_FOR_IR(BufferCreateInfo, mem_usage, size, alignment);
+	ADAPT_TEMPLATED_STRUCT_FOR_IR(Buffer, ptr, sz_bytes);
+	ADAPT_STRUCT_FOR_IR(BufferCreateInfo, memory_usage, size, alignment);
 
 	template<class T>
 	inline std::shared_ptr<Type> to_IR_type() {
@@ -476,7 +473,8 @@ public:
 			                                                   .tag = std::hash<const char*>{}(erased_tuple_adaptor<T>::name),
 			                                                   .construct = &erased_tuple_adaptor<T>::construct,
 			                                                   .get = &erased_tuple_adaptor<T>::get,
-			                                                   .is_default = &erased_tuple_adaptor<T>::is_default } }));
+			                                                   .is_default = &erased_tuple_adaptor<T>::is_default,
+			                                                   .destroy = &erased_tuple_adaptor<T>::destroy } }));
 			return composite_type;
 		}
 	}
@@ -583,6 +581,10 @@ public:
 		current_module->set_source_location(ref.node, VUK_CALL);
 		return { make_ext_ref(ref) };
 	}
+	
+	// declare ~~ int* x;
+	// acquire ~~ int* x = _existing_;
+	// discard ~~ int* x = _existing_; invalidate(x);
 
 	[[nodiscard]] inline Value<ImageAttachment> declare_ia(Name name, ImageAttachment ia = {}, VUK_CALLSTACK) {
 		Ref ref = current_module->make_declare_image(ia);
@@ -612,44 +614,31 @@ public:
 		return { std::move(ext_ref) };
 	}
 
-	[[nodiscard]] inline Value<Buffer> declare_buf(Name name, Buffer buf = {}, VUK_CALLSTACK) {
-		Ref ref = current_module->make_declare_buffer(buf);
-		current_module->name_output(ref, name.c_str());
-		current_module->set_source_location(ref.node, VUK_CALL);
-		return { make_ext_ref(ref) };
-	}
-
-	[[nodiscard]] inline Value<Buffer> discard_buf(Name name, Buffer buf, VUK_CALLSTACK) {
-		assert(buf.buffer != VK_NULL_HANDLE);
-		Ref ref = current_module->make_declare_buffer(buf);
-		current_module->name_output(ref, name.c_str());
-		current_module->set_source_location(ref.node, VUK_CALL);
-		return { make_ext_ref(ref) };
-	}
-
+	// TODO: PAV: constrain to meaningful types?
 	template<class T>
-	[[nodiscard]] inline val_ptr<T> discard_ptr(Name name, ptr<T> buf, VUK_CALLSTACK) {
+	[[nodiscard]] inline Value<T> discard(Name name, T buf, VUK_CALLSTACK) {
 		assert(buf);
-		Ref ref = current_module->make_declare_ptr(buf);
+		Ref ref = current_module->make_constant(buf);
 		current_module->name_output(ref, name.c_str());
 		current_module->set_source_location(ref.node, VUK_CALL);
 		return { make_ext_ref(ref) };
 	}
 
-	[[nodiscard]] inline Value<Buffer> acquire_buf(Name name, Buffer buf, Access access, VUK_CALLSTACK) {
-		assert(buf.buffer != VK_NULL_HANDLE || buf.size == 0);
-		Ref ref = current_module->acquire(current_module->types.get_builtin_buffer(), nullptr, buf);
-		auto ext_ref = ExtRef(std::make_shared<ExtNode>(ref.node, to_use(access)), ref);
+	template<class T>
+	[[nodiscard]] inline val_view<T> discard_buf(Name name, ptr<T> buf, VUK_CALLSTACK) {
+		Ref ref = current_module->make_constant(buf);
+		std::array args = { ref, current_module->make_get_allocation_size(ref) };
+		ref = current_module->make_construct(to_IR_type<view<T>>(), nullptr, args);
 		current_module->name_output(ref, name.c_str());
 		current_module->set_source_location(ref.node, VUK_CALL);
-		return { std::move(ext_ref) };
+		return { make_ext_ref(ref) };
 	}
 
-	template<class T>
+	template<class T = byte>
 	[[nodiscard]] inline val_ptr<BufferLike<T>> declare_ptr(Name name, BufferCreateInfo bci = {}, VUK_CALLSTACK) {
 		std::array<Ref, 3> args = {};
-		if (bci.mem_usage != BufferCreateInfo{}.mem_usage) {
-			args[0] = current_module->make_constant(&bci.mem_usage);
+		if (bci.memory_usage != BufferCreateInfo{}.memory_usage) {
+			args[0] = current_module->make_constant(&bci.memory_usage);
 		} else {
 			args[0] =
 			    current_module->make_placeholder(to_IR_type<std::remove_cvref_t<decltype(std::get<0>(erased_tuple_adaptor<BufferCreateInfo>::member_types))>>());
@@ -670,29 +659,37 @@ public:
 		return { make_ext_ref(ref) };
 	}
 
-	template<class T>
-	[[nodiscard]] inline val_ptr<T> acquire_ptr(Name name, ptr<T> buf, Access access, VUK_CALLSTACK) {
-		assert(buf);
-		Ref ref = current_module->acquire(current_module->types.make_pointer_ty(to_IR_type<T>()), nullptr, buf);
-		auto ext_ref = ExtRef(std::make_shared<ExtNode>(ref.node, to_use(access)), ref);
+	template<class T = byte>
+	[[nodiscard]] inline Value<Buffer<T>> declare_buf(Name name, BufferCreateInfo bci = {}, VUK_CALLSTACK) {
+		std::array<Ref, 3> args = {};
+		auto bci_ptr = new BufferCreateInfo{ bci };
+		if (bci.memory_usage != BufferCreateInfo{}.memory_usage) {
+			args[0] = current_module->make_constant(&bci_ptr->memory_usage);
+		} else {
+			args[0] =
+			    current_module->make_placeholder(to_IR_type<std::remove_cvref_t<decltype(std::get<0>(erased_tuple_adaptor<BufferCreateInfo>::member_types))>>());
+		}
+		if (bci.size != BufferCreateInfo{}.size) {
+			args[1] = current_module->make_constant(&bci_ptr->size);
+		} else {
+			args[1] =
+			    current_module->make_placeholder(to_IR_type<std::remove_cvref_t<decltype(std::get<1>(erased_tuple_adaptor<BufferCreateInfo>::member_types))>>());
+		}
+		// don't provide this yet
+		args[2] = current_module->make_constant(&bci_ptr->alignment);
+
+		Ref bci_ref = current_module->make_construct(to_IR_type<BufferCreateInfo>(), bci_ptr, args);
+		Ref ptr_ref = current_module->make_allocate(current_module->types.make_pointer_ty(to_IR_type<T>()), bci_ref);
+		std::array arg_refs = { ptr_ref, current_module->make_constant(&bci_ptr->size) };
+		Ref ref = current_module->make_construct(to_IR_type<Buffer<T>>(), nullptr, std::span(arg_refs));
 		current_module->name_output(ref, name.c_str());
 		current_module->set_source_location(ref.node, VUK_CALL);
-		return { std::move(ext_ref) };
+		return { make_ext_ref(ref) };
 	}
 
 	template<class T>
 	[[nodiscard]] inline Value<T> acquire(Name name, T value, Access access, VUK_CALLSTACK) {
 		Ref ref = current_module->acquire(to_IR_type<T>(), nullptr, value);
-		auto ext_ref = ExtRef(std::make_shared<ExtNode>(ref.node, to_use(access)), ref);
-		current_module->name_output(ref, name.c_str());
-		current_module->set_source_location(ref.node, VUK_CALL);
-		return { std::move(ext_ref) };
-	}
-
-	template<class T>
-	[[nodiscard]] inline val_view<BufferLike<T>> acquire_view(Name name, view<BufferLike<T>> buf, Access access, VUK_CALLSTACK) {
-		assert(buf);
-		Ref ref = current_module->acquire(to_IR_type<view<BufferLike<T>>>(), nullptr, buf);
 		auto ext_ref = ExtRef(std::make_shared<ExtNode>(ref.node, to_use(access)), ref);
 		current_module->name_output(ref, name.c_str());
 		current_module->set_source_location(ref.node, VUK_CALL);
@@ -739,8 +736,6 @@ public:
 		std::shared_ptr<Type> t;
 		if constexpr (std::is_same_v<T, vuk::ImageAttachment>) {
 			t = current_module->types.get_builtin_image();
-		} else if constexpr (std::is_same_v<T, vuk::Buffer>) {
-			t = current_module->types.get_builtin_buffer();
 		} else if constexpr (std::is_same_v<T, vuk::Sampler>) {
 			t = current_module->types.get_builtin_sampler();
 		} else if constexpr (std::is_same_v<T, vuk::SampledImage>) {
@@ -764,8 +759,6 @@ public:
 		std::shared_ptr<Type> t;
 		if constexpr (std::is_same_v<T, vuk::ImageAttachment>) {
 			t = current_module->types.get_builtin_image();
-		} else if constexpr (std::is_same_v<T, vuk::Buffer>) {
-			t = current_module->types.get_builtin_buffer();
 		} else if constexpr (std::is_same_v<T, vuk::Sampler>) {
 			t = current_module->types.get_builtin_sampler();
 		} else if constexpr (std::is_same_v<T, vuk::SampledImage>) {

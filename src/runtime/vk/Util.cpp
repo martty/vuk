@@ -139,9 +139,3 @@ size_t std::hash<vuk::ImageAttachment>::operator()(vuk::ImageAttachment const& x
 	}
 	return h;
 }
-
-size_t std::hash<vuk::Buffer>::operator()(vuk::Buffer const& x) const noexcept {
-	size_t h = 0;
-	hash_combine(h, x.buffer, x.offset, x.size);
-	return h;
-}

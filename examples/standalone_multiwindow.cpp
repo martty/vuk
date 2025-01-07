@@ -196,7 +196,7 @@ int main(int argc, char** argv) {
 		unsigned int count;
 	};
 
-	auto particles_buf = allocate_buffer(*superframe_allocator, { .mem_usage = MemoryUsage::eGPUonly, .size = sizeof(Particle) * particle_count });
+	auto particles_buf = allocate_buffer(*superframe_allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(Particle) * particle_count });
 	auto particles = clear_buffer(declare_buf("particles", **particles_buf));
 	particles.wait(*superframe_allocator, compiler, {});
 

@@ -1,11 +1,11 @@
 #pragma once
 
 #include "Pipeline.hpp"
-#include "vuk/Buffer.hpp"
 #include "vuk/Config.hpp"
 #include "vuk/FixedVector.hpp"
 #include "vuk/Hash.hpp"
 #include "vuk/runtime/CreateInfo.hpp"
+#include "vuk/runtime/vk/Allocation.hpp"
 #include <bit>
 
 inline bool operator==(VkSpecializationMapEntry const& lhs, VkSpecializationMapEntry const& rhs) noexcept {
@@ -179,7 +179,7 @@ namespace vuk {
 		VkStridedDeviceAddressRegionKHR hit_region{};
 		VkStridedDeviceAddressRegionKHR call_region{};
 
-		vuk::Buffer sbt;
+		ptr<> sbt;
 	};
 } // namespace vuk
 

@@ -1,6 +1,5 @@
 #pragma once
 
-#include "vuk/Buffer.hpp"
 #include "vuk/ImageAttachment.hpp"
 #include "vuk/RelSpan.hpp"
 #include "vuk/ResourceUse.hpp"
@@ -34,7 +33,7 @@ namespace vuk {
 
 	struct Type {
 		enum TypeKind { VOID_TY = 0, MEMORY_TY = 1, INTEGER_TY, FLOAT_TY, POINTER_TY, COMPOSITE_TY, ARRAY_TY, UNION_TY, IMBUED_TY, ALIASED_TY, OPAQUE_FN_TY, SHADER_FN_TY } kind;
-		enum Tags { TAG_BUFFERLIKE_VIEW = 1, TAG_BUFFER = 2, TAG_IMAGE = 3, TAG_SWAPCHAIN = 4 };
+		enum Tags { TAG_BUFFERLIKE_VIEW = 1, TAG_IMAGE = 3, TAG_SWAPCHAIN = 4 };
 		size_t size = ~0ULL;
 
 		TypeDebugInfo debug_info;
@@ -82,6 +81,7 @@ namespace vuk {
 				void (*construct)(void* dst, std::span<void*> args) = nullptr;
 				void* (*get)(void* value, size_t index) = nullptr;
 				bool (*is_default)(void* value, size_t index) = nullptr;
+				void (*destroy)(void* dst) = nullptr;
 			} composite;
 		};
 
@@ -550,12 +550,10 @@ namespace vuk {
 
 	template<class T>
 	T& constant(Ref ref) {
-		assert(ref.type()->kind == Type::INTEGER_TY || ref.type()->kind == Type::MEMORY_TY);
 		return *reinterpret_cast<T*>(ref.node->constant.value);
 	}
 
 	inline void* constant(Ref ref) {
-		assert(ref.type()->kind == Type::INTEGER_TY || ref.type()->kind == Type::MEMORY_TY);
 		return ref.node->constant.value;
 	}
 
@@ -747,7 +745,6 @@ namespace vuk {
 			plf::colony<UserCallbackType> ucbs;
 
 			Type::Hash builtin_image = 0;
-			Type::Hash builtin_buffer = 0;
 			Type::Hash builtin_swapchain = 0;
 			Type::Hash builtin_sampler = 0;
 			Type::Hash builtin_sampled_image = 0;
@@ -814,7 +811,9 @@ namespace vuk {
 				t->callback = std::make_unique<UserCallbackType>(std::move(callback));
 				t->child_types = std::move(arg_ptr_ret_ty_ptr);
 				t->debug_info = allocate_type_debug_info(std::string(name));
-				return emplace_type(std::shared_ptr<Type>(t));
+				auto tc = std::shared_ptr<Type>(t);
+				emplace_type(tc);
+				return tc; // we don't dedupe the outer type, only the inner type - this means all opaque_fn_tys will be unique
 			}
 
 			std::shared_ptr<Type> make_shader_fn_ty(std::span<std::shared_ptr<Type> const> args,
@@ -915,29 +914,6 @@ namespace vuk {
 				builtin_image = Type::hash(image_type.get());
 
 				return image_type;
-			}
-
-			std::shared_ptr<Type> get_builtin_buffer() {
-				if (builtin_buffer) {
-					auto it = type_map.find(builtin_buffer);
-					if (it != type_map.end()) {
-						if (auto ty = it->second.lock()) {
-							return ty;
-						}
-					}
-				}
-
-				auto buffer_ = std::vector<std::shared_ptr<Type>>{ u64() };
-				auto buffer_offsets = std::vector<size_t>{ offsetof(Buffer, size) };
-				auto buffer_type = emplace_type(std::shared_ptr<Type>(new Type{ .kind = Type::COMPOSITE_TY,
-				                                                                .size = sizeof(Buffer),
-				                                                                .debug_info = allocate_type_debug_info("buffer"),
-				                                                                .offsets = buffer_offsets,
-				                                                                .composite = { .types = buffer_, .tag = Type::TAG_BUFFER } }));
-				buffer_type->child_types = std::move(buffer_);
-
-				builtin_buffer = Type::hash(buffer_type.get());
-				return buffer_type;
 			}
 
 			std::shared_ptr<Type> get_builtin_swapchain() {
@@ -1049,8 +1025,6 @@ namespace vuk {
 			// TODO: PAV: this changes
 			void destroy(Type* t, void* v) {
 				if (t->kind == Type::INTEGER_TY) {
-				} else if (t->hash_value == builtin_buffer) {
-					std::destroy_at<Buffer>((Buffer*)v);
 				} else if (t->hash_value == builtin_image) {
 					std::destroy_at<ImageAttachment>((ImageAttachment*)v);
 				} else if (t->hash_value == builtin_sampled_image) {
@@ -1059,6 +1033,8 @@ namespace vuk {
 					std::destroy_at<SamplerCreateInfo>((SamplerCreateInfo*)v);
 				} else if (t->hash_value == builtin_swapchain) {
 					std::destroy_at<Swapchain*>((Swapchain**)v);
+				} else if (t->kind == Type::COMPOSITE_TY){
+					t->composite.destroy(v);
 				} else if (t->kind == Type::INTEGER_TY) {
 					// nothing to do
 				} else if (t->kind == Type::MEMORY_TY) {
@@ -1277,36 +1253,8 @@ namespace vuk {
 			                              .construct = { .args = std::span(args_ptr, 10) } }));
 		}
 
-		Ref make_declare_buffer(Buffer value) {
-			auto buf_ptr = new (new char[sizeof(Buffer)]) Buffer(value); /* rest size */
-			auto args_ptr = new Ref[2];
-			auto mem_ty = new std::shared_ptr<Type>[1]{ types.memory(sizeof(Buffer)) };
-			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = buf_ptr, .owned = true } }));
-			if (value.size != ~(0ULL)) {
-				args_ptr[1] = make_constant(&buf_ptr->size);
-			} else {
-				args_ptr[1] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1]{ types.u64() }, 1 } }));
-			}
-
-			return first(emplace_op(Node{ .kind = Node::CONSTRUCT,
-			                              .type = std::span{ new std::shared_ptr<Type>[1]{ types.get_builtin_buffer() }, 1 },
-			                              .construct = { .args = std::span(args_ptr, 2) } }));
-		}
-
 		Ref make_placeholder(std::shared_ptr<Type> type) {
 			return first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1]{ type }, 1 } }));
-		}
-
-		Ref make_declare_ptr(const ptr_base& value) {
-			auto buf_ptr = new (new char[sizeof(ptr_base)]) ptr_base(value); /* rest size */
-			auto args_ptr = new Ref[1];
-			auto mem_ty = new std::shared_ptr<Type>[1]{ types.memory(sizeof(ptr_base)) };
-			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = buf_ptr, .owned = true } }));
-
-			// TODO: void type
-			return first(emplace_op(Node{ .kind = Node::CONSTRUCT,
-			                              .type = std::span{ new std::shared_ptr<Type>[1]{ types.make_pointer_ty(types.u32()) }, 1 },
-			                              .construct = { .args = std::span(args_ptr, 1) } }));
 		}
 
 		Ref make_declare_array(std::shared_ptr<Type> type, std::span<Ref> args) {

@@ -1,7 +1,7 @@
 #pragma once
 
-#include "vuk/Buffer.hpp"
 #include "vuk/runtime/vk/Image.hpp"
+#include <span>
 
 namespace vuk {
 	struct AllocationEntry;
@@ -27,7 +27,7 @@ namespace vuk {
 	template<Format f>
 	struct FormatT {};
 
-	template<class Type = void, class... Constraints>
+	template<class Type = byte, class... Constraints>
 	struct ptr : ptr_base {
 		using pointed_T = Type;
 		using UnwrappedT = detail::unwrap<Type>::T;
@@ -44,6 +44,12 @@ namespace vuk {
 			return *reinterpret_cast<UnwrappedT*>(Resolver::per_thread->resolve_ptr(*this).host_ptr);
 		}
 
+		const auto& operator*() const
+		  requires(!std::is_same_v<UnwrappedT, void>)
+		{
+			return *reinterpret_cast<const UnwrappedT*>(Resolver::per_thread->resolve_ptr(*this).host_ptr);
+		}
+
 		auto& operator[](size_t index)
 		  requires(!std::is_same_v<UnwrappedT, void>)
 		{
@@ -54,6 +60,12 @@ namespace vuk {
 		  requires(!std::is_same_v<UnwrappedT, void>)
 		{
 			return { device_address + offset * sizeof(UnwrappedT) };
+		}
+
+		void operator+=(size_t offset)
+		  requires(!std::is_same_v<UnwrappedT, void>)
+		{
+			device_address += offset * sizeof(UnwrappedT);
 		}
 	};
 
@@ -109,17 +121,28 @@ namespace vuk {
 		}
 	};
 
-	template<class Type, class... Constraints>
-	struct view_base<view<Type, Constraints...>> {
-		static constexpr bool value = true;
+	/// @brief Buffer creation parameters
+	struct BufferCreateInfo {
+		/// @brief Memory usage to determine which heap to allocate the memory from
+		MemoryUsage memory_usage = MemoryUsage::eUnset;
+		/// @brief Size of the allocation in bytes
+		VkDeviceSize size = ~(0u);
+		/// @brief Alignment of the allocation in bytes
+		VkDeviceSize alignment = 1;
+
+		std::strong_ordering operator<=>(const BufferCreateInfo&) const noexcept = default;
 	};
 
-	using byte = std::byte;
-
+	/// @brief A contiguous portion of GPU-visible memory
 	template<class Type, class... Constraints>
 	struct view<BufferLike<Type>, Constraints...> {
 		ptr<Type> ptr;
 		size_t sz_bytes;
+
+		view() = default;
+		view(vuk::ptr<BufferLike<Type>> ptr, size_t count)
+		  requires(!std::is_array_v<Type>)
+		    : ptr(ptr), sz_bytes(count * sizeof(Type)) {}
 
 		auto& operator[](size_t index)
 		  requires(!std::is_same_v<Type, void>)
@@ -145,23 +168,46 @@ namespace vuk {
 			return !!ptr;
 		}
 
-		auto& data() noexcept {
+		[[nodiscard]] auto& data() noexcept {
 			return ptr;
 		}
 
-		size_t size_bytes() const noexcept {
+		[[nodiscard]] size_t size_bytes() const noexcept {
 			return sz_bytes;
 		}
 
-		size_t count() const noexcept {
+		[[nodiscard]] size_t count() const noexcept {
 			return sz_bytes / sizeof(Type);
 		}
 
-		view<BufferLike<byte>> to_byte_view() const noexcept {
+		[[nodiscard]] view<BufferLike<byte>> to_byte_view() const noexcept {
 			return { vuk::ptr<BufferLike<byte>>{ ptr.device_address }, sz_bytes };
 		}
 
+		/// @brief Create a new view that is a subset of the original
+		[[nodiscard]] view<BufferLike<Type>> subview(VkDeviceSize offset, VkDeviceSize new_count) const {
+			assert(offset + new_count <= count());
+			return { ptr + offset, new_count };
+		}
+
+		[[nodiscard]] std::span<Type> to_span() noexcept {
+			return std::span{ &*ptr, count() };
+		}
+
+		[[nodiscard]] std::span<const Type> to_span() const noexcept {
+			return std::span{ &*ptr, count() };
+		}
 		std::strong_ordering operator<=>(const view<BufferLike<Type>, Constraints...>&) const noexcept = default;
+	};
+
+	template<class T, class... Constraints>
+	struct is_view_type<view<T, Constraints...>> {
+		static constexpr bool value = true;
+	};
+
+	template<class T, class... Constraints>
+	struct is_bufferlike_view_type<view<BufferLike<T>, Constraints...>> {
+		static constexpr bool value = true;
 	};
 
 	template<class... Constraints>
@@ -171,14 +217,20 @@ namespace vuk {
 		Format format;
 	};
 
+	struct BufferViewCreateInfo {
+		size_t elem_size;
+		size_t count;
+		Format format = Format::eUndefined;
+	};
+
 	struct AllocationEntry {
-		void* host_ptr;
+		byte* host_ptr;
 		union {
 			struct : BufferCreateInfo {
 				VkBuffer buffer;
 				size_t offset;
 				uint64_t base_address;
-			} buffer;
+			} buffer = {};
 			struct : ImageCreateInfo {
 				VkImage image;
 			} image;

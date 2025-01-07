@@ -33,7 +33,7 @@ TEST_CASE("buffer upload/download") {
 TEST_CASE("buffer fill & update") {
 	{
 		auto data = { 0xfeu, 0xfeu, 0xfeu, 0xfeu };
-		auto buf = allocate_buffer(*test_context.allocator, { .mem_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
+		auto buf = allocate_buffer(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
 
 		auto fill = make_pass("fill", [](CommandBuffer& cbuf, VUK_BA(Access::eTransferWrite) dst) {
 			cbuf.fill_buffer(dst, 0xfe);
@@ -45,7 +45,7 @@ TEST_CASE("buffer fill & update") {
 	}
 	{
 		std::array<const uint32_t, 4> data = { 0xfeu, 0xfeu, 0xfeu, 0xfeu };
-		auto buf = allocate_buffer(*test_context.allocator, { .mem_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
+		auto buf = allocate_buffer(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
 
 		auto fill = make_pass("update", [data](CommandBuffer& cbuf, VUK_BA(Access::eTransferWrite) dst) {
 			cbuf.update_buffer(dst, &data[0]);

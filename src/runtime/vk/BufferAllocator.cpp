@@ -1,8 +1,10 @@
 #include "vuk/runtime/vk/BufferAllocator.hpp"
-#include "vuk/Buffer.hpp"
+#include "vuk/runtime/vk/Allocation.hpp"
 #include "vuk/Result.hpp"
 #include "vuk/SourceLocation.hpp"
 #include "vuk/runtime/vk/Allocator.hpp"
+#include "vuk/runtime/vk/VkRuntime.hpp"
+#include <iostream>
 
 // Aligns given value down to nearest multiply of align value. For example: VmaAlignUp(11, 8) = 8.
 // Use types like uint32_t, uint64_t as T.
@@ -39,14 +41,18 @@ namespace vuk {
 		}
 
 		if (best_fit_index == -1) { // no allocation suitable, allocate new one
-			Buffer alloc;
-			BufferCreateInfo bci{ .mem_usage = mem_usage, .size = block_size * num_blocks };
-			auto result = upstream->allocate_buffers(std::span{ &alloc, 1 }, std::span{ &bci, 1 }, source);
+			ptr_base alloc;
+			BufferCreateInfo bci{ .memory_usage = memory_usage, .size = block_size * num_blocks };
+			auto result = upstream->allocate_memory(std::span{ &alloc, 1 }, std::span{ &bci, 1 }, source);
 			if (!result) {
 				return result;
 			}
+			// pull the entry
+			auto ae = upstream->get_context().resolve_ptr(alloc);
+			// decommit, because we will parcel this out ourselves
+			upstream->get_context().decommit(alloc.device_address, bci.size);
 			for (auto i = 0; i < num_blocks; i++) {
-				used_allocations[used_allocation_count + i] = { alloc, i > 0 ? 0 : num_blocks, 0 };
+				used_allocations[used_allocation_count + i] = { alloc, i > 0 ? 0 : num_blocks, 0, ae };
 			}
 			current_buffer += (int)num_blocks;
 		} else { // we found one, we swap it into the used allocations and compact the available allocations
@@ -84,9 +90,9 @@ namespace vuk {
 	}
 
 	// lock-free bump allocation if there is still space
-	Result<Buffer, AllocateException> BufferLinearAllocator::allocate_buffer(size_t size, size_t alignment, SourceLocationAtFrame source) {
+	Result<ptr_base, AllocateException> BufferLinearAllocator::allocate_memory(size_t size, size_t alignment, SourceLocationAtFrame source) {
 		if (size == 0) {
-			return { expected_value, Buffer{ .buffer = VK_NULL_HANDLE, .size = 0 } };
+			return { expected_value, ptr_base{} };
 		}
 
 		size_t old_needle = needle.load();
@@ -129,11 +135,15 @@ namespace vuk {
 		};
 		auto& current_alloc = used_allocations[base_buffer];
 		auto offset = base - current_alloc.base_address;
-		Buffer b = current_alloc.buffer;
-		b.offset += offset;
-		b.size = size;
-		b.mapped_ptr = b.mapped_ptr != nullptr ? b.mapped_ptr + offset : nullptr;
-		b.device_address = b.device_address != 0 ? b.device_address + offset : 0;
+		ptr_base b = static_cast<ptr<byte>>(current_alloc.buffer) + offset;
+
+		auto alloc_ae = used_allocations[base_buffer].entry;
+
+		alloc_ae.buffer.offset += offset;
+		alloc_ae.buffer.size = size;
+		alloc_ae.host_ptr = alloc_ae.host_ptr != nullptr ? alloc_ae.host_ptr + offset : nullptr;
+		alloc_ae.buffer.base_address = alloc_ae.buffer.base_address != 0 ? alloc_ae.buffer.base_address + offset : 0;
+		upstream->get_context().commit(b.device_address, size, alloc_ae);
 
 		return { expected_value, b };
 	}
@@ -143,6 +153,7 @@ namespace vuk {
 		for (size_t i = 0; i < used_allocation_count;) {
 			available_allocations[available_allocation_count++] = used_allocations[i];
 			i += used_allocations[i].num_blocks;
+			// we don't need to decommit the radix tree - wild pointers are not allowed
 		}
 		used_allocations = {};
 		used_allocation_count = 0;
@@ -156,7 +167,9 @@ namespace vuk {
 		for (size_t i = 0; i < available_allocation_count; i++) {
 			auto& alloc = available_allocations[i];
 			if (alloc.num_blocks > 0) {
-				upstream->deallocate_buffers(std::span{ &alloc.buffer, 1 });
+				// restore allocation entry for upstream
+				upstream->get_context().commit(alloc.entry.buffer.base_address, alloc.entry.buffer.size, alloc.entry);
+				upstream->deallocate_memory(std::span{ &alloc.buffer, 1 });
 			}
 		}
 		available_allocation_count = 0;
@@ -168,28 +181,34 @@ namespace vuk {
 
 	void BufferLinearAllocator::free() {
 		for (size_t i = 0; i < used_allocation_count; i++) {
-			auto& buf = used_allocations[i].buffer;
-			if (buf && used_allocations[i].num_blocks > 0) {
-				upstream->deallocate_buffers(std::span{ &buf, 1 });
+			auto& alloc = used_allocations[i];
+			auto& buf = alloc.buffer;
+			if (buf && alloc.num_blocks > 0) {
+				// restore allocation entry for upstream
+				upstream->get_context().commit(alloc.entry.buffer.base_address, alloc.entry.buffer.size, alloc.entry);
+				upstream->deallocate_memory(std::span{ &buf, 1 });
 			}
 		}
 		used_allocation_count = 0;
 
 		for (size_t i = 0; i < available_allocation_count; i++) {
-			auto& buf = available_allocations[i].buffer;
-			if (buf && available_allocations[i].num_blocks > 0) {
-				upstream->deallocate_buffers(std::span{ &buf, 1 });
+			auto& alloc = available_allocations[i];
+			auto& buf = alloc.buffer;
+			if (buf && alloc.num_blocks > 0) {
+				// restore allocation entry for upstream
+				upstream->get_context().commit(alloc.entry.buffer.base_address, alloc.entry.buffer.size, alloc.entry);
+				upstream->deallocate_memory(std::span{ &buf, 1 });
 			}
 		}
 
 		available_allocation_count = 0;
 	}
 
-	Result<Buffer, AllocateException> BufferSubAllocator::allocate_buffer(size_t size, size_t alignment, SourceLocationAtFrame source) {
+	Result<ptr_base, AllocateException> BufferSubAllocator::allocate_memory(size_t size, size_t alignment, SourceLocationAtFrame source) {
 		if (size >= block_size) { // allocate-through
-			BufferCreateInfo bci{ .mem_usage = mem_usage, .size = size, .alignment = alignment };
-			Buffer buf;
-			auto result = upstream->allocate_buffers(std::span{ &buf, 1 }, std::span{ &bci, 1 }, source);
+			BufferCreateInfo bci{ .memory_usage = memory_usage, .size = size, .alignment = alignment };
+			ptr_base buf;
+			auto result = upstream->allocate_memory(std::span{ &buf, 1 }, std::span{ &bci, 1 }, source);
 			if (!result) {
 				return result;
 			} else {
@@ -230,30 +249,38 @@ namespace vuk {
 		}
 
 		if (!blocks[block_index].buffer) {
-			BufferCreateInfo bci{ .mem_usage = mem_usage, .size = block_size, .alignment = 256 };
-			auto result = upstream->allocate_buffers(std::span{ &blocks[block_index].buffer, 1 }, std::span{ &bci, 1 }, source);
+			BufferCreateInfo bci{ .memory_usage = memory_usage, .size = block_size, .alignment = 256 };
+			auto result = upstream->allocate_memory(std::span{ &blocks[block_index].buffer, 1 }, std::span{ &bci, 1 }, source);
 			if (!result) {
 				return result;
 			}
+			blocks[block_index].entry = upstream->get_context().resolve_ptr(blocks[block_index].buffer);
+			
 		}
 
-		const size_t aligned_offset = VmaAlignUp(static_cast<size_t>(offset - (block_index * block_size)), alignment);
-		Buffer buf = blocks[block_index].buffer.add_offset(aligned_offset);
-		assert(buf.offset % alignment == 0);
-		assert((buf.offset + size) < block_size);
-		buf.size = size;
-		buf.allocation = new SubAllocation{ block_index, va };
+		auto aligned_offset = VmaAlignUp(offset - block_index * block_size, alignment);
+		auto b = static_cast<ptr<byte>>(blocks[block_index].buffer) + aligned_offset;
+		assert((aligned_offset + size) < block_size);
+
+		auto alloc_ae = blocks[block_index].entry;
+		alloc_ae.buffer.offset += offset;
+		alloc_ae.buffer.size = size;
+		alloc_ae.host_ptr = alloc_ae.host_ptr != nullptr ? alloc_ae.host_ptr + offset : nullptr;
+		alloc_ae.buffer.base_address = alloc_ae.buffer.base_address != 0 ? alloc_ae.buffer.base_address + offset : 0;
+		alloc_ae.allocation = new SubAllocation{ block_index, va };
+		upstream->get_context().commit(b.device_address, size, alloc_ae);
 		blocks[block_index].allocation_count++;
-		return { expected_value, buf };
+		return { expected_value, b };
 	}
 
-	void BufferSubAllocator::deallocate_buffer(const Buffer& buf) {
-		if (buf.size >= block_size) {
-			upstream->deallocate_buffers(std::span{ &buf, 1 });
+	void BufferSubAllocator::deallocate_memory(const ptr_base& buf) {
+		auto& ae = upstream->get_context().resolve_ptr(buf);
+		if (ae.buffer.size >= block_size) {
+			upstream->deallocate_memory(std::span{ &buf, 1 });
 			return;
 		}
 		std::lock_guard _(mutex);
-		auto sa = static_cast<SubAllocation*>(buf.allocation);
+		auto sa = static_cast<SubAllocation*>(ae.allocation);
 #if VUK_DEBUG_ALLOCATIONS
 		VmaVirtualAllocationInfo info;
 		vmaGetVirtualAllocationInfo(virtual_alloc, sa->allocation, &info);
@@ -261,15 +288,18 @@ namespace vuk {
 #endif
 		vmaVirtualFree(virtual_alloc, sa->allocation);
 		if (--blocks[sa->block_index].allocation_count == 0) {
-			upstream->deallocate_buffers(std::span{ &blocks[sa->block_index].buffer, 1 });
+			auto& block = blocks[sa->block_index];
+			// restore for upstream
+			upstream->get_context().commit(block.buffer.device_address, block.entry.buffer.size, block.entry);
+			upstream->deallocate_memory(std::span{ &blocks[sa->block_index].buffer, 1 });
 			blocks[sa->block_index].buffer = {};
 		}
 		delete sa;
 	}
 
-	BufferSubAllocator::BufferSubAllocator(DeviceResource& upstream, MemoryUsage mem_usage, BufferUsageFlags buf_usage, size_t block_size) :
+	BufferSubAllocator::BufferSubAllocator(DeviceResource& upstream, MemoryUsage memory_usage, BufferUsageFlags buf_usage, size_t block_size) :
 	    upstream(&upstream),
-	    mem_usage(mem_usage),
+	    memory_usage(memory_usage),
 	    usage(buf_usage),
 	    block_size(block_size) {
 		VmaVirtualBlockCreateInfo vbci{};

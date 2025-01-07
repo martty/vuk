@@ -1,4 +1,4 @@
-#include "vuk/Buffer.hpp"
+#include "vuk/runtime/vk/DeviceVkResource.hpp"
 #include "vuk/Exception.hpp"
 #include "vuk/runtime/vk/Address.hpp"
 #include "vuk/runtime/vk/DeviceNestedResource.hpp"
@@ -221,7 +221,7 @@ namespace vuk {
 			bci.pQueueFamilyIndices = impl->all_queue_families.data();
 
 			VmaAllocationCreateInfo aci = {};
-			aci.usage = VmaMemoryUsage(to_integral(ci.mem_usage));
+			aci.usage = VmaMemoryUsage(to_integral(ci.memory_usage));
 			aci.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
 
 			VkBuffer buffer;
@@ -239,9 +239,9 @@ namespace vuk {
 			VkBufferDeviceAddressInfo bdai{ VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO, nullptr, buffer };
 			uint64_t device_address = ctx->vkGetBufferDeviceAddress(device, &bdai);
 
-			AllocationEntry entry{ .host_ptr = allocation_info.pMappedData, .buffer = { .buffer = buffer, .base_address = device_address } };
+			AllocationEntry entry{ .host_ptr = static_cast<byte*>(allocation_info.pMappedData), .buffer = { .buffer = buffer, .base_address = device_address } };
 			entry.buffer.alignment = ci.alignment;
-			entry.buffer.mem_usage = ci.mem_usage;
+			entry.buffer.memory_usage = ci.memory_usage;
 			entry.buffer.offset = 0;
 			entry.buffer.size = ci.size;
 			entry.device_memory = allocation_info.deviceMemory;
@@ -259,8 +259,8 @@ namespace vuk {
 		for (auto& v : src) {
 			if (v) {
 				auto& ae = ctx->resolve_ptr(v);
-				ctx->decommit(ae.buffer.base_address, ae.buffer.size);
 				vmaDestroyBuffer(impl->allocator, ae.buffer.buffer, static_cast<VmaAllocation>(ae.allocation));
+				ctx->decommit(ae.buffer.base_address, ae.buffer.size);
 			}
 		}
 	}
@@ -268,13 +268,13 @@ namespace vuk {
 	Result<void, AllocateException>
 	DeviceVkResource::allocate_memory_views(std::span<generic_view_base> dst, std::span<const BVCI> cis, SourceLocationAtFrame loc) {
 		assert(dst.size() == cis.size());
-		for (int64_t i = 0; i < (int64_t)dst.size(); i++){
+		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
 			auto& ci = cis[i];
 			auto& ae = ctx->resolve_ptr(ci.ptr);
 			assert(ci.vci.format == Format::eUndefined); // TODO: implement texel bufs
-			const auto& view_data = view<BufferLike<void>>{.ptr = ci.ptr, .sz_bytes = ci.vci.count * ci.vci.elem_size };
+			const auto& view_data = view<BufferLike<byte>>{ ptr<BufferLike<byte>>{ ci.ptr }, ci.vci.count * ci.vci.elem_size };
 			ptr_base meta_p;
-			BufferCreateInfo bci{ .mem_usage = ae.buffer.mem_usage, .size = sizeof(view_data) };
+			BufferCreateInfo bci{ .memory_usage = ae.buffer.memory_usage, .size = sizeof(view_data) };
 			auto res = allocate_memory({ &meta_p, 1 }, { &bci, 1 }, loc);
 			if (!res) {
 				deallocate_memory_views({ dst.data(), (uint64_t)i });
@@ -298,53 +298,10 @@ namespace vuk {
 		}
 	}
 
-	Result<void, AllocateException> DeviceVkResource::allocate_buffers(std::span<Buffer> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
-		assert(dst.size() == cis.size());
-		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
-			std::lock_guard _(impl->mutex);
-			auto& ci = cis[i];
-			VkBufferCreateInfo bci{ .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
-			bci.size = ci.size;
-			bci.usage = (VkBufferUsageFlags)impl->all_buffer_usage_flags;
-			bci.queueFamilyIndexCount = impl->queue_family_count;
-			bci.sharingMode = bci.queueFamilyIndexCount > 1 ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
-			bci.pQueueFamilyIndices = impl->all_queue_families.data();
-
-			VmaAllocationCreateInfo aci = {};
-			aci.usage = VmaMemoryUsage(to_integral(ci.mem_usage));
-			aci.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
-
-			VkBuffer buffer;
-			VmaAllocation allocation;
-			VmaAllocationInfo allocation_info;
-			// ignore alignment: we get a fresh VkBuffer which satisfies all alignments inside the VkBfufer
-			auto res = vmaCreateBuffer(impl->allocator, &bci, &aci, &buffer, &allocation, &allocation_info);
-			if (res != VK_SUCCESS) {
-				deallocate_buffers({ dst.data(), (uint64_t)i });
-				return { expected_error, AllocateException{ res } };
-			}
-#if VUK_DEBUG_ALLOCATIONS
-			vmaSetAllocationName(impl->allocator, allocation, to_string(loc).c_str());
-#endif
-			VkBufferDeviceAddressInfo bdai{ VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO, nullptr, buffer };
-			uint64_t device_address = ctx->vkGetBufferDeviceAddress(device, &bdai);
-			dst[i] = Buffer{ allocation, buffer, 0, ci.size, device_address, static_cast<std::byte*>(allocation_info.pMappedData), ci.mem_usage };
-		}
-		return { expected_value };
-	}
-
-	void DeviceVkResource::deallocate_buffers(std::span<const Buffer> src) {
-		for (auto& v : src) {
-			if (v) {
-				vmaDestroyBuffer(impl->allocator, v.buffer, static_cast<VmaAllocation>(v.allocation));
-			}
-		}
-	}
-
 	void DeviceVkResource::set_buffer_allocation_name(Buffer& dst, Name name) {
 		vmaSetAllocationName(impl->allocator, static_cast<VmaAllocation>(dst.allocation), name.c_str());
 	}
-
+	
 	Result<void, AllocateException> DeviceVkResource::allocate_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc) {
 		assert(dst.size() == cis.size());
 		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
@@ -1091,37 +1048,37 @@ namespace vuk {
 			assert(result == VK_SUCCESS);
 
 			VkDeviceSize sbt_size = rgen_region.size + miss_region.size + hit_region.size + call_region.size;
-			Buffer SBT;
-			BufferCreateInfo bci{ .mem_usage = vuk::MemoryUsage::eCPUtoGPU, .size = sbt_size, .alignment = ctx->rt_properties.shaderGroupBaseAlignment };
-			auto buff_cr_result = allocate_buffers(std::span{ &SBT, 1 }, std::span{ &bci, 1 }, VUK_HERE_AND_NOW());
+			ptr_base SBT_alloc;
+			BufferCreateInfo bci{ .memory_usage = vuk::MemoryUsage::eCPUtoGPU, .size = sbt_size, .alignment = ctx->rt_properties.shaderGroupBaseAlignment };
+			auto buff_cr_result = allocate_memory(std::span{ &SBT_alloc, 1 }, std::span{ &bci, 1 }, VUK_HERE_AND_NOW());
 			assert(buff_cr_result);
+
+			auto SBT = ptr<byte>{ SBT_alloc };
 
 			// Helper to retrieve the handle data
 			auto get_handle = [&](int i) {
 				return handles.data() + i * handleSize;
 			};
-			std::byte* pData{ nullptr };
 			uint32_t handleIdx{ 0 };
 			// Raygen
-			pData = SBT.mapped_ptr;
-			memcpy(pData, get_handle(handleIdx++), handleSize);
+			memcpy(&*SBT, get_handle(handleIdx++), handleSize);
 			// Miss
-			pData = SBT.mapped_ptr + rgen_region.size;
+			SBT += rgen_region.size;
 			for (uint32_t c = 0; c < miss_count; c++) {
-				memcpy(pData, get_handle(handleIdx++), handleSize);
-				pData += miss_region.stride;
+				memcpy(&*SBT, get_handle(handleIdx++), handleSize);
+				SBT += miss_region.stride;
 			}
 			// Hit
-			pData = SBT.mapped_ptr + rgen_region.size + miss_region.size;
+			SBT = ptr<byte>{ SBT_alloc } + rgen_region.size + miss_region.size;
 			for (uint32_t c = 0; c < hit_count; c++) {
-				memcpy(pData, get_handle(handleIdx++), handleSize);
-				pData += hit_region.stride;
+				memcpy(&*SBT, get_handle(handleIdx++), handleSize);
+				SBT += hit_region.stride;
 			}
 			// Call
-			pData = SBT.mapped_ptr + rgen_region.size + miss_region.size + hit_region.size;
+			SBT = ptr<byte>{ SBT_alloc } + rgen_region.size + miss_region.size + hit_region.size;
 			for (uint32_t c = 0; c < callable_count; c++) {
-				memcpy(pData, get_handle(handleIdx++), handleSize);
-				pData += call_region.stride;
+				memcpy(&*SBT, get_handle(handleIdx++), handleSize);
+				SBT += call_region.stride;
 			}
 
 			auto sbtAddress = SBT.device_address;
@@ -1140,7 +1097,7 @@ namespace vuk {
 
 	void DeviceVkResource::deallocate_ray_tracing_pipelines(std::span<const RayTracingPipelineInfo> src) {
 		for (auto& v : src) {
-			deallocate_buffers(std::span{ &v.sbt, 1 });
+			deallocate_memory(std::span{ (ptr_base*)&v.sbt, 1 });
 			ctx->vkDestroyPipeline(device, v.pipeline, nullptr);
 		}
 	}
@@ -1292,15 +1249,6 @@ namespace vuk {
 
 	void DeviceNestedResource::deallocate_memory_views(std::span<const generic_view_base> dst) {
 		upstream->deallocate_memory_views(dst);
-	}
-
-	Result<void, AllocateException>
-	DeviceNestedResource::allocate_buffers(std::span<Buffer> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
-		return upstream->allocate_buffers(dst, cis, loc);
-	}
-
-	void DeviceNestedResource::deallocate_buffers(std::span<const Buffer> src) {
-		upstream->deallocate_buffers(src);
 	}
 
 	void DeviceNestedResource::set_buffer_allocation_name(Buffer& dst, Name name) {

@@ -13,14 +13,14 @@ namespace vuk {
 
 		T* find(uint64_t base);
 
-		void insert(uint64_t base, size_t size, T value);
+		bool insert(uint64_t base, size_t size, T value);
 
 		template<class F, F f, class... Args>
-		void handle_unaligned(size_t base, size_t size, Args... values);
+		bool handle_unaligned(size_t base, size_t size, Args... values);
 
-		void insert_unaligned(size_t base, size_t size, T value);
+		bool insert_unaligned(size_t base, size_t size, T value);
 
-		void erase(uint64_t base, size_t size = -1);
+		bool erase(uint64_t base, size_t size = -1);
 
 		void erase_unaligned(uint64_t base, size_t size);
 

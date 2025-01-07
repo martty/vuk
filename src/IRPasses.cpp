@@ -756,10 +756,10 @@ namespace vuk {
 
 		// construct reification - if there were later setting of fields, then remove placeholders
 		for (auto node : nodes) {
+			auto ty = node->type[0];
 			switch (node->kind) {
 			case Node::CONSTRUCT: {
 				auto args_ptr = node->construct.args.data();
-				auto ty = node->type[0];
 				if (ty->hash_value == current_module->types.builtin_image) {
 					auto ptr = &constant<ImageAttachment>(args_ptr[0]);
 					auto& value = constant<ImageAttachment>(args_ptr[0]);
@@ -792,6 +792,13 @@ namespace vuk {
 					}
 				} else if (ty->kind == Type::COMPOSITE_TY) {
 					auto* base = constant(args_ptr[0]);
+					if (ty->is_bufferlike_view() &&
+					    node->construct.args[2].node->kind != Node::PLACEHOLDER) { // if we are constructing a view, and the view has known size
+						auto def = get_def2(node->construct.args[1]);
+						if (def && def->node->kind == Node::CONSTRUCT && def->node->construct.args[2].node->kind == Node::PLACEHOLDER) {
+							def->node->construct.args[2] = node->construct.args[2];
+						}
+					}
 					if (!base) { // if there was no value provided here, then we don't perform any reification
 						break;
 					}
@@ -1192,7 +1199,7 @@ namespace vuk {
 	Result<void> Compiler::validate_read_undefined() {
 		for (auto node : impl->nodes) {
 			switch (node->kind) {
-			case Node::ALLOCATE: { // ALLOCATE discards
+			case Node::ALLOCATE: {                 // ALLOCATE discards
 				if (node->links->reads.size() > 0) { // we are trying to read from it :(
 					auto reads = node->links->reads.to_span(impl->pass_reads);
 					for (auto offender : reads) {
@@ -1265,6 +1272,7 @@ namespace vuk {
 	}
 
 	Result<void> Compiler::validate_duplicated_resource_ref() {
+		RadixTree<bool> memory;
 		std::unordered_map<Buffer, Node*> bufs;
 		std::unordered_map<ImageAttachment, Node*> ias;
 		std::unordered_map<Swapchain*, Node*> swps;
@@ -1302,8 +1310,41 @@ namespace vuk {
 		for (auto node : impl->nodes) {
 			std::optional<Node*> fail = {};
 			switch (node->kind) {
+			case Node::CONSTANT: {
+				bool s = true;
+				if (node->type[0]->kind == Type::POINTER_TY) { // pointers - use implicit view
+					auto& ptr = constant<ptr_base>(first(node));
+					auto& ae = Resolver::per_thread->resolve_ptr(ptr);
+					s = memory.insert_unaligned(ptr.device_address, ae.buffer.size, true);
+				} else if (node->type[0]->is_bufferlike_view()) { // bufferlike views
+					auto& buf = constant<Buffer<>>(first(node));
+					s = memory.insert_unaligned(buf.ptr.device_address, buf.sz_bytes, true);
+				}
+			} break;
 			case Node::CONSTRUCT: {
 				fail = add_one(node->type[0].get(), node, node->construct.args[0].node->constant.value);
+				bool s = true;
+				if (node->type[0]->hash_value == current_module->types.builtin_image) {
+					auto ia = reinterpret_cast<ImageAttachment*>(node->construct.args[0].node->constant.value);
+					if (ia->image) {
+						auto [_, succ] = ias.emplace(*ia);
+						s = succ;
+					}
+				} else if (node->type[0]->is_bufferlike_view()) { // bufferlike views
+					auto buf = eval<Buffer<>>(first(node));
+					if (!buf) { // cannot be constant evaluated -> we are going to allocate it, therefore it can't alias
+						(void)buf.error();
+						break;
+					}
+					s = memory.insert_unaligned(buf->ptr.device_address, buf->sz_bytes, true);
+				} else if (node->type[0]->hash_value == current_module->types.builtin_swapchain) {
+					auto [_, succ] = swps.emplace(reinterpret_cast<Swapchain*>(node->construct.args[0].node->constant.value));
+					s = succ;
+				} else { // TODO: it is an array, no val yet
+				}
+				if (!s) {
+					return { expected_error, RenderGraphException{ format_graph_message(Level::eError, node, "tried to acquire something that was already known.") } };
+				}
 			} break;
 			case Node::ACQUIRE: {
 				for (size_t i = 0; i < node->type.size(); i++) {

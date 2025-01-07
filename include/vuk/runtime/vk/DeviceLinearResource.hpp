@@ -41,9 +41,9 @@ namespace vuk {
 		void deallocate_command_pools(std::span<const CommandPool> dst) override; // no-op
 
 		// buffers are lockless
-		Result<void, AllocateException> allocate_buffers(std::span<Buffer> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) override;
+		Result<void, AllocateException> allocate_memory(std::span<ptr_base> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) override;
 
-		void deallocate_buffers(std::span<const Buffer> src) override; // no-op, linear
+		void deallocate_memory(std::span<const ptr_base> src) override; // no-op, linear
 
 		Result<void, AllocateException>
 		allocate_framebuffers(std::span<VkFramebuffer> dst, std::span<const FramebufferCreateInfo> cis, SourceLocationAtFrame loc) override;

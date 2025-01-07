@@ -452,7 +452,7 @@ namespace vuk {
 		/// @brief Binds an index buffer with the given type
 		/// @param buffer The buffer to be bound
 		/// @param type The index type in the buffer
-		CommandBuffer& bind_index_buffer(const Buffer& buffer, IndexType type);
+		CommandBuffer& bind_index_buffer(const Buffer<>& buffer, IndexType type);
 		/// @brief Binds a vertex buffer to the given binding point and configures attributes sourced from this buffer based on a packed format list, the attribute
 		/// locations are offset with first_location
 		/// @param binding The binding point of the buffer
@@ -460,7 +460,7 @@ namespace vuk {
 		/// @param first_location First location assigned to the attributes
 		/// @param format_list List of formats packed in buffer to generate attributes from
 		CommandBuffer& bind_vertex_buffer(unsigned binding,
-		                                  const Buffer& buffer,
+		                                  const Buffer<>& buffer,
 		                                  unsigned first_location,
 		                                  Packed format_list,
 		                                  VertexInputRate input_rate = VertexInputRate::eVertex);
@@ -471,7 +471,7 @@ namespace vuk {
 		/// @param attribute_descriptions Attributes that are sourced from this buffer
 		/// @param stride Stride of a vertex sourced from this buffer
 		CommandBuffer& bind_vertex_buffer(unsigned binding,
-		                                  const Buffer& buffer,
+		                                  const Buffer<>& buffer,
 		                                  std::span<VertexInputAttributeDescription> attribute_descriptions,
 		                                  uint32_t stride,
 		                                  VertexInputRate input_rate = VertexInputRate::eVertex);
@@ -506,16 +506,7 @@ namespace vuk {
 		/// @param set The set bind index to be used
 		/// @param binding The descriptor binding to bind the buffer to
 		/// @param buffer The buffer to be bound
-		CommandBuffer& bind_buffer(unsigned set, unsigned binding, const Buffer& buffer);
-
-		/// @brief Bind a buffer to the command buffer
-		/// @param set The set bind index to be used
-		/// @param binding The descriptor binding to bind the buffer to
-		/// @param buffer The buffer to be bound
-		template<Access acc, class UniqueT>
-		CommandBuffer& bind_buffer(unsigned set, unsigned binding, Arg<Buffer, acc, UniqueT> buffer) {
-			return bind_buffer(set, binding, *buffer.ptr);
-		}
+		CommandBuffer& bind_buffer(unsigned set, unsigned binding, const Buffer<>& buffer);
 
 		/// @brief Bind an image to the command buffer
 		/// @param set The set bind index to be used
@@ -577,7 +568,7 @@ namespace vuk {
 		/// @brief Issue an indirect draw
 		/// @param command_count Number of indirect commands to be used
 		/// @param indirect_buffer Buffer of indirect commands
-		CommandBuffer& draw_indirect(size_t command_count, const Buffer& indirect_buffer);
+		CommandBuffer& draw_indirect(size_t command_count, const Buffer<>& indirect_buffer);
 		/// @brief Issue an indirect draw
 		/// @param commands Indirect commands to be uploaded and used for this draw
 		CommandBuffer& draw_indirect(std::span<DrawIndirectCommand> commands);
@@ -586,7 +577,7 @@ namespace vuk {
 		/// @param max_command_count Upper limit of commands that can be drawn
 		/// @param indirect_buffer Buffer of indirect commands
 		/// @param count_buffer Buffer of command count
-		CommandBuffer& draw_indirect_count(size_t max_draw_count, const Buffer& indirect_buffer, const Buffer& count_buffer);
+		CommandBuffer& draw_indirect_count(size_t max_draw_count, const Buffer<>& indirect_buffer, const Buffer<>& count_buffer);
 
 		/// @brief Isuse an indexed draw
 		/// @param index_count Number of vertices to draw
@@ -599,7 +590,7 @@ namespace vuk {
 		/// @brief Issue an indirect indexed draw
 		/// @param command_count Number of indirect commands to be used
 		/// @param indirect_buffer Buffer of indirect commands
-		CommandBuffer& draw_indexed_indirect(size_t command_count, const Buffer& indirect_buffer);
+		CommandBuffer& draw_indexed_indirect(size_t command_count, const Buffer<>& indirect_buffer);
 		/// @brief Issue an indirect indexed draw
 		/// @param commands Indirect commands to be uploaded and used for this draw
 		CommandBuffer& draw_indexed_indirect(std::span<DrawIndexedIndirectCommand> commands);
@@ -608,7 +599,7 @@ namespace vuk {
 		/// @param max_command_count Upper limit of commands that can be drawn
 		/// @param indirect_buffer Buffer of indirect commands
 		/// @param count_buffer Buffer of command count
-		CommandBuffer& draw_indexed_indirect_count(size_t max_command_count, const Buffer& indirect_buffer, const Buffer& count_buffer);
+		CommandBuffer& draw_indexed_indirect_count(size_t max_command_count, const Buffer<>& indirect_buffer, const Buffer<>& count_buffer);
 
 		/// @brief Issue a mesh shader draw
 		/// @param group_count_x Number of mesh shader workgroups on the x-axis
@@ -665,11 +656,11 @@ namespace vuk {
 		/// @param buffer Buffer to use for calculating element count
 		/// @param element_size Size of one element
 		/// @param invocations_per_element_scale Invocation count scale
-		CommandBuffer& dispatch_invocations_per_element(const Buffer& buffer, size_t element_size, float invocations_per_element_scale = 1.f);
+		CommandBuffer& dispatch_invocations_per_element(const Buffer<>& buffer, size_t element_size, float invocations_per_element_scale = 1.f);
 
 		/// @brief Issue an indirect compute dispatch
 		/// @param indirect_buffer Buffer of workgroup counts
-		CommandBuffer& dispatch_indirect(const Buffer& indirect_buffer);
+		CommandBuffer& dispatch_indirect(const Buffer<>& indirect_buffer);
 
 		/// @brief Issue an indirect compute dispatch
 		/// @param commands Indirect commands to be uploaded and used for this draw
@@ -716,29 +707,24 @@ namespace vuk {
 		/// @param src the Name of the source Resource
 		/// @param dst the Name of the destination Resource
 		/// @param copy_params parameters of the copy
-		CommandBuffer& copy_buffer_to_image(const Buffer& src, const ImageAttachment& dst, BufferImageCopy copy_params);
+		CommandBuffer& copy_buffer_to_image(const Buffer<>& src, const ImageAttachment& dst, BufferImageCopy copy_params);
 		/// @brief Copy an image resource into a buffer resource
 		/// @param src the Name of the source Resource
 		/// @param dst the Name of the destination Resource
 		/// @param copy_params parameters of the copy
-		CommandBuffer& copy_image_to_buffer(const ImageAttachment& src, const Buffer& dst, BufferImageCopy copy_params);
-		/// @brief Copy between two buffer resource
-		/// @param src the Name of the source Resource
-		/// @param dst the Name of the destination Resource
-		/// @param size number of bytes to copy (VK_WHOLE_SIZE to copy the entire "src" buffer)
-		CommandBuffer& copy_buffer(const ImageAttachment& src, const ImageAttachment& dst, size_t size);
+		CommandBuffer& copy_image_to_buffer(const ImageAttachment& src, const Buffer<>& dst, BufferImageCopy copy_params);
 		/// @brief Copy between two Buffers
 		/// @param src the source Buffer
 		/// @param dst the destination Buffer
-		CommandBuffer& copy_buffer(const Buffer& src, const Buffer& dst);
+		CommandBuffer& copy_buffer(const Buffer<>& src, const Buffer<>& dst);
 		/// @brief Fill a buffer with a fixed value
 		/// @param dst the destination Buffer
 		/// @param data the 4 byte value to fill with
-		CommandBuffer& fill_buffer(const view<BufferLike<byte>>& dst, uint32_t data);
+		CommandBuffer& fill_buffer(const Buffer<>& dst, uint32_t data);
 		/// @brief Fill a buffer with a host values
 		/// @param dst the destination Buffer
 		/// @param data pointer to host values
-		CommandBuffer& update_buffer(const Buffer& dst, const void* data);
+		CommandBuffer& update_buffer(const Buffer<>& dst, const void* data);
 
 		// explicit synchronisation
 
