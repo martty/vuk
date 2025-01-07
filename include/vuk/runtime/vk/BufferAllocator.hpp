@@ -1,9 +1,9 @@
 #pragma once
 
-#include "vuk/Buffer.hpp"
 #include "vuk/Config.hpp"
 #include "vuk/SourceLocation.hpp"
 #include "vuk/Types.hpp"
+#include "vuk/runtime/vk/Allocation.hpp"
 #include "vuk/runtime/vk/VkTypes.hpp" // TODO: leaking vk
 
 #include <array>
@@ -19,9 +19,10 @@ namespace vuk {
 	struct DeviceResource;
 
 	struct LinearSegment {
-		Buffer buffer;
+		ptr_base buffer;
 		size_t num_blocks;
 		uint64_t base_address = 0;
+		AllocationEntry entry;
 	};
 
 	struct BufferLinearAllocator {
@@ -39,15 +40,15 @@ namespace vuk {
 
 		size_t block_size;
 
-		BufferLinearAllocator(DeviceResource& upstream, MemoryUsage mem_usage, BufferUsageFlags buf_usage, size_t block_size = 1024 * 1024 * 16) :
+		BufferLinearAllocator(DeviceResource& upstream, MemoryUsage memory_usage, BufferUsageFlags buf_usage, size_t block_size = 1024 * 1024 * 16) :
 		    upstream(&upstream),
-		    mem_usage(mem_usage),
+		    memory_usage(memory_usage),
 		    usage(buf_usage),
 		    block_size(block_size) {}
 		~BufferLinearAllocator();
 
 		Result<void, AllocateException> grow(size_t num_blocks, SourceLocationAtFrame source);
-		Result<Buffer, AllocateException> allocate_buffer(size_t size, size_t alignment, SourceLocationAtFrame source);
+		Result<ptr_base, AllocateException> allocate_memory(size_t size, size_t alignment, SourceLocationAtFrame source);
 		// trim the amount of memory to the currently used amount
 		void trim();
 		// return all resources to available
@@ -57,8 +58,9 @@ namespace vuk {
 	};
 
 	struct BufferBlock {
-		Buffer buffer = {};
+		ptr_base buffer = {};
 		size_t allocation_count = 0;
+		AllocationEntry entry;
 	};
 
 	struct SubAllocation {
@@ -68,17 +70,17 @@ namespace vuk {
 
 	struct BufferSubAllocator {
 		DeviceResource* upstream;
-		MemoryUsage mem_usage;
+		MemoryUsage memory_usage;
 		BufferUsageFlags usage;
 		std::vector<BufferBlock> blocks;
 		VmaVirtualBlock virtual_alloc;
 		std::mutex mutex;
 		size_t block_size;
 
-		BufferSubAllocator(DeviceResource& upstream, MemoryUsage mem_usage, BufferUsageFlags buf_usage, size_t block_size);
+		BufferSubAllocator(DeviceResource& upstream, MemoryUsage memory_usage, BufferUsageFlags buf_usage, size_t block_size);
 		~BufferSubAllocator();
 
-		Result<Buffer, AllocateException> allocate_buffer(size_t size, size_t alignment, SourceLocationAtFrame source);
-		void deallocate_buffer(const Buffer& buf);
+		Result<ptr_base, AllocateException> allocate_memory(size_t size, size_t alignment, SourceLocationAtFrame source);
+		void deallocate_memory(const ptr_base& buf);
 	};
 }; // namespace vuk

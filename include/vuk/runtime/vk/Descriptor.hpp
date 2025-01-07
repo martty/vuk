@@ -248,8 +248,8 @@ namespace vuk {
 
 		void update_combined_image_sampler(unsigned binding, unsigned array_index, ImageView iv, Sampler sampler, ImageLayout layout);
 		void update_storage_image(unsigned binding, unsigned array_index, ImageView iv);
-		void update_uniform_buffer(unsigned binding, unsigned array_index, Buffer buf);
-		void update_storage_buffer(unsigned binding, unsigned array_index, Buffer buf);
+		void update_uniform_buffer(unsigned binding, unsigned array_index, Buffer<> buf);
+		void update_storage_buffer(unsigned binding, unsigned array_index, Buffer<> buf);
 		void update_sampler(unsigned binding, unsigned array_index, Sampler sampler);
 		void update_sampled_image(unsigned binding, unsigned array_index, ImageView iv, ImageLayout layout);
 		void update_acceleration_structure(unsigned binding, unsigned array_index, VkAccelerationStructureKHR as);

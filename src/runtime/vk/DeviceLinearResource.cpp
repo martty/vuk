@@ -14,7 +14,7 @@ namespace vuk {
 		Runtime* ctx;
 		VkDevice device;
 		std::vector<VkSemaphore> semaphores;
-		std::vector<Buffer> buffers;
+		std::vector<ptr_base> buffers;
 		std::vector<VkFence> fences;
 		std::vector<CommandBufferAllocation> cmdbuffers_to_free;
 		std::vector<CommandPool> cmdpools_to_free;
@@ -96,24 +96,24 @@ namespace vuk {
 	void DeviceLinearResource::deallocate_command_pools(std::span<const CommandPool> dst) {} // no-op
 
 	Result<void, AllocateException>
-	DeviceLinearResource::allocate_buffers(std::span<Buffer> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
+	DeviceLinearResource::allocate_memory(std::span<ptr_base> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
 		assert(dst.size() == cis.size());
 
 		for (uint64_t i = 0; i < dst.size(); i++) {
 			auto& ci = cis[i];
-			Result<Buffer, AllocateException> result{ expected_value };
+			Result<ptr_base, AllocateException> result{ expected_value };
 			auto alignment = std::lcm(ci.alignment, get_context().min_buffer_alignment);
-			if (ci.mem_usage == MemoryUsage::eGPUonly) {
-				result = impl->linear_gpu_only.allocate_buffer(ci.size, alignment, loc);
-			} else if (ci.mem_usage == MemoryUsage::eCPUonly) {
-				result = impl->linear_cpu_only.allocate_buffer(ci.size, alignment, loc);
-			} else if (ci.mem_usage == MemoryUsage::eCPUtoGPU) {
-				result = impl->linear_cpu_gpu.allocate_buffer(ci.size, alignment, loc);
-			} else if (ci.mem_usage == MemoryUsage::eGPUtoCPU) {
-				result = impl->linear_gpu_cpu.allocate_buffer(ci.size, alignment, loc);
+			if (ci.memory_usage == MemoryUsage::eGPUonly) {
+				result = impl->linear_gpu_only.allocate_memory(ci.size, alignment, loc);
+			} else if (ci.memory_usage == MemoryUsage::eCPUonly) {
+				result = impl->linear_cpu_only.allocate_memory(ci.size, alignment, loc);
+			} else if (ci.memory_usage == MemoryUsage::eCPUtoGPU) {
+				result = impl->linear_cpu_gpu.allocate_memory(ci.size, alignment, loc);
+			} else if (ci.memory_usage == MemoryUsage::eGPUtoCPU) {
+				result = impl->linear_gpu_cpu.allocate_memory(ci.size, alignment, loc);
 			}
 			if (!result) {
-				deallocate_buffers({ dst.data(), (uint64_t)i });
+				deallocate_memory({ dst.data(), (uint64_t)i });
 				return result;
 			}
 			dst[i] = result.value();
@@ -121,7 +121,7 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	void DeviceLinearResource::deallocate_buffers(std::span<const Buffer> src) {} // no-op, linear
+	void DeviceLinearResource::deallocate_memory(std::span<const ptr_base> src) {} // no-op, linear
 
 	Result<void, AllocateException>
 	DeviceLinearResource::allocate_framebuffers(std::span<VkFramebuffer> dst, std::span<const FramebufferCreateInfo> cis, SourceLocationAtFrame loc) {
@@ -323,7 +323,7 @@ namespace vuk {
 		upstream->deallocate_framebuffers(f.framebuffers);
 		upstream->deallocate_images(f.images);
 		upstream->deallocate_image_views(f.image_views);
-		upstream->deallocate_buffers(f.buffers);
+		upstream->deallocate_memory(f.buffers);
 		upstream->deallocate_persistent_descriptor_sets(f.persistent_descriptor_sets);
 		upstream->deallocate_descriptor_sets(f.descriptor_sets);
 		f.ctx->make_timestamp_results_available(f.ts_query_pools);

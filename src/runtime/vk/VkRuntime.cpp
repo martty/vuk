@@ -251,17 +251,19 @@ namespace vuk {
 		descriptor_bindings[binding][array_index].type = (DescriptorType)((uint8_t)DescriptorType::eStorageImage | (uint8_t)DescriptorType::ePendingWrite);
 	}
 
-	void PersistentDescriptorSet::update_uniform_buffer(unsigned binding, unsigned array_index, Buffer buffer) {
+	void PersistentDescriptorSet::update_uniform_buffer(unsigned binding, unsigned array_index, Buffer<> buffer) {
 		assert(binding < descriptor_bindings.size());
 		assert(array_index < descriptor_bindings[binding].size());
-		descriptor_bindings[binding][array_index].buffer = VkDescriptorBufferInfo{ buffer.buffer, buffer.offset, buffer.size };
+		// defer resolving the buffer
+		descriptor_bindings[binding][array_index].buffer = VkDescriptorBufferInfo{ VK_NULL_HANDLE, buffer.ptr.device_address, buffer.sz_bytes };
 		descriptor_bindings[binding][array_index].type = (DescriptorType)((uint8_t)DescriptorType::eUniformBuffer | (uint8_t)DescriptorType::ePendingWrite);
 	}
 
-	void PersistentDescriptorSet::update_storage_buffer(unsigned binding, unsigned array_index, Buffer buffer) {
+	void PersistentDescriptorSet::update_storage_buffer(unsigned binding, unsigned array_index, Buffer<> buffer) {
 		assert(binding < descriptor_bindings.size());
 		assert(array_index < descriptor_bindings[binding].size());
-		descriptor_bindings[binding][array_index].buffer = VkDescriptorBufferInfo{ buffer.buffer, buffer.offset, buffer.size };
+		// defer resolving the buffer
+		descriptor_bindings[binding][array_index].buffer = VkDescriptorBufferInfo{ VK_NULL_HANDLE, buffer.ptr.device_address, buffer.sz_bytes };
 		descriptor_bindings[binding][array_index].type = (DescriptorType)((uint8_t)DescriptorType::eStorageBuffer | (uint8_t)DescriptorType::ePendingWrite);
 	}
 
@@ -298,6 +300,11 @@ namespace vuk {
 						db[j].as.wds = { VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR };
 						db[j].as.wds.accelerationStructureCount = 1;
 						db[j].as.wds.pAccelerationStructures = &db[j].as.as;
+					} else if (db[j].type == DescriptorType::eStorageBuffer || db[j].type == DescriptorType::eUniformBuffer) { // resolve buffers here
+						ptr_base ptr{ db[j].buffer.offset };
+						auto& ae = ctx.resolve_ptr(ptr);
+						db[j].buffer.buffer = ae.buffer.buffer;
+						db[j].buffer.offset = ae.buffer.offset;
 					}
 					wdss.push_back(VkWriteDescriptorSet{ .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 					                                     .pNext = db[j].type == DescriptorType::eAccelerationStructureKHR ? &db[j].as.wds : nullptr,

@@ -15,18 +15,18 @@ namespace vuk {
 	/// @param buffer Buffer to fill
 	/// @param src_data pointer to source data
 	/// @param size size of source data
-	inline Value<Buffer> host_data_to_buffer(Allocator& allocator, DomainFlagBits copy_domain, Buffer dst, const void* src_data, size_t size, VUK_CALLSTACK) {
+	inline Value<Buffer<>> host_data_to_buffer(Allocator& allocator, DomainFlagBits copy_domain, Buffer<> dst, const void* src_data, size_t size, VUK_CALLSTACK) {
 		// host-mapped buffers just get memcpys
-		if (dst.mapped_ptr) {
-			memcpy(dst.mapped_ptr, src_data, size);
-			return { acquire_buf("_dst", dst, Access::eNone, VUK_CALL) };
+		if (&*dst.ptr) {
+			memcpy(&*dst.ptr, src_data, size);
+			return { acquire("_dst", dst, Access::eNone, VUK_CALL) };
 		}
 
-		auto src = *allocate_buffer(allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, 1 });
-		::memcpy(src->mapped_ptr, src_data, size);
+		auto src = *allocate_memory(allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, 1 });
+		::memcpy(&*src, src_data, size);
 
-		auto src_buf = acquire_buf("_src", *src, Access::eNone, VUK_CALL);
-		auto dst_buf = discard_buf("_dst", dst, VUK_CALL);
+		auto src_buf = acquire("_src", Buffer<>{ src.get(), size }, Access::eNone, VUK_CALL);
+		auto dst_buf = discard("_dst", dst, VUK_CALL);
 		auto pass = make_pass("upload buffer", [](CommandBuffer& command_buffer, VUK_BA(Access::eTransferRead) src, VUK_BA(Access::eTransferWrite) dst) {
 			command_buffer.copy_buffer(src, dst);
 			return dst;
@@ -39,21 +39,22 @@ namespace vuk {
 	/// @param copy_domain The domain where the copy should happen (when dst is mapped, the copy happens on host)
 	/// @param dst Buffer to fill
 	/// @param data source data
-	template<class T>
-	Value<Buffer> host_data_to_buffer(Allocator& allocator, DomainFlagBits copy_domain, Buffer dst, std::span<T> data, VUK_CALLSTACK) {
+	template<class T = byte>
+	Value<Buffer<T>> host_data_to_buffer(Allocator& allocator, DomainFlagBits copy_domain, Buffer<T> dst, std::span<T> data, VUK_CALLSTACK) {
 		return host_data_to_buffer(allocator, copy_domain, dst, data.data(), data.size_bytes(), VUK_CALL);
 	}
 
 	/// @brief Download a buffer to GPUtoCPU memory
 	/// @param buffer_src Buffer to download
-	inline Value<Buffer> download_buffer(Value<Buffer> buffer_src, VUK_CALLSTACK) {
-		auto dst = declare_buf("dst", Buffer{ .memory_usage = MemoryUsage::eGPUtoCPU }, VUK_CALL);
+	template<class T = byte>
+	inline Value<Buffer<T>> download_buffer(Value<Buffer<T>> buffer_src, VUK_CALLSTACK) {
+		auto dst = declare_buf<T>("dst", { .memory_usage = MemoryUsage::eGPUtoCPU }, VUK_CALL);
 		dst.same_size(buffer_src);
-		auto download =
-		    make_pass("download buffer", [](CommandBuffer& command_buffer, VUK_BA(Access::eTransferRead) src, VUK_BA(Access::eTransferWrite) dst) {
-			    command_buffer.copy_buffer(src, dst);
-			    return dst;
-		    });
+		auto download = make_pass("download buffer",
+		                          [](CommandBuffer& command_buffer, VUK_ARG(Buffer<T>, Access::eTransferRead) src, VUK_ARG(Buffer<T>, Access::eTransferWrite) dst) {
+			                          command_buffer.copy_buffer(src->to_byte_view(), dst->to_byte_view());
+			                          return dst;
+		                          });
 		return download(std::move(buffer_src), std::move(dst), VUK_CALL);
 	}
 
@@ -66,8 +67,8 @@ namespace vuk {
 	host_data_to_image(Allocator& allocator, DomainFlagBits copy_domain, ImageAttachment image, const void* src_data, VUK_CALLSTACK) {
 		size_t alignment = format_to_texel_block_size(image.format);
 		size_t size = compute_image_size(image.format, image.extent);
-		auto src = *allocate_buffer(allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
-		::memcpy(src->mapped_ptr, src_data, size);
+		auto src = *allocate_memory(allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
+		::memcpy(&*src, src_data, size);
 
 		BufferImageCopy bc;
 		bc.imageOffset = { 0, 0, 0 };
@@ -79,28 +80,27 @@ namespace vuk {
 		bc.imageSubresource.baseArrayLayer = image.base_layer;
 		assert(image.layer_count == 1); // unsupported yet
 		bc.imageSubresource.layerCount = image.layer_count;
-		bc.bufferOffset = src->offset;
+		bc.bufferOffset = allocator.get_context().resolve_ptr(src.get()).buffer.offset;
 
-		auto srcbuf = acquire_buf("src", *src, Access::eNone, VUK_CALL);
+		auto srcbuf = acquire("src", Buffer<>{ *src, size }, Access::eNone, VUK_CALL);
 		auto dst = declare_ia("dst", image, VUK_CALL);
-		auto image_upload =
-		    make_pass("image upload", [bc](CommandBuffer& command_buffer, VUK_BA(Access::eTransferRead) src, VUK_IA(Access::eTransferWrite) dst) {
-			    command_buffer.copy_buffer_to_image(src, dst, bc);
-			    return dst;
-		    });
+		auto image_upload = make_pass("image upload", [bc](CommandBuffer& command_buffer, VUK_BA(Access::eTransferRead) src, VUK_IA(Access::eTransferWrite) dst) {
+			command_buffer.copy_buffer_to_image(src, dst, bc);
+			return dst;
+		});
 
 		return image_upload(std::move(srcbuf), std::move(dst), VUK_CALL);
 	}
 
 	/// @brief Allocates & fills a buffer with explicitly managed lifetime
 	/// @param allocator Allocator to allocate this Buffer from
-	/// @param mem_usage Where to allocate the buffer (host visible buffers will be automatically mapped)
+	/// @param memory_usage Where to allocate the buffer (host visible buffers will be automatically mapped)
 	template<class T>
-	std::pair<Unique<Buffer>, Value<Buffer>>
+	std::pair<Unique<Buffer<T>>, Value<Buffer<T>>>
 	create_buffer(Allocator& allocator, MemoryUsage memory_usage, DomainFlagBits domain, std::span<T> data, size_t alignment = 1, VUK_CALLSTACK) {
 		Unique<Buffer> buf(allocator);
 		BufferCreateInfo bci{ memory_usage, sizeof(T) * data.size(), alignment };
-		auto ret = allocator.allocate_buffers(std::span{ &*buf, 1 }, std::span{ &bci, 1 }); // TODO: dropping error
+		auto ret = allocator.allocate_memory(std::span{ &*buf, 1 }, std::span{ &bci, 1 }); // TODO: dropping error
 		Buffer b = buf.get();
 		return { std::move(buf), host_data_to_buffer(allocator, domain, b, data, VUK_CALL) };
 	}
@@ -175,8 +175,9 @@ namespace vuk {
 		return blit(std::move(src), std::move(dst), VUK_CALL);
 	}
 
-	inline Value<Buffer> copy(Value<ImageAttachment> src, Value<Buffer> dst, VUK_CALLSTACK) {
-		auto image2buf = make_pass("copy image to buffer", [](CommandBuffer& cbuf, VUK_IA(Access::eCopyRead) src, VUK_BA(Access::eCopyWrite) dst) {
+	template<class T>
+	inline Value<Buffer<T>> copy(Value<ImageAttachment> src, Value<Buffer<T>> dst, VUK_CALLSTACK) {
+		auto image2buf = make_pass("copy image to buffer", [](CommandBuffer& cbuf, VUK_IA(Access::eCopyRead) src, VUK_BA(Access::eTransferWrite) dst) {
 			BufferImageCopy bc;
 			bc.imageOffset = { 0, 0, 0 };
 			bc.bufferRowLength = 0;
@@ -187,7 +188,8 @@ namespace vuk {
 			bc.imageSubresource.baseArrayLayer = src->base_layer;
 			assert(src->layer_count == 1); // unsupported yet
 			bc.imageSubresource.layerCount = src->layer_count;
-			bc.bufferOffset = dst->offset;
+			auto& ae = cbuf.get_context().resolve_ptr(dst.ptr);
+			bc.bufferOffset = ae.buffer.offset; // TODO: PAV: bad
 			cbuf.copy_image_to_buffer(src, dst, bc);
 			return dst;
 		});
@@ -195,8 +197,10 @@ namespace vuk {
 		return image2buf(src, dst, VUK_CALL);
 	}
 
-	inline Value<Buffer> copy(Value<Buffer> src, Value<Buffer> dst, VUK_CALLSTACK) {
-		auto buf2buf = vuk::make_pass("copy buffer to buffer", [](vuk::CommandBuffer& command_buffer, VUK_BA(vuk::eCopyRead) src, VUK_BA(vuk::eCopyWrite) dst) {
+	template<class T>
+	inline Value<Buffer<T>> copy(Value<Buffer<T>> src, Value<Buffer<T>> dst, VUK_CALLSTACK) {
+		auto buf2buf =
+		    vuk::make_pass("copy buffer to buffer", [](vuk::CommandBuffer& command_buffer, VUK_BA(vuk::eCopyRead) src, VUK_BA(vuk::eCopyWrite) dst) {
 			    command_buffer.copy_buffer(src, dst);
 			    return dst;
 		    });
@@ -214,7 +218,7 @@ namespace vuk {
 		buf2buf(dst, VUK_CALL);
 	}
 
-	inline Value<ImageAttachment> copy(Value<Buffer> src, Value<ImageAttachment> dst, VUK_CALLSTACK) {
+	inline Value<ImageAttachment> copy(Value<Buffer<T>> src, Value<ImageAttachment> dst, VUK_CALLSTACK) {
 		auto buf2img = make_pass("copy buffer to image", [](CommandBuffer& cbuf, VUK_BA(Access::eCopyRead) src, VUK_IA(Access::eCopyWrite) dst) {
 			BufferImageCopy bc;
 			bc.imageOffset = { 0, 0, 0 };
@@ -226,7 +230,8 @@ namespace vuk {
 			bc.imageSubresource.baseArrayLayer = dst->base_layer;
 			assert(dst->layer_count == 1); // unsupported yet
 			bc.imageSubresource.layerCount = dst->layer_count;
-			bc.bufferOffset = src->offset;
+			auto& ae = cbuf.get_context().resolve_ptr(dst.ptr);
+			bc.bufferOffset = ae.buffer.offset; // TODO: PAV: bad
 			cbuf.copy_buffer_to_image(src, dst, bc);
 			return dst;
 		});
@@ -234,7 +239,7 @@ namespace vuk {
 		return buf2img(src, dst, VUK_CALL);
 	}
 
-		inline Value<ImageAttachment> copy(Value<ImageAttachment> src, Value<ImageAttachment> dst, VUK_CALLSTACK) {
+	inline Value<ImageAttachment> copy(Value<ImageAttachment> src, Value<ImageAttachment> dst, VUK_CALLSTACK) {
 		auto img2img = make_pass("copy image to image", [](CommandBuffer& cbuf, VUK_IA(Access::eCopyRead) src, VUK_IA(Access::eCopyWrite) dst) {
 			assert(src->level_count == dst->level_count);
 

@@ -6,7 +6,6 @@
 #include <string_view>
 #include <vector>
 
-#include "vuk/Buffer.hpp"
 #include "vuk/Executor.hpp"
 #include "vuk/runtime/vk/Allocation.hpp"
 #include "vuk/runtime/vk/Allocator.hpp"

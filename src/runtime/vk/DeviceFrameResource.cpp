@@ -129,7 +129,7 @@ namespace vuk {
 		std::mutex sema_mutex;
 		std::vector<VkSemaphore> semaphores;
 		std::mutex buf_mutex;
-		std::vector<Buffer> buffers;
+		std::vector<ptr_base> buffers;
 		std::mutex fence_mutex;
 		std::vector<VkFence> fences;
 		std::mutex cbuf_mutex;
@@ -151,7 +151,7 @@ namespace vuk {
 
 		// only for use via SuperframeAllocator
 		std::mutex buffers_mutex;
-		std::vector<Buffer> buffer_gpus;
+		std::vector<ptr_base> buffer_gpus;
 
 		std::vector<TimestampQueryPool> ts_query_pools;
 		std::mutex query_pool_mutex;
@@ -239,24 +239,24 @@ namespace vuk {
 	void DeviceFrameResource::deallocate_command_pools(std::span<const CommandPool> dst) {} // no-op
 
 	Result<void, AllocateException>
-	DeviceFrameResource::allocate_buffers(std::span<Buffer> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
+	DeviceFrameResource::allocate_memory(std::span<ptr_base> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
 		assert(dst.size() == cis.size());
 
 		for (uint64_t i = 0; i < dst.size(); i++) {
 			auto& ci = cis[i];
-			Result<Buffer, AllocateException> result{ expected_value };
+			Result<ptr_base, AllocateException> result{ expected_value };
 			auto alignment = std::lcm(ci.alignment, get_context().min_buffer_alignment);
-			if (ci.mem_usage == MemoryUsage::eGPUonly) {
-				result = impl->linear_gpu_only.allocate_buffer(ci.size, alignment, loc);
-			} else if (ci.mem_usage == MemoryUsage::eCPUonly) {
-				result = impl->linear_cpu_only.allocate_buffer(ci.size, alignment, loc);
-			} else if (ci.mem_usage == MemoryUsage::eCPUtoGPU) {
-				result = impl->linear_cpu_gpu.allocate_buffer(ci.size, alignment, loc);
-			} else if (ci.mem_usage == MemoryUsage::eGPUtoCPU) {
-				result = impl->linear_gpu_cpu.allocate_buffer(ci.size, alignment, loc);
+			if (ci.memory_usage == MemoryUsage::eGPUonly) {
+				result = impl->linear_gpu_only.allocate_memory(ci.size, alignment, loc);
+			} else if (ci.memory_usage == MemoryUsage::eCPUonly) {
+				result = impl->linear_cpu_only.allocate_memory(ci.size, alignment, loc);
+			} else if (ci.memory_usage == MemoryUsage::eCPUtoGPU) {
+				result = impl->linear_cpu_gpu.allocate_memory(ci.size, alignment, loc);
+			} else if (ci.memory_usage == MemoryUsage::eGPUtoCPU) {
+				result = impl->linear_gpu_cpu.allocate_memory(ci.size, alignment, loc);
 			}
 			if (!result) {
-				deallocate_buffers({ dst.data(), (uint64_t)i });
+				deallocate_memory({ dst.data(), (uint64_t)i });
 				return result;
 			}
 			dst[i] = result.value();
@@ -264,7 +264,7 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	void DeviceFrameResource::deallocate_buffers(std::span<const Buffer> src) {} // no-op, linear
+	void DeviceFrameResource::deallocate_memory(std::span<const ptr_base> src) {} // no-op, linear
 
 	Result<void, AllocateException>
 	DeviceFrameResource::allocate_framebuffers(std::span<VkFramebuffer> dst, std::span<const FramebufferCreateInfo> cis, SourceLocationAtFrame loc) {
@@ -633,7 +633,7 @@ namespace vuk {
 		}
 	}
 
-	void DeviceSuperFrameResource::deallocate_buffers(std::span<const Buffer> src) {
+	void DeviceSuperFrameResource::deallocate_memory(std::span<const ptr_base> src) {
 		std::shared_lock _s(impl->new_frame_mutex);
 		auto& f = get_last_frame();
 		std::unique_lock _(f.impl->buffers_mutex);
@@ -676,15 +676,15 @@ namespace vuk {
 	}
 
 	Result<void, AllocateException>
-	DeviceSuperFrameResource::allocate_buffers(std::span<Buffer> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
+	DeviceSuperFrameResource::allocate_memory(std::span<ptr_base> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
 		assert(dst.size() == cis.size());
 		for (uint64_t i = 0; i < dst.size(); i++) {
 			auto& ci = cis[i];
-			auto& alloc = impl->suballocators[(int)ci.mem_usage - 1];
+			auto& alloc = impl->suballocators[(int)ci.memory_usage - 1];
 			auto alignment = std::lcm(ci.alignment, get_context().min_buffer_alignment);
-			auto res = alloc.allocate_buffer(ci.size, alignment, loc);
+			auto res = alloc.allocate_memory(ci.size, alignment, loc);
 			if (!res) {
-				deallocate_buffers({ dst.data(), (uint64_t)i });
+				deallocate_memory({ dst.data(), (uint64_t)i });
 				return res;
 			}
 			dst[i] = *res;
@@ -895,8 +895,9 @@ namespace vuk {
 			direct->ctx->vkResetCommandPool(get_context().device, pool.command_pool, {});
 		}
 		deallocate_command_pools(f.cmdpools_to_free);
-		for (Buffer& buf : f.buffer_gpus) {
-			impl->suballocators[(int)buf.memory_usage - 1].deallocate_buffer(buf);
+		for (auto& buf : f.buffer_gpus) {
+			auto& ae = direct->ctx->resolve_ptr(buf);
+			impl->suballocators[(int)ae.buffer.memory_usage - 1].deallocate_memory(buf);
 		}
 		upstream->deallocate_framebuffers(f.framebuffers);
 		upstream->deallocate_images(f.images);
@@ -907,7 +908,7 @@ namespace vuk {
 		upstream->deallocate_timestamp_query_pools(f.ts_query_pools);
 		upstream->deallocate_acceleration_structures(f.ass);
 		upstream->deallocate_swapchains(f.swapchains);
-		upstream->deallocate_buffers(f.buffers);
+		upstream->deallocate_memory(f.buffers);
 
 		for (auto& p : f.ds_pools) {
 			direct->ctx->vkResetDescriptorPool(get_context().device, p, {});

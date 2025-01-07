@@ -1,5 +1,7 @@
 #pragma once
 
+#include <type_traits>
+
 namespace vuk {
 	namespace detail {
 		template<class T>
@@ -116,6 +118,10 @@ namespace vuk {
 			    },                                                                                                                                                   \
 			    members);                                                                                                                                            \
 		}                                                                                                                                                          \
+		static void destroy(void* value) {                                                                                                                         \
+			T& v = *reinterpret_cast<T*>(value);                                                                                                                     \
+			v.~T();                                                                                                                                                  \
+		}                                                                                                                                                          \
 		static constexpr const char* name = #type;                                                                                                                 \
 		struct proxy {                                                                                                                                             \
 			EVAL(MAKE_EXPAND TRANSFORMSC(WRAPPED_T, (__VA_ARGS__)));                                                                                                 \
@@ -126,6 +132,53 @@ namespace vuk {
 	}
 
 #define ADAPT_TEMPLATED_STRUCT_FOR_IR(type, ...)                                                                                                               \
+	template<class Type>                                                                                                                                         \
+	struct erased_tuple_adaptor<type<Type>> : std::true_type {                                                                                                   \
+		using T = type<Type>;                                                                                                                                      \
+		static constexpr std::tuple members = EVAL(MAKE_INITIALIZER TRANSFORM(MEM_OBJ_ARG, (__VA_ARGS__)));                                                        \
+		static constexpr std::array member_names = EVAL(MAKE_INITIALIZER TRANSFORM(STRIFY, (__VA_ARGS__)));                                                        \
+		static constexpr std::tuple EVAL(MAKE_TEMPLATE_LIST TRANSFORM(MEM_OBJ_TYPE, (__VA_ARGS__))) member_types;                                                  \
+		static constexpr std::array offsets = EVAL(MAKE_INITIALIZER TRANSFORM(OFFSETIFY, (__VA_ARGS__)));                                                          \
+		static void construct(void* dst, std::span<void*> parts) {                                                                                                 \
+			T& v = *new (dst) T;                                                                                                                                     \
+			size_t i = 0;                                                                                                                                            \
+			std::apply(                                                                                                                                              \
+			    [&](auto... member_obj_tys) { ((v.*member_obj_tys = *reinterpret_cast<detail::member_type_t<decltype(member_obj_tys)>*>(parts[i++])), ...); },       \
+			    members);                                                                                                                                            \
+		}                                                                                                                                                          \
+		static void* get(void* value, size_t index) {                                                                                                              \
+			T& v = *reinterpret_cast<T*>(value);                                                                                                                     \
+			return std::apply(                                                                                                                                       \
+			    [&](auto... member_obj_tys) {                                                                                                                        \
+				    std::array results = { static_cast<void*>(&(v.*member_obj_tys))... };                                                                              \
+				    return results[index];                                                                                                                             \
+			    },                                                                                                                                                   \
+			    members);                                                                                                                                            \
+		}                                                                                                                                                          \
+		static bool is_default(void* value, size_t index) {                                                                                                        \
+			T& v = *reinterpret_cast<T*>(value);                                                                                                                     \
+			T def{};                                                                                                                                                 \
+			return std::apply(                                                                                                                                       \
+			    [&](auto... member_obj_tys) {                                                                                                                        \
+				    std::array results = { (def.*member_obj_tys) == (v.*member_obj_tys)... };                                                                          \
+				    return results[index];                                                                                                                             \
+			    },                                                                                                                                                   \
+			    members);                                                                                                                                            \
+		}                                                                                                                                                          \
+		static void destroy(void* value) {                                                                                                                         \
+			T& v = *reinterpret_cast<T*>(value);                                                                                                                     \
+			v.~T();                                                                                                                                                  \
+		}                                                                                                                                                          \
+		static constexpr const char* name = #type;                                                                                                                 \
+		struct proxy {                                                                                                                                             \
+			EVAL(MAKE_EXPAND TRANSFORMSC(WRAPPED_T, (__VA_ARGS__)));                                                                                                 \
+			proxy* operator->() {                                                                                                                                    \
+				return this;                                                                                                                                           \
+			}                                                                                                                                                        \
+		};                                                                                                                                                         \
+	}
+
+#define ADAPT_TEMPLATED_PACK_STRUCT_FOR_IR(type, ...)                                                                                                          \
 	template<class... Args>                                                                                                                                      \
 	struct erased_tuple_adaptor<type<Args...>> : std::true_type {                                                                                                \
 		using T = type<Args...>;                                                                                                                                   \
@@ -158,6 +211,10 @@ namespace vuk {
 				    return results[index];                                                                                                                             \
 			    },                                                                                                                                                   \
 			    members);                                                                                                                                            \
+		}                                                                                                                                                          \
+		static void destroy(void* value) {                                                                                                                         \
+			T& v = *reinterpret_cast<T*>(value);                                                                                                                     \
+			v.~T();                                                                                                                                                  \
 		}                                                                                                                                                          \
 		static constexpr const char* name = #type;                                                                                                                 \
 		struct proxy {                                                                                                                                             \

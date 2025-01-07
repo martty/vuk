@@ -49,9 +49,17 @@ namespace vuk {
 	class Unique;
 
 	struct BufferCreateInfo;
-	struct Buffer;
+	template<class T>
+	struct BufferLike;
 
 	struct ImageAttachment;
+	
+	template<class Type, class... Constraints>
+	struct view;
+
+	using byte = std::byte;
+	template<class Type = byte>
+	using Buffer = view<BufferLike<Type>>;
 
 	struct VirtualAllocation;
 	struct VirtualAddressSpace;

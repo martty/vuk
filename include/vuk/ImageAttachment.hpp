@@ -1,6 +1,5 @@
 #pragma once
 
-#include "vuk/Buffer.hpp"
 #include "vuk/runtime/vk/Image.hpp"
 #include "vuk/vuk_fwd.hpp"
 #include <cmath>

@@ -9,8 +9,8 @@ TEST_CASE("arrayed buffers") {
 	{
 		auto data = { 0xfeu, 0xfeu, 0xfeu, 0xfeu };
 		auto data2 = { 0xfdu, 0xfdu, 0xfdu, 0xfdu };
-		auto buf = allocate_buffer(*test_context.allocator, { .mem_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
-		auto buf2 = allocate_buffer(*test_context.allocator, { .mem_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
+		auto buf = allocate_buffer(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
+		auto buf2 = allocate_buffer(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
 
 		auto fill = make_pass("fill two", [](CommandBuffer& cbuf, VUK_ARG(Buffer[], Access::eTransferWrite) dst) {
 			cbuf.fill_buffer(dst[0], 0xfe);
@@ -31,8 +31,8 @@ TEST_CASE("arrayed buffers, internal loop") {
 	{
 		auto data = { 0xfeu, 0xfeu, 0xfeu, 0xfeu };
 		auto data2 = { 0xfdu, 0xfdu, 0xfdu, 0xfdu };
-		auto buf = allocate_buffer(*test_context.allocator, { .mem_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
-		auto buf2 = allocate_buffer(*test_context.allocator, { .mem_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
+		auto buf = allocate_buffer(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
+		auto buf2 = allocate_buffer(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
 
 		auto fill = make_pass("fill two", [](CommandBuffer& cbuf, VUK_ARG(Buffer[], Access::eTransferWrite) dst) {
 			for (size_t i = 0; i < dst.size(); i++) {
@@ -52,8 +52,8 @@ TEST_CASE("arrayed buffers, internal loop") {
 
 TEST_CASE("zero len arrayed buffers") {
 	{
-		auto buf = allocate_buffer(*test_context.allocator, { .mem_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
-		auto buf2 = allocate_buffer(*test_context.allocator, { .mem_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
+		auto buf = allocate_buffer(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
+		auto buf2 = allocate_buffer(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
 
 		std::string trace = "";
 
