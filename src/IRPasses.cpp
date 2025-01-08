@@ -1314,7 +1314,7 @@ namespace vuk {
 				bool s = true;
 				if (node->type[0]->kind == Type::POINTER_TY) { // pointers - use implicit view
 					auto& ptr = constant<ptr_base>(first(node));
-					auto& ae = Resolver::per_thread->resolve_ptr(ptr);
+					auto& ae = Resolver::per_thread->resolve_ptr(ptr); //TODO: PAV: using per_thread here, shouldn't
 					s = memory.insert_unaligned(ptr.device_address, ae.buffer.size, true);
 				} else if (node->type[0]->is_bufferlike_view()) { // bufferlike views
 					auto& buf = constant<Buffer<>>(first(node));

@@ -854,6 +854,14 @@ namespace vuk {
 		return *p;
 	}
 
+	Resolver::BufferWithOffset Resolver::ptr_to_buffer_offset(ptr_base ptr) {
+		auto p = allocations.find(ptr.device_address);
+		assert(p);
+		Resolver::BufferWithOffset bwo{ p->buffer.buffer, p->buffer.offset };
+		bwo.offset += ptr.device_address - p->buffer.base_address;
+		return bwo;
+	}
+
 	ViewEntry& Resolver::resolve_view(generic_view_base v) {
 		if ((v.key & 0x3) == 0) { // a generic memory view
 			auto p = memory_views.find(v.key);

@@ -80,7 +80,7 @@ namespace vuk {
 		bc.imageSubresource.baseArrayLayer = image.base_layer;
 		assert(image.layer_count == 1); // unsupported yet
 		bc.imageSubresource.layerCount = image.layer_count;
-		bc.bufferOffset = allocator.get_context().resolve_ptr(src.get()).buffer.offset;
+		bc.bufferOffset = allocator.get_context().ptr_to_buffer_offset(src.get()).offset;
 
 		auto srcbuf = acquire("src", Buffer<>{ *src, size }, Access::eNone, VUK_CALL);
 		auto dst = declare_ia("dst", image, VUK_CALL);
@@ -188,8 +188,7 @@ namespace vuk {
 			bc.imageSubresource.baseArrayLayer = src->base_layer;
 			assert(src->layer_count == 1); // unsupported yet
 			bc.imageSubresource.layerCount = src->layer_count;
-			auto& ae = cbuf.get_context().resolve_ptr(dst.ptr);
-			bc.bufferOffset = ae.buffer.offset; // TODO: PAV: bad
+			bc.bufferOffset = cbuf.get_context().ptr_to_buffer_offset(dst.ptr).offset; // TODO: PAV: bad
 			cbuf.copy_image_to_buffer(src, dst, bc);
 			return dst;
 		});
@@ -230,8 +229,7 @@ namespace vuk {
 			bc.imageSubresource.baseArrayLayer = dst->base_layer;
 			assert(dst->layer_count == 1); // unsupported yet
 			bc.imageSubresource.layerCount = dst->layer_count;
-			auto& ae = cbuf.get_context().resolve_ptr(dst.ptr);
-			bc.bufferOffset = ae.buffer.offset; // TODO: PAV: bad
+			bc.bufferOffset = cbuf.get_context().ptr_to_buffer_offset(dst.ptr).offset; // TODO: PAV: bad
 			cbuf.copy_buffer_to_image(src, dst, bc);
 			return dst;
 		});
