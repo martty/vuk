@@ -16,7 +16,13 @@ namespace vuk {
 		void add_generic_view(uint64_t key, ViewEntry& ve);
 		void remove_generic_view(uint64_t key);
 
+		struct BufferWithOffset {
+			VkBuffer buffer;
+			size_t offset;
+		};
+
 		AllocationEntry& resolve_ptr(ptr_base ptr);
+		BufferWithOffset ptr_to_buffer_offset(ptr_base ptr);
 		ViewEntry& resolve_view(generic_view_base view);
 		void install_as_thread_resolver();
 
@@ -35,25 +41,33 @@ namespace vuk {
 		UnwrappedT* operator->()
 		  requires(!std::is_same_v<UnwrappedT, void>)
 		{
-			return reinterpret_cast<UnwrappedT*>(Resolver::per_thread->resolve_ptr(*this).host_ptr);
+			auto& ae = Resolver::per_thread->resolve_ptr(*this);
+			auto offset = device_address - ae.buffer.base_address;
+			return reinterpret_cast<UnwrappedT*>(ae.host_ptr + offset);
 		}
 
 		auto& operator*()
 		  requires(!std::is_same_v<UnwrappedT, void>)
 		{
-			return *reinterpret_cast<UnwrappedT*>(Resolver::per_thread->resolve_ptr(*this).host_ptr);
+			auto& ae = Resolver::per_thread->resolve_ptr(*this);
+			auto offset = device_address - ae.buffer.base_address;
+			return *reinterpret_cast<UnwrappedT*>(ae.host_ptr + offset);
 		}
 
 		const auto& operator*() const
 		  requires(!std::is_same_v<UnwrappedT, void>)
 		{
-			return *reinterpret_cast<const UnwrappedT*>(Resolver::per_thread->resolve_ptr(*this).host_ptr);
+			auto& ae = Resolver::per_thread->resolve_ptr(*this);
+			auto offset = device_address - ae.buffer.base_address;
+			return *reinterpret_cast<const UnwrappedT*>(ae.host_ptr + offset);
 		}
 
 		auto& operator[](size_t index)
 		  requires(!std::is_same_v<UnwrappedT, void>)
 		{
-			return *(reinterpret_cast<std::remove_extent_t<UnwrappedT>*>(Resolver::per_thread->resolve_ptr(*this).host_ptr) + index);
+			auto& ae = Resolver::per_thread->resolve_ptr(*this);
+			auto offset = device_address - ae.buffer.base_address;
+			return *(reinterpret_cast<std::remove_extent_t<UnwrappedT>*>(ae.host_ptr + offset) + index);
 		}
 
 		ptr operator+(size_t offset)
