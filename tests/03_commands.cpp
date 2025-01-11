@@ -2,6 +2,7 @@
 #include "vuk/runtime/vk/AllocatorHelpers.hpp"
 #include "vuk/vsl/Core.hpp"
 #include <doctest/doctest.h>
+#include <thread>
 
 using namespace vuk;
 

@@ -552,6 +552,8 @@ namespace vuk {
 			}
 			break;
 		}
+		default:
+			break;
 		}
 	}
 
