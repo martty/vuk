@@ -312,11 +312,7 @@ inline val_view<BufferLike<T>> clear(val_view<BufferLike<T>> in, T clear_value, 
 }
 
 TEST_CASE("allocate ptr and view in IR") {
-	auto buf0 = vuk::declare_ptr<float>("jacob");
-	// set directly on struct from an immediate
-	buf0.def()->memory_usage.set(MemoryUsage::eCPUonly);
-	// set from function that could take Value
-	buf0.set_size_bytes(16);
+	auto buf0 = vuk::declare_ptr<float>("jacob", { .memory_usage = MemoryUsage::eCPUonly, .size = 16 });
 
 	auto view = buf0.implicit_view();
 	clear(buf0.implicit_view(), 0.f);
@@ -341,6 +337,32 @@ void main() {
 	auto schpen = std::span(&res[0], 4);
 	CHECK(schpen == std::span(test));
 }
+/*
+TEST_CASE("allocate view in IR") {
+	auto buf0 = vuk::declare_buf<float>("jacob", { .memory_usage = MemoryUsage::eCPUonly, .size = 16 });
+
+	clear(buf0, 0.f);
+
+	auto pass = lift_compute(test_context.runtime->get_pipeline(vuk::PipelineBaseCreateInfo::from_inline_glsl(R"(#version 460
+#pragma shader_stage(compute)
+#include <runtime>
+
+layout (push_constant) uniform data {
+	REF(float) data_in;
+};
+
+layout (local_size_x = 1) in;
+
+void main() {
+	ARRAY(data_in)[gl_GlobalInvocationID.x] = (gl_GlobalInvocationID.x + 1);
+}
+)")));
+	pass(4, 1, 1, buf0->ptr);
+	auto res = *buf0.get(*test_context.allocator, test_context.compiler, { .dump_graph = true });
+	auto test = { 1.f, 2.f, 3.f, 4.f };
+	auto schpen = res.to_span();
+	CHECK(schpen == std::span(test));
+}*/
 
 struct Bigbog {
 	ptr<BufferLike<float>> the_boof;
