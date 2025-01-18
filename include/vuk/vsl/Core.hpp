@@ -267,7 +267,7 @@ namespace vuk {
 	inline Value<ImageAttachment> resolve_into(Value<ImageAttachment> src, Value<ImageAttachment> dst, VUK_CALLSTACK) {
 		src.same_format_as(dst);
 		src.same_shape_as(dst);
-		dst->sample_count = Samples::e1;
+		// TODO: set dst as single sampled
 
 		auto resolve = make_pass(
 		    "resolve image",

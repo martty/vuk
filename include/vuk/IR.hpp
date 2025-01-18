@@ -1033,7 +1033,7 @@ namespace vuk {
 					std::destroy_at<SamplerCreateInfo>((SamplerCreateInfo*)v);
 				} else if (t->hash_value == builtin_swapchain) {
 					std::destroy_at<Swapchain*>((Swapchain**)v);
-				} else if (t->kind == Type::COMPOSITE_TY){
+				} else if (t->kind == Type::COMPOSITE_TY) {
 					t->composite.destroy(v);
 				} else if (t->kind == Type::INTEGER_TY) {
 					// nothing to do
@@ -1459,6 +1459,9 @@ namespace vuk {
 
 			return first(emplace_op(Node{ .kind = Node::MATH_BINARY, .type = std::span{ tys, 1 }, .math_binary = { .a = a, .b = b, .op = op } }));
 		}
+
+		// EDITS
+
 
 		// GC
 		void collect_garbage();
