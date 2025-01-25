@@ -83,6 +83,62 @@ namespace vuk {
 				return Program::Type::edmat4;
 			}
 			break;
+		case SPIRType::SByte:
+			switch (s.vecsize) {
+			case 1:
+				return Program::Type::eint8_t;
+			case 2:
+				return Program::Type::ei8vec2;
+			case 3:
+				return Program::Type::ei8vec3;
+			case 4:
+				return Program::Type::ei8vec4;
+			default:
+				assert("NYI" && 0);
+			}
+			break;
+		case SPIRType::UByte:
+			switch (s.vecsize) {
+			case 1:
+				return Program::Type::euint8_t;
+			case 2:
+				return Program::Type::eu8vec2;
+			case 3:
+				return Program::Type::eu8vec3;
+			case 4:
+				return Program::Type::eu8vec4;
+			default:
+				assert("NYI" && 0);
+			}
+			break;
+		case SPIRType::Short:
+			switch (s.vecsize) {
+			case 1:
+				return Program::Type::eint16_t;
+			case 2:
+				return Program::Type::ei16vec2;
+			case 3:
+				return Program::Type::ei16vec3;
+			case 4:
+				return Program::Type::ei16vec4;
+			default:
+				assert("NYI" && 0);
+			}
+			break;
+		case SPIRType::UShort:
+			switch (s.vecsize) {
+			case 1:
+				return Program::Type::euint16_t;
+			case 2:
+				return Program::Type::eu16vec2;
+			case 3:
+				return Program::Type::eu16vec3;
+			case 4:
+				return Program::Type::eu16vec4;
+			default:
+				assert("NYI" && 0);
+			}
+			break;
 		case SPIRType::Int:
 			switch (s.vecsize) {
 			case 1:
@@ -342,7 +398,7 @@ namespace vuk {
 			un.non_readable = refl.get_decoration(sb.id, spv::DecorationNonReadable);
 			// maybe spirv cross bug?
 			un.array_size = type.array.size() == 1 ? (type.array[0] == 1 ? 0 : type.array[0]) : -1;
-			
+
 			ensure_set(set).bindings.push_back(un);
 		}
 
@@ -369,7 +425,7 @@ namespace vuk {
 			s.binding = binding;
 			s.stage = stage;
 			s.array_size = type.array.size() == 1 ? (type.array[0] == 1 ? 0 : type.array[0]) : -1;
-			
+
 			ensure_set(set).bindings.push_back(s);
 		}
 
