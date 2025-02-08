@@ -658,6 +658,22 @@ namespace vuk {
 		return *this;
 	}
 
+	CommandBuffer& CommandBuffer::dispatch_indirect(std::span<DispatchIndirectCommand> commands) {
+		VUK_EARLY_RET();
+		if (!_bind_compute_pipeline_state()) {
+			return *this;
+		}
+		auto res = allocate_buffer(*allocator, { MemoryUsage::eCPUtoGPU, commands.size_bytes(), 1 });
+		if (!res) {
+			current_error = std::move(res);
+			return *this;
+		}
+		auto& buf = *res;
+		memcpy(buf->mapped_ptr, commands.data(), commands.size_bytes());
+		ctx.vkCmdDispatchIndirect(command_buffer, buf->buffer, buf->offset);
+		return *this;
+	}
+
 	CommandBuffer& CommandBuffer::trace_rays(size_t size_x, size_t size_y, size_t size_z) {
 		VUK_EARLY_RET();
 		if (!_bind_ray_tracing_pipeline_state()) {
