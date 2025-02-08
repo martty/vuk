@@ -16,6 +16,26 @@
 namespace vuk {
 	class Runtime;
 
+	struct DispatchIndirectCommand {
+		uint32_t x = {};
+		uint32_t y = {};
+		uint32_t z = {};
+		operator VkDispatchIndirectCommand const&() const noexcept {
+			return *reinterpret_cast<const VkDispatchIndirectCommand*>(this);
+		}
+		operator VkDispatchIndirectCommand&() noexcept {
+			return *reinterpret_cast<VkDispatchIndirectCommand*>(this);
+		}
+		bool operator==(VkDispatchIndirectCommand const& rhs) const noexcept {
+			return (x == rhs.x) && (y == rhs.y) && (z == rhs.z);
+		}
+		bool operator!=(VkDispatchIndirectCommand const& rhs) const noexcept {
+			return !operator==(rhs);
+		}
+	};
+	static_assert(sizeof(DispatchIndirectCommand) == sizeof(VkDispatchIndirectCommand), "struct and wrapper have different size!");
+	static_assert(std::is_standard_layout_v<DispatchIndirectCommand>, "struct wrapper is not a standard layout!");
+
 	struct Ignore {
 		Ignore(size_t bytes) : format(Format::eUndefined), bytes((uint32_t)bytes) {}
 		Ignore(Format format) : format(format) {}
@@ -595,6 +615,10 @@ namespace vuk {
 		/// @brief Issue an indirect compute dispatch
 		/// @param indirect_buffer Buffer of workgroup counts
 		CommandBuffer& dispatch_indirect(const Buffer& indirect_buffer);
+
+		/// @brief Issue an indirect compute dispatch
+		/// @param commands Indirect commands to be uploaded and used for this draw
+		CommandBuffer& dispatch_indirect(std::span<DispatchIndirectCommand> commands);
 
 		/// @brief Perform ray trace query with a ray tracing pipeline
 		/// @param width width of the ray trace query dimensions
