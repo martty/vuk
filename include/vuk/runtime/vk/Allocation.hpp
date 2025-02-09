@@ -198,6 +198,11 @@ namespace vuk {
 			return { vuk::ptr<BufferLike<byte>>{ ptr.device_address }, sz_bytes };
 		}
 
+		template<class new_T>
+		[[nodiscard]] view<BufferLike<new_T>> cast() const noexcept {
+			return { vuk::ptr<BufferLike<new_T>>{ ptr.device_address }, sz_bytes };
+		}
+
 		/// @brief Create a new view that is a subset of the original
 		[[nodiscard]] view<BufferLike<Type>> subview(VkDeviceSize offset, VkDeviceSize new_count) const {
 			assert(offset + new_count <= count());

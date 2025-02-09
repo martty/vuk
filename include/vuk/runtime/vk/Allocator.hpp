@@ -685,6 +685,8 @@ namespace vuk {
 			allocator.deallocate(std::span<const ptr_base>{ static_cast<const ptr_base*>(&src), 1 });
 		} else if constexpr (std::is_base_of_v<generic_view_base, T>) {
 			allocator.deallocate(std::span<const generic_view_base>{ static_cast<const generic_view_base*>(&src), 1 });
+		} else if constexpr (is_view<T>) { // TODO: PAV: check if deallocated view matches pointer implicit view
+			allocator.deallocate(std::span<const ptr_base>{ static_cast<const ptr_base*>(&src.ptr), 1 });
 		} else {
 			allocator.deallocate(std::span<const T>{ &src, 1 });
 		}

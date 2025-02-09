@@ -697,6 +697,17 @@ public:
 	}
 
 	template<class T>
+	[[nodiscard]] inline val_view<T> acquire_buf(Name name, ptr<T> p, Access access, VUK_CALLSTACK) {
+		assert(p);
+		Ref ref = current_module->acquire(to_IR_type<ptr<T>>(), nullptr, p);
+		std::array args = { ref, current_module->make_get_allocation_size(ref) };
+		ref = current_module->make_construct(to_IR_type<view<T>>(), nullptr, args);
+		current_module->name_output(ref, name.c_str());
+		current_module->set_source_location(ref.node, VUK_CALL);
+		return { make_ext_ref(ref) };
+	}
+
+	template<class T>
 	[[nodiscard]] inline val_view<BufferLike<T>> make_view(Name name, val_ptr<BufferLike<T>> buf, Value<size_t> size, VUK_CALLSTACK) {
 		assert(buf);
 		Ref ref = current_module->make_construct(to_IR_type<view<BufferLike<T>>>(), buf.get_head(), size.get_head());

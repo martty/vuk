@@ -94,7 +94,7 @@ namespace vuk {
 			auto def_or_v = *get_def(get_head());
 			if (!def_or_v.is_ref) {
 				assert(false);
-				//return static_cast<T*>(def_or_v.value);
+				// return static_cast<T*>(def_or_v.value);
 			}
 			auto def = def_or_v.ref;
 			return std::apply(
