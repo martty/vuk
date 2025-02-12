@@ -35,7 +35,7 @@ namespace vuk {
 #define VUK_ARG(type, access) vuk::Arg<type, access, vuk::tag_type<__COUNTER__>>
 #endif
 
-#define VUK_CALLSTACK SourceLocationAtFrame _pscope = VUK_HERE_AND_NOW(), SourceLocationAtFrame _scope = VUK_HERE_AND_NOW()
+#define VUK_CALLSTACK vuk::SourceLocationAtFrame _pscope = VUK_HERE_AND_NOW(), vuk::SourceLocationAtFrame _scope = VUK_HERE_AND_NOW()
 #define VUK_CALL      (_pscope != _scope ? _scope.parent = &_pscope, _scope : _scope)
 
 namespace vuk {
