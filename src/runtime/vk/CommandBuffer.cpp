@@ -320,7 +320,8 @@ namespace vuk {
 		VUK_SB_SET(set_binding_descriptions, binding, true);
 
 		if (buf.buffer) {
-			ctx.vkCmdBindVertexBuffers(command_buffer, binding, 1, &buf.buffer, &buf.offset);
+			const VkDeviceSize len = static_cast<VkDeviceSize>(buf.offset);
+			ctx.vkCmdBindVertexBuffers(command_buffer, binding, 1, &buf.buffer, &len);
 		}
 		return *this;
 	}
@@ -345,7 +346,8 @@ namespace vuk {
 		VUK_SB_SET(set_binding_descriptions, binding, true);
 
 		if (buf.buffer) {
-			ctx.vkCmdBindVertexBuffers(command_buffer, binding, 1, &buf.buffer, &buf.offset);
+			const VkDeviceSize len = static_cast<VkDeviceSize>(buf.offset);
+			ctx.vkCmdBindVertexBuffers(command_buffer, binding, 1, &buf.buffer, &len);
 		}
 		return *this;
 	}
