@@ -320,7 +320,8 @@ namespace vuk {
 		VUK_SB_SET(set_binding_descriptions, binding, true);
 
 		if (buf.buffer) {
-			ctx.vkCmdBindVertexBuffers(command_buffer, binding, 1, &buf.buffer, &buf.offset);
+			const VkDeviceSize len = static_cast<VkDeviceSize>(buf.offset);
+			ctx.vkCmdBindVertexBuffers(command_buffer, binding, 1, &buf.buffer, &len);
 		}
 		return *this;
 	}
@@ -345,7 +346,8 @@ namespace vuk {
 		VUK_SB_SET(set_binding_descriptions, binding, true);
 
 		if (buf.buffer) {
-			ctx.vkCmdBindVertexBuffers(command_buffer, binding, 1, &buf.buffer, &buf.offset);
+			const VkDeviceSize len = static_cast<VkDeviceSize>(buf.offset);
+			ctx.vkCmdBindVertexBuffers(command_buffer, binding, 1, &buf.buffer, &len);
 		}
 		return *this;
 	}
@@ -937,8 +939,8 @@ namespace vuk {
 
 		auto sets_mask = sets_to_bind.to_ulong();
 		auto persistent_sets_mask = persistent_sets_to_bind.to_ulong();
-		uint64_t highest_undisturbed_binding_required = 0;
-		uint64_t lowest_disturbed_binding = VUK_MAX_SETS;
+		size_t highest_undisturbed_binding_required = 0;
+		size_t lowest_disturbed_binding = VUK_MAX_SETS;
 		for (size_t set_index = 0; set_index < VUK_MAX_SETS; set_index++) {
 			bool set_to_bind = sets_mask & (1ULL << set_index);
 			bool persistent_set_to_bind = persistent_sets_mask & (1ULL << set_index);
