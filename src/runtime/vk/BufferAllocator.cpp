@@ -90,10 +90,10 @@ namespace vuk {
 			return { expected_value, Buffer{ .buffer = VK_NULL_HANDLE, .size = 0 } };
 		}
 
-		uint64_t old_needle = needle.load();
-		uint64_t new_needle = VmaAlignUp(old_needle, alignment) + size;
-		uint64_t low_buffer = old_needle / block_size;
-		uint64_t high_buffer = new_needle / block_size;
+		size_t old_needle = needle.load();
+		size_t new_needle = VmaAlignUp(old_needle, alignment) + size;
+		size_t low_buffer = old_needle / block_size;
+		size_t high_buffer = new_needle / block_size;
 		bool is_straddling = low_buffer != high_buffer;
 		if (is_straddling) { // boost alignment to place on block start
 			new_needle = VmaAlignUp(old_needle, block_size) + size;
@@ -115,11 +115,11 @@ namespace vuk {
 			}
 		}
 
-		uint64_t base = new_needle - size;
+		size_t base = new_needle - size;
 		int base_buffer = (int)(base / block_size);
 		bool needs_to_create = old_needle == 0 || is_straddling;
 		if (needs_to_create) {
-			size_t num_blocks = std::max(high_buffer - low_buffer + (old_needle == 0 ? 1 : 0), static_cast<uint64_t>(1));
+			size_t num_blocks = std::max({ high_buffer - low_buffer + (old_needle == 0 ? 1 : 0), static_cast<size_t>(1) });
 			while (current_buffer.load() < (int)high_buffer) {
 				grow(num_blocks, source);
 			}
@@ -238,7 +238,7 @@ namespace vuk {
 			}
 		}
 
-		auto aligned_offset = VmaAlignUp(offset - block_index * block_size, alignment);
+		const size_t aligned_offset = VmaAlignUp(static_cast<size_t>(offset - (block_index * block_size)), alignment);
 		Buffer buf = blocks[block_index].buffer.add_offset(aligned_offset);
 		assert(buf.offset % alignment == 0);
 		assert((buf.offset + size) < block_size);
