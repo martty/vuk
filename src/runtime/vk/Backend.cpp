@@ -648,7 +648,12 @@ namespace vuk {
 	enum class RW { eNop, eRead, eWrite };
 
 	struct Scheduler {
-		Scheduler(Allocator all, RGCImpl* impl) : allocator(all), pass_reads(impl->pass_reads), pass_nops(impl->pass_nops), scheduled_execables(impl->scheduled_execables), impl(impl) {
+		Scheduler(Allocator all, RGCImpl* impl) :
+		    allocator(all),
+		    pass_reads(impl->pass_reads),
+		    pass_nops(impl->pass_nops),
+		    scheduled_execables(impl->scheduled_execables),
+		    impl(impl) {
 			// these are the items that were determined to run
 			for (auto& i : scheduled_execables) {
 				scheduled.emplace(i.execable);
@@ -835,7 +840,7 @@ namespace vuk {
 		}
 
 		void init_sync(Type* base_ty, StreamResourceUse src_use, void* value, bool enforce_unique = true) {
-			uint64_t key = 0;
+			size_t key = 0;
 			PartialStreamResourceUse psru{ src_use };
 			if (base_ty->hash_value == current_module->types.builtin_image) {
 				auto& img_att = *reinterpret_cast<ImageAttachment*>(value);
@@ -872,7 +877,7 @@ namespace vuk {
 			}
 			auto& dst_use = *maybe_dst_use;
 
-			uint64_t key = 0;
+			size_t key = 0;
 			if (base_ty->kind == Type::ARRAY_TY) {
 				auto elem_ty = base_ty->array.T->get();
 				auto size = base_ty->array.count;
@@ -967,7 +972,7 @@ namespace vuk {
 		}
 
 		StreamResourceUse& last_use(Type* base_ty, void* value) {
-			uint64_t key = 0;
+			size_t key = 0;
 			if (base_ty->hash_value == current_module->types.builtin_image) {
 				auto& img_att = *reinterpret_cast<ImageAttachment*>(value);
 				key = reinterpret_cast<uint64_t>(img_att.image.image);
@@ -986,7 +991,7 @@ namespace vuk {
 			} else if (base_ty->hash_value == current_module->types.builtin_sampled_image) { // only image syncs
 				auto& img_att = reinterpret_cast<SampledImage*>(value)->ia;
 				key = reinterpret_cast<uint64_t>(img_att.image.image);
-			} else if (base_ty->kind == Type::INTEGER_TY){ // TODO: generalise
+			} else if (base_ty->kind == Type::INTEGER_TY) { // TODO: generalise
 				return *last_modify.at(0);
 			} else { // other types just key on the voidptr
 				key = reinterpret_cast<uint64_t>(value);
@@ -1428,8 +1433,7 @@ namespace vuk {
 
 						void* rpass_profile_data = nullptr;
 						if (vk_rec->callbacks->on_begin_pass)
-							rpass_profile_data =
-							    vk_rec->callbacks->on_begin_pass(vk_rec->callbacks->user_data, fn_type->debug_info.name.c_str(), cobuf, vk_rec->domain);
+							rpass_profile_data = vk_rec->callbacks->on_begin_pass(vk_rec->callbacks->user_data, fn_type->debug_info.name.c_str(), cobuf, vk_rec->domain);
 
 						if (vk_rec->rp.rpci.attachments.size() > 0) {
 							vk_rec->prepare_render_pass();
@@ -1792,9 +1796,10 @@ namespace vuk {
 					// half sync
 					for (size_t i = 0; i < node->converge.diverged.size(); i++) {
 						auto& div = node->converge.diverged[i];
-						recorder.add_sync(sched.base_type(div).get(),
-						                  sched.get_dependency_info(div, div.type().get(), node->converge.write[i] ? RW::eWrite : RW::eRead, base.node->execution_info->stream),
-						                  sched.get_value(div));
+						recorder.add_sync(
+						    sched.base_type(div).get(),
+						    sched.get_dependency_info(div, div.type().get(), node->converge.write[i] ? RW::eWrite : RW::eRead, base.node->execution_info->stream),
+						    sched.get_value(div));
 					}
 
 #ifdef VUK_DUMP_EXEC

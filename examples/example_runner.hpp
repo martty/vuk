@@ -2,17 +2,19 @@
 
 #include "glfw.hpp"
 #include "utils.hpp"
+#include "vuk/RenderGraph.hpp"
+#include "vuk/runtime/CommandBuffer.hpp"
+#include "vuk/runtime/ThisThreadExecutor.hpp"
 #include "vuk/runtime/vk/Allocator.hpp"
 #include "vuk/runtime/vk/AllocatorHelpers.hpp"
-#include "vuk/runtime/CommandBuffer.hpp"
+#include "vuk/runtime/vk/DeviceFrameResource.hpp"
 #include "vuk/runtime/vk/VkRuntime.hpp"
 #include "vuk/vsl/Core.hpp"
-#include "vuk/RenderGraph.hpp"
-#include "vuk/runtime/vk/DeviceFrameResource.hpp"
-#include "vuk/runtime/ThisThreadExecutor.hpp"
 #include <VkBootstrap.h>
 #include <filesystem>
+#include <format>
 #include <functional>
+#include <iostream>
 #include <mutex>
 #include <optional>
 #include <stdexcept>
@@ -61,9 +63,11 @@ namespace vuk {
 		bool has_rt;
 		vuk::Unique<std::array<VkSemaphore, 3>> present_ready;
 		vuk::Unique<std::array<VkSemaphore, 3>> render_complete;
-		// one tracy::VkCtx per domain
+// one tracy::VkCtx per domain
+#ifdef TRACY_ENABLE
 		tracy::VkCtx* tracy_graphics_ctx;
 		tracy::VkCtx* tracy_transfer_ctx;
+#endif // TRACY_ENABLE
 		// command buffer and pool for Tracy to do init & collect
 		vuk::Unique<vuk::CommandPool> tracy_cpool;
 		vuk::Unique<vuk::CommandBufferAllocation> tracy_cbufai;
@@ -89,9 +93,13 @@ namespace vuk {
 			ImGui_ImplGlfw_InitForVulkan(window, true);
 			imgui_data = util::ImGui_ImplVuk_Init(*superframe_allocator);
 			{
-				std::vector<std::jthread> threads;
+				std::vector<std::thread> threads;
 				for (auto& ex : examples) {
-					threads.emplace_back(std::jthread([&] { ex->setup(*this, *superframe_allocator); }));
+					threads.emplace_back(std::thread([&] { ex->setup(*this, *superframe_allocator); }));
+				}
+
+				for (std::thread& t : threads) {
+					t.join();
 				}
 			}
 			glfwSetWindowSizeCallback(window, [](GLFWwindow* window, int width, int height) {
@@ -188,7 +196,11 @@ namespace vuk {
 		    .add_required_extension(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME)
 		    .add_required_extension(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME)
 		    .add_desired_extension(VK_EXT_CALIBRATED_TIMESTAMPS_EXTENSION_NAME)
+#ifdef __APPLE__
+		    .add_desired_extension(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME)
+#endif // __APPLE__
 		    .add_desired_extension(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
+
 		auto phys_ret = selector.select();
 		vkb::PhysicalDevice vkbphysical_device;
 		if (!phys_ret) {
@@ -198,6 +210,9 @@ namespace vuk {
 			    .set_minimum_version(1, 0)
 			    .add_required_extension(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME)
 			    .add_desired_extension(VK_EXT_CALIBRATED_TIMESTAMPS_EXTENSION_NAME)
+#ifdef __APPLE__
+			    .add_desired_extension(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME)
+#endif // __APPLE__
 			    .add_desired_extension(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
 			auto phys_ret2 = selector2.select();
 			if (!phys_ret2) {
@@ -242,8 +257,10 @@ namespace vuk {
 		vkbdevice = dev_ret.value();
 		graphics_queue = vkbdevice.get_queue(vkb::QueueType::graphics).value();
 		auto graphics_queue_family_index = vkbdevice.get_queue_index(vkb::QueueType::graphics).value();
+#ifndef __APPLE__
 		transfer_queue = vkbdevice.get_queue(vkb::QueueType::transfer).value();
 		auto transfer_queue_family_index = vkbdevice.get_queue_index(vkb::QueueType::transfer).value();
+#endif // __APPLE__
 		device = vkbdevice.device;
 		vuk::FunctionPointers fps;
 		fps.vkGetInstanceProcAddr = vkbinstance.fp_vkGetInstanceProcAddr;
@@ -251,7 +268,9 @@ namespace vuk {
 		std::vector<std::unique_ptr<Executor>> executors;
 
 		executors.push_back(vuk::create_vkqueue_executor(fps, device, graphics_queue, graphics_queue_family_index, DomainFlagBits::eGraphicsQueue));
+#ifndef __APPLE__
 		executors.push_back(vuk::create_vkqueue_executor(fps, device, transfer_queue, transfer_queue_family_index, DomainFlagBits::eTransferQueue));
+#endif // __APPLE__
 		executors.push_back(std::make_unique<ThisThreadExecutor>());
 
 		runtime.emplace(RuntimeCreateParameters{ instance, device, physical_device, std::move(executors), fps });
@@ -268,7 +287,8 @@ namespace vuk {
 		superframe_allocator->allocate_semaphores(*present_ready);
 		superframe_allocator->allocate_semaphores(*render_complete);
 
-		// set up the example Tracy integration
+// set up the example Tracy integration
+#ifdef TRACY_ENABLE
 		VkCommandPoolCreateInfo cpci{ .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT };
 		cpci.queueFamilyIndex = graphics_queue_family_index;
 		tracy_cpool = Unique<CommandPool>(*superframe_allocator);
@@ -280,6 +300,7 @@ namespace vuk {
 		    instance, physical_device, device, graphics_queue, tracy_cbufai->command_buffer, fps.vkGetInstanceProcAddr, fps.vkGetDeviceProcAddr);
 		tracy_transfer_ctx = TracyVkContextCalibrated(
 		    instance, physical_device, device, graphics_queue, tracy_cbufai->command_buffer, fps.vkGetInstanceProcAddr, fps.vkGetDeviceProcAddr);
+#endif // TRACY_ENABLE
 	}
 } // namespace vuk
 

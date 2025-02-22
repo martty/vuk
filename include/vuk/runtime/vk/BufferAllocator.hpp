@@ -28,7 +28,7 @@ namespace vuk {
 		DeviceResource* upstream;
 		std::mutex mutex;
 		std::atomic<int> current_buffer = -1;
-		std::atomic<uint64_t> needle = 0;
+		std::atomic<size_t> needle = 0;
 		MemoryUsage mem_usage;
 		BufferUsageFlags usage;
 		// TODO: convert to deque
