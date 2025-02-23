@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.7)
 project(vuk LANGUAGES CXX C)
 
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
+
 include(ExternalProject)
 include(FetchContent)
 
@@ -187,8 +190,6 @@ set(SPIRV_CROSS_ENABLE_UTIL OFF CACHE BOOL "")
 
 add_subdirectory(ext/SPIRV-Cross)
 
-# we don't enable this directly, because the order of flags disables /Zc:char8_t- on MSVC
-#target_compile_features(vuk PUBLIC cxx_std_20)
 
 target_sources(vuk PRIVATE
 	src/Format.cpp
@@ -258,13 +259,6 @@ else()
 endif()
 
 message(CMAKE_CXX_COMPILER="${CMAKE_CXX_COMPILER}" IS_CLANGCL="${VUK_COMPILER_CLANGCL}" IS_MSVC="${MSVC}" IS_CLANGPP="${VUK_COMPILER_CLANGPP}" IS_GPP="${VUK_COMPILER_GPP}")
-
-if(VUK_COMPILER_CLANGPP OR VUK_COMPILER_GPP)
-	target_compile_options(vuk PRIVATE -std=c++20 -fno-char8_t)
-elseif(MSVC) # cl.exe or clang-cl
-	# w4068 : unknown pragma
-	target_compile_options(vuk PRIVATE /std:c++20 /permissive- /Zc:char8_t- /wd4068)
-endif()
 
 if(VUK_COMPILER_CLANGPP OR VUK_COMPILER_CLANGCL)
 	 target_compile_options(vuk PRIVATE -Wno-nullability-completeness)
@@ -356,13 +350,6 @@ if(VUK_BUILD_TESTS)
 
 	include(ext/doctest/scripts/cmake/doctest.cmake) # until we can use cmake 3.24
 	doctest_discover_tests(vuk-tests)
-
-	if(VUK_COMPILER_CLANGPP OR VUK_COMPILER_GPP)
-		target_compile_options(vuk-tests PRIVATE -std=c++20 -fno-char8_t)
-	elseif(MSVC)
-		# w4068 : unknown pragma
-		target_compile_options(vuk-tests PRIVATE /std:c++latest /permissive- /Zc:char8_t- /wd4068) 
-	endif()
 
 	if(VUK_COMPILER_CLANGPP OR VUK_COMPILER_CLANGCL)
 		 target_compile_options(vuk-tests PRIVATE -Wno-nullability-completeness)

@@ -29,7 +29,7 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(glm)
 
-set(TRACY_ENABLE ON)
+set(TRACY_ENABLE OFF)
 set(TRACY_ON_DEMAND OFF)
 FetchContent_Declare(tracy
     GIT_REPOSITORY https://github.com/wolfpld/tracy.git
@@ -38,6 +38,10 @@ FetchContent_Declare(tracy
     GIT_PROGRESS TRUE
 )
 FetchContent_MakeAvailable(tracy)
+
+if(${TRACY_ENABLE} AND ${APPLE})
+    message(FATAL_ERROR "MoltenVk's restrictions on query pools are too high to be usable")
+endif()
 
 add_library(vuk-example-framework)
 
