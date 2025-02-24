@@ -39,7 +39,7 @@ FetchContent_Declare(tracy
 )
 FetchContent_MakeAvailable(tracy)
 
-if(${TRACY_ENABLE} AND ${APPLE})
+if(${TRACY_ENABLE} AND APPLE)
     message(FATAL_ERROR "MoltenVk's restrictions on query pools are too high to be usable")
 endif()
 

@@ -3,3 +3,4 @@ build/
 .spv
 .cache/
 .vscode/
+checks.json
