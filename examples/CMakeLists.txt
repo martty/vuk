@@ -29,7 +29,11 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(glm)
 
-set(TRACY_ENABLE OFF)
+if (NOT APPLE)
+    option(TRACY_ENABLE "Enable Tracy Profiler" ON) 
+else()
+    option(TRACY_ENABLE "Enable Tracy Profiler" OFF) 
+endif()
 set(TRACY_ON_DEMAND OFF)
 FetchContent_Declare(tracy
     GIT_REPOSITORY https://github.com/wolfpld/tracy.git
