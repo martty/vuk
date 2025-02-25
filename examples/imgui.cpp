@@ -150,12 +150,9 @@ Value<ImageAttachment> util::ImGui_ImplVuk_Render(Allocator& allocator,
 
 						                      // Bind texture
 						                      if (pcmd->TextureId) {
-							                      auto ia_index = reinterpret_cast<size_t>(pcmd->TextureId) - 1;
+							                      auto ia_index = static_cast<size_t>(pcmd->TextureId) - 1;
 
 							                      command_buffer.bind_image(0, 0, sis[ia_index].ia).bind_sampler(0, 0, sis[ia_index].sci);
-
-							                      // TODO: SampledImage
-							                      //.bind_sampler(0, 0, sis[si_index]);
 						                      }
 						                      // Draw
 						                      command_buffer.draw_indexed(pcmd->ElemCount, 1, pcmd->IdxOffset + global_idx_offset, pcmd->VtxOffset + global_vtx_offset, 0);
