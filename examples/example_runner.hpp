@@ -169,7 +169,7 @@ namespace vuk {
 		                           void* pUserData) -> VkBool32 {
 			    auto ms = vkb::to_string_message_severity(messageSeverity);
 			    auto mt = vkb::to_string_message_type(messageType);
-			    printf("[%s: %s](user defined)\n%s\n", ms, mt, pCallbackData->pMessage);
+			    printf("[%s: %s]\n%s\n", ms, mt, pCallbackData->pMessage);
 			    return VK_FALSE;
 		    })
 		    .set_app_name("vuk_example")
@@ -246,25 +246,31 @@ namespace vuk {
 		}
 		auto dev_ret = device_builder.build();
 		if (!dev_ret) {
-			throw std::runtime_error("Couldn't create device");
+			auto err_msg = std::string("ERROR: couldn't create device - ") + dev_ret.error().message();
+			printf("ERROR: %s\n", err_msg.c_str());
+			throw std::runtime_error(err_msg);
 		}
 		vkbdevice = dev_ret.value();
-		graphics_queue = vkbdevice.get_queue(vkb::QueueType::graphics).value();
-		auto graphics_queue_family_index = vkbdevice.get_queue_index(vkb::QueueType::graphics).value();
-#ifndef __APPLE__
-		transfer_queue = vkbdevice.get_queue(vkb::QueueType::transfer).value();
-		auto transfer_queue_family_index = vkbdevice.get_queue_index(vkb::QueueType::transfer).value();
-#endif // __APPLE__
 		device = vkbdevice.device;
 		vuk::FunctionPointers fps;
 		fps.vkGetInstanceProcAddr = vkbinstance.fp_vkGetInstanceProcAddr;
 		fps.load_pfns(instance, device, true);
 		std::vector<std::unique_ptr<Executor>> executors;
 
+		// create an executor for the graphics queue
+		graphics_queue = vkbdevice.get_queue(vkb::QueueType::graphics).value();
+		auto graphics_queue_family_index = vkbdevice.get_queue_index(vkb::QueueType::graphics).value();
 		executors.push_back(vuk::create_vkqueue_executor(fps, device, graphics_queue, graphics_queue_family_index, DomainFlagBits::eGraphicsQueue));
-#ifndef __APPLE__
-		executors.push_back(vuk::create_vkqueue_executor(fps, device, transfer_queue, transfer_queue_family_index, DomainFlagBits::eTransferQueue));
-#endif // __APPLE__
+
+		// create an executor for a transfer queue
+		// this is an optional executor
+		if (vkbdevice.get_queue(vkb::QueueType::transfer)) {
+			transfer_queue = vkbdevice.get_queue(vkb::QueueType::transfer).value();
+			auto transfer_queue_family_index = vkbdevice.get_queue_index(vkb::QueueType::transfer).value();
+			executors.push_back(vuk::create_vkqueue_executor(fps, device, transfer_queue, transfer_queue_family_index, DomainFlagBits::eTransferQueue));
+		}
+
+		// create an executor for the main thread
 		executors.push_back(std::make_unique<ThisThreadExecutor>());
 
 		runtime.emplace(RuntimeCreateParameters{ instance, device, physical_device, std::move(executors), fps });
