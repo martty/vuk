@@ -67,7 +67,7 @@ target_compile_definitions(vuk_all_examples PUBLIC VUK_EX_PATH_TGT="$<TARGET_FIL
 
 add_library(vuk_example_runner_single OBJECT example_runner_single.cpp)
 target_link_libraries(vuk_example_runner_single PRIVATE vuk-example-framework)
-target_compile_definitions(vuk-example-framework PUBLIC VUK_EX_PATH_TGT="$<TARGET_FILE_DIR:vuk_all_examples>" VUK_EX_PATH_ROOT="${CMAKE_SOURCE_DIR}")
+target_compile_definitions(vuk-example-framework PUBLIC VUK_EX_PATH_TGT="$<TARGET_FILE_DIR:vuk_all_examples>" VUK_EX_PATH_ROOT="${CMAKE_SOURCE_DIR}" TRACY_NO_CALLSTACK)
 
 function(ADD_EXAMPLE name)
     set(FULL_NAME "vuk_example_${name}")
