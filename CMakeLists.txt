@@ -62,6 +62,11 @@ FetchContent_Declare(
   GIT_REPOSITORY https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator
   GIT_TAG v3.2.1
 )
+FetchContent_Declare(
+  spirv-cross
+  GIT_REPOSITORY https://github.com/KhronosGroup/SPIRV-Cross.git
+  GIT_TAG 2c32b6bf86f3c4a5539aa1f0bacbd59fe61759cf
+)
 
 FetchContent_MakeAvailable(
   robin-hood-hashing
@@ -70,6 +75,7 @@ FetchContent_MakeAvailable(
   concurrentqueue
   function2
   vma
+  spirv-cross
 )
 
 # plf_colony does not provide a CMake build script, hence we create an
@@ -240,11 +246,8 @@ set(SPIRV_CROSS_ENABLE_REFLECT OFF CACHE BOOL "")
 set(SPIRV_CROSS_ENABLE_C_API OFF CACHE BOOL "")
 set(SPIRV_CROSS_ENABLE_UTIL OFF CACHE BOOL "")
 
-add_subdirectory(ext/SPIRV-Cross)
-
 # we don't enable this directly, because the order of flags disables /Zc:char8_t- on MSVC
 target_compile_features(vuk PUBLIC cxx_std_20)
-
 
 target_sources(vuk PRIVATE
 	src/Format.cpp
