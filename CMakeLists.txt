@@ -36,6 +36,11 @@ FetchContent_Declare(
   GIT_TAG 9145f963d80d6a02f0f96a47758050a89184a3ed
 )
 FetchContent_Declare(
+  plf_colony
+  GIT_REPOSITORY https://github.com/mattreecebentley/plf_colony.git
+  GIT_TAG c4c1a2e7f4346faa5d16e89ba1b4fa8c3d976bd2
+)
+FetchContent_Declare(
   small_vector
   GIT_REPOSITORY https://github.com/gharveymn/small_vector.git
   GIT_TAG 5b4ad3bd3dc3e1593a7e95cb3843a87b5ae21000
@@ -48,9 +53,15 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(
   robin-hood-hashing
+  plf_colony
   small_vector
   function2
 )
+
+# plf_colony does not provide a CMake build script, hence we create an
+# interface library here.
+add_library(plf_colony INTERFACE)
+target_include_directories(plf_colony INTERFACE "${plf_colony_SOURCE_DIR}")
 
 ##### Using vuk with volk (or a similar library)
 # step 1: turn off VUK_LINK_TO_LOADER and add_subdirectory vuk
@@ -238,9 +249,8 @@ target_sources(vuk PRIVATE
 	src/runtime/vk/Util.cpp
 	src/runtime/vk/VkQueueExecutor.cpp
 	src/runtime/vk/VkRuntime.cpp
-	)
+)
 
-target_include_directories(vuk PUBLIC ext/plf_colony)
 if (NOT TARGET fmt::fmt)
   add_subdirectory(ext/fmt)
 endif()
@@ -287,7 +297,7 @@ target_compile_definitions(vuk PUBLIC
 )
 
 target_link_libraries(vuk PRIVATE spirv-cross-core robin_hood fmt::fmt gch::small_vector)
-target_link_libraries(vuk PUBLIC function2)
+target_link_libraries(vuk PUBLIC function2 plf_colony)
 
 if(VUK_LINK_TO_LOADER)
 	if (VUK_USE_VULKAN_SDK)
