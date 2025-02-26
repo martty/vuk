@@ -30,6 +30,8 @@ if(CMAKE_SIZEOF_VOID_P EQUAL "4")
 	message(FATAL_ERROR "x86 is not supported.")
 endif()
 
+set(BUILD_TESTS OFF)
+
 FetchContent_Declare(
   robin-hood-hashing
   GIT_REPOSITORY https://github.com/martinus/robin-hood-hashing.git
@@ -254,7 +256,6 @@ target_sources(vuk PRIVATE
 if (NOT TARGET fmt::fmt)
   add_subdirectory(ext/fmt)
 endif()
-set(BUILD_TESTS OFF)
 target_include_directories(vuk PRIVATE ext/concurrentqueue ext/VulkanMemoryAllocator/include)
 target_include_directories(vuk PUBLIC include)
 
