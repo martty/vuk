@@ -52,11 +52,17 @@ FetchContent_Declare(
   GIT_REPOSITORY https://github.com/Naios/function2.git
   GIT_TAG 43fc0ca473ecb081918709bd7d524d84c2ff8dce
 )
+FetchContent_Declare(
+  concurrentqueue
+  GIT_REPOSITORY https://github.com/cameron314/concurrentqueue
+  GIT_TAG 0d54c6794510018f42b1b987f55c313dd1358320
+)
 
 FetchContent_MakeAvailable(
   robin-hood-hashing
   plf_colony
   small_vector
+  concurrentqueue
   function2
 )
 
@@ -256,7 +262,7 @@ target_sources(vuk PRIVATE
 if (NOT TARGET fmt::fmt)
   add_subdirectory(ext/fmt)
 endif()
-target_include_directories(vuk PRIVATE ext/concurrentqueue ext/VulkanMemoryAllocator/include)
+target_include_directories(vuk PRIVATE ext/VulkanMemoryAllocator/include)
 target_include_directories(vuk PUBLIC include)
 
 set(VUK_COMPILER_CLANGPP OFF)
@@ -297,8 +303,17 @@ target_compile_definitions(vuk PUBLIC
   VUK_COMPILER_MSVC=$<BOOL:${VUK_COMPILER_MSVC}>
 )
 
-target_link_libraries(vuk PRIVATE spirv-cross-core robin_hood fmt::fmt gch::small_vector)
-target_link_libraries(vuk PUBLIC function2 plf_colony)
+target_link_libraries(vuk
+  PUBLIC
+  function2
+  plf_colony
+  PRIVATE
+  spirv-cross-core
+  robin_hood
+  fmt::fmt
+  gch::small_vector
+  concurrentqueue
+)
 
 if(VUK_LINK_TO_LOADER)
 	if (VUK_USE_VULKAN_SDK)

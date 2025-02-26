@@ -4,9 +4,6 @@
 [submodule "ext/VulkanMemoryAllocator"]
 	path = ext/VulkanMemoryAllocator
 	url = https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator
-[submodule "ext/concurrentqueue"]
-	path = ext/concurrentqueue
-	url = https://github.com/cameron314/concurrentqueue
 [submodule "ext/doctest"]
 	path = ext/doctest
 	url = https://github.com/doctest/doctest
