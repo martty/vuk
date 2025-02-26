@@ -35,7 +35,7 @@ set(BUILD_TESTS OFF)
 FetchContent_Declare(
   robin-hood-hashing
   GIT_REPOSITORY https://github.com/martinus/robin-hood-hashing.git
-  GIT_TAG 9145f963d80d6a02f0f96a47758050a89184a3ed
+  GIT_TAG bd632059ea0bb5cf444b33bdfb4eba2118300c62
 )
 FetchContent_Declare(
   plf_colony
