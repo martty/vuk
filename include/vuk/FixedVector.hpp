@@ -1,8 +1,10 @@
 #pragma once
 
-#include <string.h>
 #include <algorithm>
+#include <iterator>
 #include <memory>
+#include <string.h>
+#include <type_traits>
 #include <utility>
 
 namespace vuk {
