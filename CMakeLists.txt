@@ -57,6 +57,11 @@ FetchContent_Declare(
   GIT_REPOSITORY https://github.com/cameron314/concurrentqueue
   GIT_TAG 0d54c6794510018f42b1b987f55c313dd1358320
 )
+FetchContent_Declare(
+  vma
+  GIT_REPOSITORY https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator
+  GIT_TAG v3.2.1
+)
 
 FetchContent_MakeAvailable(
   robin-hood-hashing
@@ -64,12 +69,18 @@ FetchContent_MakeAvailable(
   small_vector
   concurrentqueue
   function2
+  vma
 )
 
 # plf_colony does not provide a CMake build script, hence we create an
 # interface library here.
 add_library(plf_colony INTERFACE)
 target_include_directories(plf_colony INTERFACE "${plf_colony_SOURCE_DIR}")
+
+# VulkanMemoryAllocator (vma) does not provide a CMake build script, hence we
+# create an interface library here.
+add_library(vma INTERFACE)
+target_include_directories(vma INTERFACE "${vma_SOURCE_DIR}/include")
 
 ##### Using vuk with volk (or a similar library)
 # step 1: turn off VUK_LINK_TO_LOADER and add_subdirectory vuk
@@ -262,7 +273,6 @@ target_sources(vuk PRIVATE
 if (NOT TARGET fmt::fmt)
   add_subdirectory(ext/fmt)
 endif()
-target_include_directories(vuk PRIVATE ext/VulkanMemoryAllocator/include)
 target_include_directories(vuk PUBLIC include)
 
 set(VUK_COMPILER_CLANGPP OFF)
@@ -309,6 +319,7 @@ target_link_libraries(vuk
   plf_colony
   PRIVATE
   spirv-cross-core
+  vma
   robin_hood
   fmt::fmt
   gch::small_vector
