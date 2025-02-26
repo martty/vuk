@@ -61,8 +61,6 @@ namespace vuk {
 		double old_time = 0;
 		uint32_t num_frames = 0;
 		bool has_rt;
-		vuk::Unique<std::array<VkSemaphore, 3>> present_ready;
-		vuk::Unique<std::array<VkSemaphore, 3>> render_complete;
 // one tracy::VkCtx per domain
 #ifdef TRACY_ENABLE
 		tracy::VkCtx* tracy_graphics_ctx;
@@ -140,8 +138,6 @@ namespace vuk {
 			TracyVkDestroy(tracy_transfer_ctx);
 			tracy_cbufai.reset();
 			tracy_cpool.reset();
-			present_ready.reset();
-			render_complete.reset();
 			imgui_data.font_image.reset();
 			imgui_data.font_image_view.reset();
 			swapchain.reset();
@@ -278,14 +274,9 @@ namespace vuk {
 		superframe_resource.emplace(*runtime, num_inflight_frames);
 		superframe_allocator.emplace(*superframe_resource);
 		swapchain = util::make_swapchain(*superframe_allocator, vkbdevice, surface, {});
-		present_ready = vuk::Unique<std::array<VkSemaphore, 3>>(*superframe_allocator);
-		render_complete = vuk::Unique<std::array<VkSemaphore, 3>>(*superframe_allocator);
 
 		// match shader compilation target version to the vk version we request
 		runtime->set_shader_target_version(VK_API_VERSION_1_2);
-
-		superframe_allocator->allocate_semaphores(*present_ready);
-		superframe_allocator->allocate_semaphores(*render_complete);
 
 // set up the example Tracy integration
 #ifdef TRACY_ENABLE
