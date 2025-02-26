@@ -194,26 +194,14 @@ namespace vuk {
 		    .add_required_extension(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME)
 		    .add_required_extension(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME)
 		    .add_required_extension(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME)
-		    .add_required_extension(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME)
-		    .add_desired_extension(VK_EXT_CALIBRATED_TIMESTAMPS_EXTENSION_NAME)
-#ifdef __APPLE__
-		    .add_desired_extension(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME)
-#endif // __APPLE__
-		    .add_desired_extension(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
+		    .add_required_extension(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME);
 
 		auto phys_ret = selector.select();
 		vkb::PhysicalDevice vkbphysical_device;
 		if (!phys_ret) {
 			has_rt = false;
 			vkb::PhysicalDeviceSelector selector2{ vkbinstance };
-			selector2.set_surface(surface)
-			    .set_minimum_version(1, 0)
-			    .add_required_extension(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME)
-			    .add_desired_extension(VK_EXT_CALIBRATED_TIMESTAMPS_EXTENSION_NAME)
-#ifdef __APPLE__
-			    .add_desired_extension(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME)
-#endif // __APPLE__
-			    .add_desired_extension(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
+			selector2.set_surface(surface).set_minimum_version(1, 0).add_required_extension(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
 			auto phys_ret2 = selector2.select();
 			if (!phys_ret2) {
 				throw std::runtime_error("Couldn't create physical device");
@@ -223,6 +211,12 @@ namespace vuk {
 		} else {
 			vkbphysical_device = phys_ret.value();
 		}
+
+		vkbphysical_device.enable_extension_if_present(VK_EXT_CALIBRATED_TIMESTAMPS_EXTENSION_NAME);
+		vkbphysical_device.enable_extension_if_present(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
+#ifdef __APPLE__
+		vkbphysical_device.enable_extension_if_present(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+#endif // __APPLE__
 
 		physical_device = vkbphysical_device.physical_device;
 		vkb::DeviceBuilder device_builder{ vkbphysical_device };
