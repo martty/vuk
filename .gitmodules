@@ -25,6 +25,3 @@
 [submodule "ext/function2"]
 	path = ext/function2
 	url = https://github.com/Naios/function2.git
-[submodule "ext/small_vector"]
-	path = ext/small_vector
-	url = https://github.com/gharveymn/small_vector

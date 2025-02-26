@@ -35,7 +35,16 @@ FetchContent_Declare(
   GIT_REPOSITORY https://github.com/martinus/robin-hood-hashing.git
   GIT_TAG 9145f963d80d6a02f0f96a47758050a89184a3ed
 )
-FetchContent_MakeAvailable(robin-hood-hashing)
+FetchContent_Declare(
+  small_vector
+  GIT_REPOSITORY https://github.com/gharveymn/small_vector.git
+  GIT_TAG 5b4ad3bd3dc3e1593a7e95cb3843a87b5ae21000
+)
+
+FetchContent_MakeAvailable(
+  robin-hood-hashing
+  small_vector
+)
 
 ##### Using vuk with volk (or a similar library)
 # step 1: turn off VUK_LINK_TO_LOADER and add_subdirectory vuk
@@ -231,7 +240,6 @@ if (NOT TARGET fmt::fmt)
 endif()
 set(BUILD_TESTS OFF)
 add_subdirectory(ext/function2)
-add_subdirectory (ext/small_vector)
 target_include_directories(vuk PRIVATE ext/concurrentqueue ext/VulkanMemoryAllocator/include)
 target_include_directories(vuk PUBLIC include)
 
