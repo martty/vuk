@@ -40,10 +40,16 @@ FetchContent_Declare(
   GIT_REPOSITORY https://github.com/gharveymn/small_vector.git
   GIT_TAG 5b4ad3bd3dc3e1593a7e95cb3843a87b5ae21000
 )
+FetchContent_Declare(
+  function2
+  GIT_REPOSITORY https://github.com/Naios/function2.git
+  GIT_TAG 43fc0ca473ecb081918709bd7d524d84c2ff8dce
+)
 
 FetchContent_MakeAvailable(
   robin-hood-hashing
   small_vector
+  function2
 )
 
 ##### Using vuk with volk (or a similar library)
@@ -239,7 +245,6 @@ if (NOT TARGET fmt::fmt)
   add_subdirectory(ext/fmt)
 endif()
 set(BUILD_TESTS OFF)
-add_subdirectory(ext/function2)
 target_include_directories(vuk PRIVATE ext/concurrentqueue ext/VulkanMemoryAllocator/include)
 target_include_directories(vuk PUBLIC include)
 
