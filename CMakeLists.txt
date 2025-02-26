@@ -30,6 +30,42 @@ if(CMAKE_SIZEOF_VOID_P EQUAL "4")
 	message(FATAL_ERROR "x86 is not supported.")
 endif()
 
+# Detect OS
+set(VUK_OS_LINUX OFF)
+set(VUK_OS_APPLE OFF)
+set(VUK_OS_WINDOWS OFF)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  set(VUK_OS_LINUX ON)
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+  set(VUK_OS_APPLE ON)
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+  set(VUK_OS_WINDOWS ON)
+else()
+  message(FATAL "unrecognised operating system '${CMAKE_SYSTEM_NAME}'")
+endif()
+
+# Detect compilers
+set(VUK_COMPILER_CLANGPP OFF)
+set(VUK_COMPILER_CLANGCL OFF)
+set(VUK_COMPILER_GPP OFF)
+set(VUK_COMPILER_MSVC OFF)
+
+if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+  if(CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "GNU")
+    set(VUK_COMPILER_CLANGPP ON)
+  elseif(CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
+    set(VUK_COMPILER_CLANGCL ON)
+  else()
+    message(FATAL "unrecognised clang frontend '${CMAKE_CXX_COMPILER_FRONTEND_VARIANT}'")
+  endif()
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  set(VUK_COMPILER_GPP ON)
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+  set(VUK_COMPILER_MSVC ON)
+else()
+  message(FATAL "unrecognised compiler '${CMAKE_CXX_COMPILER}' with ID '${CMAKE_CXX_COMPILER_ID}'")
+endif()
+
 set(BUILD_TESTS OFF)
 
 FetchContent_Declare(
@@ -62,6 +98,14 @@ FetchContent_Declare(
   GIT_REPOSITORY https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator
   GIT_TAG v3.2.1
 )
+set(SPIRV_CROSS_CLI OFF CACHE BOOL "")
+set(SPIRV_CROSS_ENABLE_TESTS OFF CACHE BOOL "")
+set(SPIRV_CROSS_ENABLE_HLSL OFF CACHE BOOL "")
+set(SPIRV_CROSS_ENABLE_MSL OFF CACHE BOOL "")
+set(SPIRV_CROSS_ENABLE_CPP OFF CACHE BOOL "")
+set(SPIRV_CROSS_ENABLE_REFLECT OFF CACHE BOOL "")
+set(SPIRV_CROSS_ENABLE_C_API OFF CACHE BOOL "")
+set(SPIRV_CROSS_ENABLE_UTIL OFF CACHE BOOL "")
 FetchContent_Declare(
   spirv-cross
   GIT_REPOSITORY https://github.com/KhronosGroup/SPIRV-Cross.git
@@ -236,24 +280,20 @@ if (VUK_USE_SLANG)
 	target_sources(vuk PRIVATE src/shader_compilers/slang.cpp)
 endif()
 
-target_compile_definitions(vuk PUBLIC
-								VUK_USE_SHADERC=$<BOOL:${VUK_USE_SHADERC}>
-								VUK_USE_DXC=$<BOOL:${VUK_USE_DXC}>
-								VUK_USE_VCC=$<BOOL:${VUK_USE_VCC}>
-								VUK_USE_SLANG=$<BOOL:${VUK_USE_SLANG}>
-								VUK_BUILD_TESTS=$<BOOL:${VUK_BUILD_TESTS}>
-								VUK_FAIL_FAST=$<BOOL:${VUK_FAIL_FAST}>
-								VUK_DEBUG_ALLOCATIONS=$<BOOL:${VUK_DEBUG_ALLOCATIONS}>
+target_compile_definitions(vuk
+  PUBLIC
+  VUK_USE_SHADERC=$<BOOL:${VUK_USE_SHADERC}>
+  VUK_USE_DXC=$<BOOL:${VUK_USE_DXC}>
+  VUK_USE_VCC=$<BOOL:${VUK_USE_VCC}>
+  VUK_USE_SLANG=$<BOOL:${VUK_USE_SLANG}>
+  VUK_BUILD_TESTS=$<BOOL:${VUK_BUILD_TESTS}>
+  VUK_FAIL_FAST=$<BOOL:${VUK_FAIL_FAST}>
+  VUK_DEBUG_ALLOCATIONS=$<BOOL:${VUK_DEBUG_ALLOCATIONS}>
+  VUK_COMPILER_MSVC=$<BOOL:${VUK_COMPILER_MSVC}>
+  VUK_OS_WINDOWS=$<BOOL:${VUK_OS_WINDOWS}>
+  VUK_OS_LINUX=$<BOOL:${$VUK_OS_LINUX}>
+  VUK_OS_APPLE=$<BOOL:${VUK_OS_APPLE}>
 )
-
-set(SPIRV_CROSS_CLI OFF CACHE BOOL "")
-set(SPIRV_CROSS_ENABLE_TESTS OFF CACHE BOOL "")
-set(SPIRV_CROSS_ENABLE_HLSL OFF CACHE BOOL "")
-set(SPIRV_CROSS_ENABLE_MSL OFF CACHE BOOL "")
-set(SPIRV_CROSS_ENABLE_CPP OFF CACHE BOOL "")
-set(SPIRV_CROSS_ENABLE_REFLECT OFF CACHE BOOL "")
-set(SPIRV_CROSS_ENABLE_C_API OFF CACHE BOOL "")
-set(SPIRV_CROSS_ENABLE_UTIL OFF CACHE BOOL "")
 
 # we don't enable this directly, because the order of flags disables /Zc:char8_t- on MSVC
 target_compile_features(vuk PUBLIC cxx_std_20)
@@ -284,29 +324,6 @@ target_sources(vuk PRIVATE
 
 target_include_directories(vuk PUBLIC include)
 
-set(VUK_COMPILER_CLANGPP OFF)
-set(VUK_COMPILER_CLANGCL OFF)
-set(VUK_COMPILER_GPP OFF)
-set(VUK_COMPILER_MSVC OFF)
-
-if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-  if(CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "GNU")
-    set(VUK_COMPILER_CLANGPP ON)
-  elseif(CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
-    set(VUK_COMPILER_CLANGCL ON)
-  else()
-    message(FATAL "unrecognised clang frontend '${CMAKE_CXX_COMPILER_FRONTEND_VARIANT}'")
-  endif()
-elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-  set(VUK_COMPILER_GPP ON)
-elseif(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-  set(VUK_COMPILER_MSVC ON)
-else()
-  message(FATAL "unrecognised compiler '${CMAKE_CXX_COMPILER}' with ID '${CMAKE_CXX_COMPILER_ID}'")
-endif()
-
-message(CMAKE_CXX_COMPILER="${CMAKE_CXX_COMPILER}" IS_CLANGCL="${VUK_COMPILER_CLANGCL}" IS_MSVC="${MSVC}" IS_CLANGPP="${VUK_COMPILER_CLANGPP}" IS_GPP="${VUK_COMPILER_GPP}")
-
 if(VUK_COMPILER_CLANGPP OR VUK_COMPILER_GPP)
   target_compile_options(vuk PRIVATE -fno-char8_t)
 elseif(VUK_COMPILER_MSVC OR VUK_COMPILER_CLANGCL) # cl.exe or clang-cl
@@ -317,10 +334,6 @@ endif()
 if(VUK_COMPILER_CLANGPP OR VUK_COMPILER_CLANGCL)
   target_compile_options(vuk PRIVATE -Wno-nullability-completeness)
 endif()
-
-target_compile_definitions(vuk PUBLIC
-  VUK_COMPILER_MSVC=$<BOOL:${VUK_COMPILER_MSVC}>
-)
 
 target_link_libraries(vuk
   PUBLIC
