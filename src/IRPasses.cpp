@@ -36,6 +36,10 @@ namespace {
 #endif
 
 namespace vuk {
+	auto format_as(Ref f) {
+		return std::string("\"") + fmt::to_string(fmt::ptr(f.node)) + "@" + fmt::to_string(f.index) + std::string("\"");
+	}
+
 	constexpr void access_to_usage(ImageUsageFlags& usage, Access acc) {
 		if (acc & (eMemoryRW | eColorResolveRead | eColorResolveWrite | eColorRW)) {
 			usage |= ImageUsageFlagBits::eColorAttachment;
@@ -1189,39 +1193,48 @@ namespace vuk {
 	}
 
 	Result<void> Compiler::validate_duplicated_resource_ref() {
-		std::unordered_set<Buffer> bufs;
-		std::unordered_set<ImageAttachment> ias;
-		std::unordered_set<Swapchain*> swps;
+		std::unordered_map<Buffer, Node*> bufs;
+		std::unordered_map<ImageAttachment, Node*> ias;
+		std::unordered_map<Swapchain*, Node*> swps;
 		for (auto node : impl->nodes) {
 			switch (node->kind) {
 			case Node::CONSTRUCT: {
-				bool s = true;
+				std::optional<Node*> fail = {};
 				if (node->type[0]->hash_value == current_module->types.builtin_image) {
 					auto ia = reinterpret_cast<ImageAttachment*>(node->construct.args[0].node->constant.value);
 					if (ia->image) {
-						auto [_, succ] = ias.emplace(*ia);
-						s = succ;
+						auto [_, succ] = ias.emplace(*ia, node);
+						if (!succ) {
+							fail = ias.at(*ia);
+						}
 					}
 				} else if (node->type[0]->hash_value == current_module->types.builtin_buffer) {
 					auto buf = reinterpret_cast<Buffer*>(node->construct.args[0].node->constant.value);
 					if (buf->buffer != VK_NULL_HANDLE) {
-						auto [_, succ] = bufs.emplace(*buf);
-						s = succ;
+						auto [_, succ] = bufs.emplace(*buf, node);
+						if (!succ) {
+							fail = bufs.at(*buf);
+						}
 					}
 				} else if (node->type[0]->hash_value == current_module->types.builtin_swapchain) {
-					auto [_, succ] = swps.emplace(reinterpret_cast<Swapchain*>(node->construct.args[0].node->constant.value));
-					s = succ;
+					auto swp = reinterpret_cast<Swapchain*>(node->construct.args[0].node->constant.value);
+					auto [_, succ] = swps.emplace();
+					if (!succ) {
+						fail = swps.at(swp);
+					}
 				} else { // TODO: it is an array, no val yet
 				}
-				if (!s) {
-					return { expected_error, RenderGraphException{ format_graph_message(Level::eError, node, "tried to acquire something that was already known.") } };
+				if (fail) {
+					auto loc = format_source_location(*fail);
+					auto msg = fmt::format("tried to acquire something that was already known. Previously acquired by {} with callstack:\n{}", node_to_string(*fail), loc);
+					return { expected_error, RenderGraphException{ format_graph_message(Level::eError, node, msg) } };
 				}
 			} break;
 			case Node::SPLICE: {
 				if (!node->splice.rel_acq || node->splice.rel_acq->status == Signal::Status::eDisarmed) {
 					break;
 				}
-				bool s = true;
+				std::optional<Node*> fail = {};
 				assert(node->type.size() == node->splice.values.size());
 				for (auto i = 0; i < node->type.size(); i++) {
 					// is this ever used?
@@ -1230,22 +1243,34 @@ namespace vuk {
 						continue;
 					}
 					if (node->type[i]->hash_value == current_module->types.builtin_image) {
-						auto [_, succ] = ias.emplace(*reinterpret_cast<ImageAttachment*>(node->splice.values[i]));
-						s = succ;
+						auto ia = reinterpret_cast<ImageAttachment*>(node->splice.values[i]);
+						auto [_, succ] = ias.emplace(*ia, node);
+						if (!succ) {
+							fail = ias.at(*ia);
+						}
 					} else if (node->type[i]->hash_value == current_module->types.builtin_buffer) {
-						auto [_, succ] = bufs.emplace(*reinterpret_cast<Buffer*>(node->splice.values[i]));
-						s = succ;
+						auto buf = reinterpret_cast<Buffer*>(node->splice.values[i]);
+						auto [_, succ] = bufs.emplace(*buf, node);
+						if (!succ) {
+							fail = bufs.at(*buf);
+						}
 					} else if (node->type[i]->hash_value == current_module->types.builtin_swapchain) {
-						auto [_, succ] = swps.emplace(reinterpret_cast<Swapchain*>(node->splice.values[i]));
-						s = succ;
+						auto swp = reinterpret_cast<Swapchain*>(node->splice.values[i]);
+						auto [_, succ] = swps.emplace(swp, node);
+						if (!succ) {
+							fail = swps.at(swp);
+						}
 					} else { // TODO: it is an array, no val yet
 					}
-					if (!s) {
+					if (fail) {
 						break;
 					}
 				}
-				if (!s) {
-					return { expected_error, RenderGraphException{ format_graph_message(Level::eError, node, "tried to acquire something that was already known.") } };
+				if (fail) {
+					auto loc = format_source_location(*fail);
+					auto msg =
+					    fmt::format("tried to acquire something that was already known. Previously acquired by {} with callstack:\n{}", node_to_string(*fail), loc);
+					return { expected_error, RenderGraphException{ format_graph_message(Level::eError, node, msg) } };
 				}
 			} break;
 			default:
@@ -1272,10 +1297,6 @@ namespace vuk {
 		build_links(module, nodes.begin(), nodes.end(), pass_reads, pass_nops, child_chains, allocator);
 		module->link_frontier = module->node_counter;
 		return { expected_value };
-	}
-
-	auto format_as(Ref f) {
-		return std::string("\"") + fmt::to_string(fmt::ptr(f.node)) + "@" + fmt::to_string(f.index) + std::string("\"");
 	}
 
 	struct Replace {
