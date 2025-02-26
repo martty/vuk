@@ -911,7 +911,7 @@ namespace vuk {
 			case Node::SPLICE:
 				return compdef;
 			default:
-				assert(0);
+				VUK_UNREACHABLE("invalid node kind");
 			}
 		}
 		case Node::SLICE:
@@ -920,10 +920,10 @@ namespace vuk {
 			if (def.type()->kind == Type::ALIASED_TY) {
 				return get_def2(def.node->call.args[def.type()->aliased.ref_idx]);
 			} else {
-				assert(0);
+				VUK_UNREACHABLE("invalid node kind");
 			}
 		default:
-			assert(0);
+			VUK_UNREACHABLE("invalid node kind");
 		}
 	}
 
@@ -955,13 +955,13 @@ namespace vuk {
 			case Node::SPLICE:
 				return compdef;
 			default:
-				assert(0);
+				VUK_UNREACHABLE("invalid node kind");
 			}
 		}
 		case Node::SLICE:
 			return def;
 		default:
-			assert(0);
+			VUK_UNREACHABLE("invalid node kind");
 		}
 	}
 

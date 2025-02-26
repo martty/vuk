@@ -41,8 +41,10 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
   set(VUK_OS_WINDOWS ON)
 else()
-  message(FATAL "unrecognised operating system '${CMAKE_SYSTEM_NAME}'")
+  message(FATAL_ERROR "unrecognised operating system '${CMAKE_SYSTEM_NAME}'")
 endif()
+
+message(STATUS "LINUX=${VUK_OS_LINUX}; APPLE=${VUK_OS_APPLE}; WINDOWS=${VUK_OS_WINDOWS}")
 
 # Detect compilers
 set(VUK_COMPILER_CLANGPP OFF)
@@ -56,15 +58,19 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
   elseif(CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
     set(VUK_COMPILER_CLANGCL ON)
   else()
-    message(FATAL "unrecognised clang frontend '${CMAKE_CXX_COMPILER_FRONTEND_VARIANT}'")
+    message(FATAL_ERROR "unrecognised clang frontend '${CMAKE_CXX_COMPILER_FRONTEND_VARIANT}'")
   endif()
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
+  set(VUK_COMPILER_CLANGPP ON)
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
   set(VUK_COMPILER_GPP ON)
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
   set(VUK_COMPILER_MSVC ON)
 else()
-  message(FATAL "unrecognised compiler '${CMAKE_CXX_COMPILER}' with ID '${CMAKE_CXX_COMPILER_ID}'")
+  message(FATAL_ERROR "unrecognised compiler '${CMAKE_CXX_COMPILER}' with ID '${CMAKE_CXX_COMPILER_ID}'")
 endif()
+
+message(STATUS "CLANGPP=${VUK_COMPILER_CLANGPP}; CLANGCL=${VUK_COMPILER_CLANGCL}; GPP=${VUK_COMPILER_GPP}; MSVC=${VUK_COMPILER_MSVC}")
 
 set(BUILD_TESTS OFF)
 
@@ -295,6 +301,9 @@ target_compile_definitions(vuk
   VUK_BUILD_TESTS=$<BOOL:${VUK_BUILD_TESTS}>
   VUK_FAIL_FAST=$<BOOL:${VUK_FAIL_FAST}>
   VUK_DEBUG_ALLOCATIONS=$<BOOL:${VUK_DEBUG_ALLOCATIONS}>
+  VUK_COMPILER_CLANGPP=$<BOOL:${VUK_COMPILER_CLANGPP}>
+  VUK_COMPILER_CLANGCL=$<BOOL:${VUK_COMPILER_CLANGCL}>
+  VUK_COMPILER_GPP=$<BOOL:${VUK_COMPILER_GPP}>
   VUK_COMPILER_MSVC=$<BOOL:${VUK_COMPILER_MSVC}>
   VUK_OS_WINDOWS=$<BOOL:${VUK_OS_WINDOWS}>
   VUK_OS_LINUX=$<BOOL:${$VUK_OS_LINUX}>
@@ -331,7 +340,7 @@ target_sources(vuk PRIVATE
 target_include_directories(vuk PUBLIC include)
 
 if(VUK_COMPILER_CLANGPP OR VUK_COMPILER_GPP)
-  target_compile_options(vuk PRIVATE -fno-char8_t)
+  target_compile_options(vuk PRIVATE -fno-char8_t -Wreturn-type)
 elseif(VUK_COMPILER_MSVC OR VUK_COMPILER_CLANGCL) # cl.exe or clang-cl
   # w4068 : unknown pragma
   target_compile_options(vuk PRIVATE /permissive- /Zc:char8_t- /wd4068)

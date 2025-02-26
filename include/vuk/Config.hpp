@@ -61,3 +61,11 @@
 #else
 #define VUK_USE_EXCEPTIONS 0
 #endif
+
+#if VUK_COMPILER_CLANGPP || VUK_COMPILER_CLANGCL || VUK_COMPILER_GPP
+#define VUK_UNREACHABLE(msg) (assert(false && msg), __builtin_unreachable())
+#elif VUK_COMPILER_MSVC
+#define VUK_UNREACHABLE(msg) (assert(false && msg), __assume(0))
+#else
+#define VUK_UNREACHABLE(msg) assert(false && msg)
+#endif
