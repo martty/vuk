@@ -2,11 +2,16 @@
 #include "vuk/Value.hpp"
 #include "vuk/runtime/Cache.hpp"
 #include "vuk/runtime/vk/AllocatorHelpers.hpp"
+#include "vuk/runtime/vk/DeviceVkResource.hpp"
 #include "vuk/runtime/vk/VkRuntime.hpp"
 #include "vuk/runtime/vk/VkSwapchain.hpp"
 
 namespace vuk {
 	Result<void> submit(Allocator& allocator, Compiler& compiler, std::span<UntypedValue> values, RenderGraphCompileOptions options) {
+		// DeviceVkResource is unsuitable for submits, because internally the lifetimes are not tracked
+		if (dynamic_cast<DeviceVkResource*>(&allocator.get_device_resource()) != nullptr) {
+			return { expected_error, RenderGraphException{ "DeviceVkResource is unsuitable for submits" } };
+		}
 		std::vector<std::shared_ptr<ExtNode>> extnodes;
 		for (auto& value : values) {
 			auto& node = value.node;
