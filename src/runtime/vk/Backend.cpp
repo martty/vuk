@@ -822,9 +822,10 @@ namespace vuk {
 		}
 
 		Stream* stream_for_domain(DomainFlagBits domain) {
-			auto it = streams.find(domain);
-			if (it != streams.end()) {
-				return it->second.get();
+			for (auto& [dom, stream] : streams) {
+				if (dom & domain) {
+					return stream.get();
+				}
 			}
 			return nullptr;
 		}
