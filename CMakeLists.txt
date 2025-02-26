@@ -30,6 +30,13 @@ if(CMAKE_SIZEOF_VOID_P EQUAL "4")
 	message(FATAL_ERROR "x86 is not supported.")
 endif()
 
+FetchContent_Declare(
+  robin-hood-hashing
+  GIT_REPOSITORY https://github.com/martinus/robin-hood-hashing.git
+  GIT_TAG 9145f963d80d6a02f0f96a47758050a89184a3ed
+)
+FetchContent_MakeAvailable(robin-hood-hashing)
+
 ##### Using vuk with volk (or a similar library)
 # step 1: turn off VUK_LINK_TO_LOADER and add_subdirectory vuk
 # set(VUK_LINK_TO_LOADER OFF)
@@ -219,7 +226,6 @@ target_sources(vuk PRIVATE
 	)
 
 target_include_directories(vuk PUBLIC ext/plf_colony)
-add_subdirectory(ext/robin-hood-hashing)
 if (NOT TARGET fmt::fmt)
   add_subdirectory(ext/fmt)
 endif()
