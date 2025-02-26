@@ -1,8 +1,8 @@
-cmake_minimum_required(VERSION 3.7)
+cmake_minimum_required(VERSION 3.15)
 project(vuk-benchmarks)
 
 FetchContent_Declare(
-  vk-bootstrap 
+  vk-bootstrap
   GIT_REPOSITORY https://github.com/charles-lunarg/vk-bootstrap
   GIT_TAG        8e61b2d81c3f5f84339735085ff5651f71bbe1e7
 )
@@ -12,7 +12,7 @@ set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(
-  glfw 
+  glfw
   GIT_REPOSITORY https://github.com/glfw/glfw
   GIT_TAG        3.3.2
 )
