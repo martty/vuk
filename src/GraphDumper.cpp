@@ -1,7 +1,8 @@
 #include <fstream>
 #include <sstream>
 #include <string>
-#ifdef _WINDOWS
+
+#if VUK_OS_WINDOWS
 #include <Windows.h>
 #include <shellapi.h>
 #endif
@@ -173,14 +174,16 @@ namespace vuk {
 
 		void end_graph() {
 			ss << "}\n";
-			std::string temp_file = std::tmpnam(nullptr);
-			std::ofstream out(temp_file);
-			auto str = ss.str();
-			out << str;
-			out.close();
+			[[maybe_unused]] auto str = ss.str();
 			ss.str("");
 			ss.clear();
-#ifdef _WINDOWS
+
+#if VUK_OS_WINDOWS
+			std::string temp_file = std::tmpnam(nullptr);
+			std::ofstream out(temp_file);
+			out << str;
+			out.close();
+
 			std::string png_temp_file = std::tmpnam(nullptr);
 			png_temp_file += ".png";
 			auto cmd = std::string("\"C:\\Program Files\\Graphviz\\bin\\dot.exe\" -Tpng -o") + png_temp_file + " " + temp_file + "  >nul 2>nul";
