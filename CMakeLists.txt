@@ -363,17 +363,21 @@ endif()
 if(VUK_BUILD_TESTS)
 	enable_testing()
 
-	add_subdirectory(ext/doctest)
-	target_link_libraries(vuk PUBLIC doctest::doctest)
-	target_sources(vuk PRIVATE tests/Test.cpp)
-
+	FetchContent_Declare(
+	  doctest
+	  GIT_REPOSITORY https://github.com/doctest/doctest
+	  GIT_TAG        ae7a13539fb71f270b87eb2e874fbac80bc8dda2
+	)
 	FetchContent_Declare(
 	  vk-bootstrap
 	  GIT_REPOSITORY https://github.com/charles-lunarg/vk-bootstrap
 	  GIT_TAG        cf8df11a0a071463009031cb474099dacffe90ed
 	)
-	FetchContent_MakeAvailable(vk-bootstrap)
 
+	FetchContent_MakeAvailable(vk-bootstrap doctest)
+
+	target_link_libraries(vuk PUBLIC doctest::doctest)
+	target_sources(vuk PRIVATE tests/Test.cpp)
 	include(doctest_force_link_static_lib_in_target) # until we can use cmake 3.24
 	add_executable(vuk-tests tests/Test.cpp
 					tests/00_misc.cpp
@@ -391,7 +395,7 @@ if(VUK_BUILD_TESTS)
 
 	copy_runtime_dlls(vuk-tests)
 
-	include(ext/doctest/scripts/cmake/doctest.cmake) # until we can use cmake 3.24
+  include(${doctest_SOURCE_DIR}/scripts/cmake/doctest.cmake) # until we can use cmake 3.24
 	doctest_discover_tests(vuk-tests)
 
 	if(VUK_COMPILER_CLANGPP OR VUK_COMPILER_GPP)
