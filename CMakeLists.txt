@@ -78,6 +78,15 @@ FetchContent_MakeAvailable(
   spirv-cross
 )
 
+if (NOT TARGET fmt::fmt)
+  FetchContent_Declare(
+    fmt
+    GIT_REPOSITORY https://github.com/fmtlib/fmt
+    GIT_TAG 7f7695524a4bc3c9b7883afcc86ba61421989b7f
+  )
+  FetchContent_MakeAvailable(fmt)
+endif()
+
 # plf_colony does not provide a CMake build script, hence we create an
 # interface library here.
 add_library(plf_colony INTERFACE)
@@ -273,9 +282,6 @@ target_sources(vuk PRIVATE
 	src/runtime/vk/VkRuntime.cpp
 )
 
-if (NOT TARGET fmt::fmt)
-  add_subdirectory(ext/fmt)
-endif()
 target_include_directories(vuk PUBLIC include)
 
 set(VUK_COMPILER_CLANGPP OFF)
