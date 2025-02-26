@@ -1,17 +1,27 @@
-cmake_minimum_required(VERSION 3.7)
+cmake_minimum_required(VERSION 3.15)
 project(vuk-examples)
 
 if(NOT VUK_USE_SHADERC)
     message(FATAL_ERROR "Building vuk examples require shaderc for building shaders, enable VUK_USE_SHADERC")
 endif()
 
+if (NOT APPLE)
+    option(TRACY_ENABLE "Enable Tracy Profiler" ON)
+else()
+    option(TRACY_ENABLE "Enable Tracy Profiler" OFF)
+endif()
+set(TRACY_ON_DEMAND OFF)
+FetchContent_Declare(tracy
+    GIT_REPOSITORY https://github.com/wolfpld/tracy.git
+    GIT_TAG master
+    GIT_SHALLOW TRUE
+    GIT_PROGRESS TRUE
+)
 FetchContent_Declare(
   vk-bootstrap
   GIT_REPOSITORY https://github.com/charles-lunarg/vk-bootstrap
   GIT_TAG        1f07cf143429c671a3dd778a8644e3f26668475d
 )
-FetchContent_MakeAvailable(vk-bootstrap)
-
 set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
@@ -30,48 +40,51 @@ FetchContent_Declare(
   GIT_REPOSITORY https://github.com/nothings/stb
   GIT_TAG 5c205738c191bcb0abc65c4febfa9bd25ff35234
 )
-
+FetchContent_Declare(
+  imgui
+  GIT_REPOSITORY https://github.com/ocornut/imgui.git
+  GIT_TAG 4c0604ec2ee9a9121ea4ecb55543ff507ca81bcc
+)
 FetchContent_MakeAvailable(
   glm
   glfw
   stb
+  imgui
+  vk-bootstrap
+  tracy
 )
 
-# stb does not provide a CMake build script, hence we create a static library
-# here.
-add_library(stb STATIC
-  "${CMAKE_CURRENT_SOURCE_DIR}/stbi.cpp"
-)
-target_include_directories(stb PUBLIC "${stb_SOURCE_DIR}")
-
-if (NOT APPLE)
-    option(TRACY_ENABLE "Enable Tracy Profiler" ON)
-else()
-    option(TRACY_ENABLE "Enable Tracy Profiler" OFF)
-endif()
-set(TRACY_ON_DEMAND OFF)
-FetchContent_Declare(tracy
-    GIT_REPOSITORY https://github.com/wolfpld/tracy.git
-    GIT_TAG master
-    GIT_SHALLOW TRUE
-    GIT_PROGRESS TRUE
-)
-FetchContent_MakeAvailable(tracy)
-
-if(${TRACY_ENABLE} AND APPLE)
+if(TRACY_ENABLE AND APPLE)
     message(FATAL_ERROR "MoltenVk's restrictions on query pools are too high to be usable")
 endif()
 
-add_library(vuk-example-framework)
+# stb does not provide a CMake build script, hence we create a interface
+# library here.
+add_library(stb INTERFACE)
+target_include_directories(stb INTERFACE "${stb_SOURCE_DIR}")
 
-SET(imgui_sources ../ext/imgui/imgui.cpp ../ext/imgui/imgui_draw.cpp ../ext/imgui/imgui_demo.cpp ../ext/imgui/imgui_widgets.cpp ../ext/imgui/imgui_tables.cpp ../ext/imgui/backends/imgui_impl_glfw.cpp)
-target_sources(vuk-example-framework PRIVATE imgui.cpp ${imgui_sources})
-target_include_directories(vuk-example-framework SYSTEM PUBLIC ../ext/imgui)
+# imgui does not provide a CMake build script, hence we create a static library
+# here.
+add_library(imgui STATIC
+  "${imgui_SOURCE_DIR}/imgui.cpp"
+  "${imgui_SOURCE_DIR}/imgui_draw.cpp"
+  "${imgui_SOURCE_DIR}/imgui_demo.cpp"
+  "${imgui_SOURCE_DIR}/imgui_widgets.cpp"
+  "${imgui_SOURCE_DIR}/imgui_tables.cpp"
+  "${imgui_SOURCE_DIR}/backends/imgui_impl_glfw.cpp"
+)
+target_include_directories(imgui PUBLIC "${imgui_SOURCE_DIR}")
+target_link_libraries(imgui PRIVATE glfw)
+
+add_library(vuk-example-framework STATIC
+  "${CMAKE_CURRENT_SOURCE_DIR}/stbi.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/imgui.cpp"
+)
 target_compile_definitions(vuk-example-framework PUBLIC GLM_FORCE_SIZE_FUNC GLM_FORCE_EXPLICIT_CTOR GLM_ENABLE_EXPERIMENTAL GLM_FORCE_RADIANS GLM_FORCE_DEPTH_ZERO_TO_ONE TRACY_VK_USE_SYMBOL_TABLE)
 if(VUK_COMPILER_CLANGPP OR VUK_COMPILER_GPP)
-    target_compile_options(vuk-example-framework PUBLIC -std=c++20 -fno-char8_t)
+  target_compile_options(vuk-example-framework PUBLIC -std=c++20 -fno-char8_t)
 elseif(MSVC)
-    target_compile_options(vuk-example-framework PUBLIC /std:c++20 /permissive- /Zc:char8_t- /wd4068)
+  target_compile_options(vuk-example-framework PUBLIC /std:c++20 /permissive- /Zc:char8_t- /wd4068)
 endif()
 target_link_libraries(vuk-example-framework
   PUBLIC
@@ -81,6 +94,7 @@ target_link_libraries(vuk-example-framework
   glm
   stb
   TracyClient
+  imgui
 )
 
 add_executable(vuk_all_examples)
