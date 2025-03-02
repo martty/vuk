@@ -5,6 +5,8 @@
 namespace vuk::extra {
 	vkb::InstanceBuilder make_instance_builder(uint32_t vulkan_major_version, uint32_t vulkan_minor_version, bool with_default_callback) {
 		vkb::InstanceBuilder builder;
+		assert(vulkan_major_version >= 1);
+		assert(vulkan_minor_version >= 2 && "vuk needs at least Vulkan 1.2!");
 		builder.request_validation_layers().require_api_version(vulkan_major_version, vulkan_minor_version, 0);
 		if (with_default_callback) {
 			builder.set_debug_callback([](VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
@@ -21,9 +23,7 @@ namespace vuk::extra {
 	}
 
 	PhysicalDevice select_physical_device(vkb::Instance vkbinstance, VkSurfaceKHR surface) {
-		// EVIL TIME
-		auto api_version = VK_MAKE_API_VERSION(0, 1, 2, 0); // TODO: finalize this
-		// END EVIL TIME
+		auto api_version = vkbinstance.api_version;
 		uint32_t rq_major_version = VK_API_VERSION_MAJOR(api_version);
 		uint32_t rq_minor_version = VK_API_VERSION_MINOR(api_version);
 		vkb::PhysicalDeviceSelector selector{ vkbinstance };
