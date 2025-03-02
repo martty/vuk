@@ -51,3 +51,43 @@ function(target_shaders target)
         endif()
     endforeach()
 endfunction()
+
+# IMPORTANT: you must use this function in the same directory as the target, otherwise CMake doesn't pick up the command
+# usage: target_shaders(<target name> SHADERS <input spirv files>)
+# last arg must be the cli flag indicating output, such as -o or -Fo
+function(target_dist_spv target)
+    cmake_parse_arguments(PARSE_ARGV 1 target_shaders "" "" "SHADERS")
+    foreach(shader_file IN LISTS target_shaders_SHADERS)
+        # construct the output file name
+        cmake_path(APPEND vuk-binary-dist_SOURCE_DIR "bin" ${shader_file} OUTPUT_VARIABLE in_file)
+        cmake_path(APPEND CMAKE_CURRENT_BINARY_DIR ${shader_file} OUTPUT_VARIABLE output_file)
+
+        # generate data embedding
+        # this will use incbin on non-MSVC and RC files on MSVC
+        string(REPLACE "." "_" embed_name ${shader_file})
+        EMBED_TARGET(${embed_name} ${in_file})
+        target_sources("${target}" PRIVATE ${EMBED_${embed_name}_OUTPUTC})
+        # for MSVC, we sidestep CMake and compile the res files manually, so we can refer to their path
+        # and put the resulting .res files in the INTERFACE link options for libraries that don't link
+        # and link directly for targets that do
+        if(VUK_COMPILER_MSVC)
+            add_custom_command(OUTPUT ${output_file}.res
+                               MAIN_DEPENDENCY ${EMBED_${embed_name}_OUTPUTRC}
+                               DEPENDS ${in_file}
+                               VERBATIM
+                               WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+                               COMMAND ${CMAKE_RC_COMPILER}
+                               ARGS /nologo /fo ${output_file}.res ${EMBED_${embed_name}_OUTPUTRC}
+            )
+            target_sources("${target}" PRIVATE ${output_file}.res)
+            get_target_property(target_type "${target}" TYPE)
+            if (target_type STREQUAL "STATIC_LIBRARY")
+                target_link_options("${target}" INTERFACE ${output_file}.res)
+            elseif(target_type STREQUAL "OBJECT_LIBRARY")
+                target_link_options("${target}" INTERFACE ${output_file}.res)
+            else()
+                target_link_options("${target}" PRIVATE ${output_file}.res)
+            endif()
+        endif()
+    endforeach()
+endfunction()

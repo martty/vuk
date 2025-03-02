@@ -128,6 +128,18 @@ FetchContent_Declare(
   GIT_TAG 2c32b6bf86f3c4a5539aa1f0bacbd59fe61759cf
 )
 
+FetchContent_Declare(
+  vuk-binary-dist
+  GIT_REPOSITORY https://github.com/martty/vuk-binary-dist.git
+  GIT_TAG 517d0bf43963725208794a43530341e65524edf1
+)
+
+# for vuk-binary-dist, we want to populate but not add to the build
+FetchContent_GetProperties(vuk-binary-dist)
+if(NOT vuk-binary-dist_POPULATED)
+  FetchContent_Populate(vuk-binary-dist)
+endif()
+
 FetchContent_MakeAvailable(
   robin-hood-hashing
   plf_colony
