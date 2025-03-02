@@ -8,9 +8,8 @@ FetchContent_MakeAvailable(
   imgui
 )
 
-# imgui does not provide a CMake build script, hence we create a static library
-# here.
-add_library(imgui STATIC
+# imgui does not provide a CMake build script, hence we create a library here.
+add_library(imgui OBJECT
   "${imgui_SOURCE_DIR}/imgui.cpp"
   "${imgui_SOURCE_DIR}/imgui_draw.cpp"
   "${imgui_SOURCE_DIR}/imgui_demo.cpp"
@@ -18,9 +17,9 @@ add_library(imgui STATIC
   "${imgui_SOURCE_DIR}/imgui_tables.cpp"
 )
 target_include_directories(imgui PUBLIC "${imgui_SOURCE_DIR}")
-target_link_libraries(imgui)
 
 target_sources(vuk PRIVATE ImGuiIntegration.cpp)
+target_shaders(imgui COMPILER glslangValidator ARGS --target-env vulkan1.2 SHADERS imgui.vert imgui.frag)
 
 if (VUK_IMGUI_PLATFORM_BACKEND STREQUAL "")
 	message(FATAL_ERROR "VUK_IMGUI_PLATFORM_BACKEND must be set to a valid imgui platform backend or to the string ''custom'")

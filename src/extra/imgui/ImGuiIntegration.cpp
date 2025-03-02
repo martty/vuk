@@ -1,18 +1,18 @@
 #include "vuk/extra/ImGuiIntegration.hpp"
 #include "vuk/RenderGraph.hpp"
 #include "vuk/extra/ImGuiIntegration.hpp"
-#include <stdint.h>
+#include "vuk/EmbeddedResource.hpp"
 
 #include <backends/imgui_impl_glfw.h>
 #include <imgui.h>
-
-#include "imgui_frag.hpp"
-#include "imgui_vert.hpp"
 
 #include "vuk/runtime/CommandBuffer.hpp"
 #include "vuk/runtime/vk/AllocatorHelpers.hpp"
 #include "vuk/runtime/vk/VkRuntime.hpp"
 #include "vuk/vsl/Core.hpp"
+
+VUK_EMBEDDED_RESOURCE(imgui_vert);
+VUK_EMBEDDED_RESOURCE(imgui_frag);
 
 namespace vuk::extra {
 	ImTextureID ImGuiData::add_sampled_image(Value<SampledImage> sampled_image) {
@@ -54,9 +54,11 @@ namespace vuk::extra {
 		{
 			PipelineBaseCreateInfo pci;
 			// glslangValidator.exe -V imgui.vert --vn imgui_vert -o examples/imgui_vert.hpp
-			pci.add_static_spirv(imgui_vert, sizeof(imgui_vert) / 4, "imgui.vert");
+			auto vert = imgui_vert();
+			pci.add_static_spirv((uint32_t*)vert.data, vert.size / 4, "imgui.vert");
 			// glslangValidator.exe -V imgui.frag --vn imgui_frag -o examples/imgui_frag.hpp
-			pci.add_static_spirv(imgui_frag, sizeof(imgui_frag) / 4, "imgui.frag");
+			auto frag = imgui_frag();
+			pci.add_static_spirv((uint32_t*)frag.data, frag.size / 4, "imgui.frag");
 			ctx.create_named_pipeline("imgui", pci);
 		}
 		return data;
