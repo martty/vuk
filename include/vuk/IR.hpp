@@ -1083,7 +1083,14 @@ namespace vuk {
 	}
 
 	struct IRModule {
-		IRModule() : op_arena(/**/), module_id(module_id_counter++) {}
+		IRModule() : op_arena(/**/), module_id(module_id_counter++) {
+			// prepopulate builtin type hashes
+			types.get_builtin_buffer();
+			types.get_builtin_image();
+			types.get_builtin_sampler();
+			types.get_builtin_sampled_image();
+			types.get_builtin_swapchain();
+		}
 
 		plf::colony<Node /*, inline_alloc<Node, 4 * 1024>*/> op_arena;
 		std::vector<Node*> garbage;
