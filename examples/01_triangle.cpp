@@ -15,14 +15,14 @@ namespace {
 		.name = "01_triangle",
 		// Setup code, ran once in the beginning
 		.setup =
-		    [](vuk::ExampleRunner& runner, vuk::Allocator& allocator) {
+		    [](vuk::ExampleRunner& runner, vuk::Allocator& allocator, vuk::Runtime& runtime) {
 		      // Pipelines are created by filling out a vuk::PipelineCreateInfo
 		      // In this case, we only need the shaders, we don't care about the rest of the state
 		      vuk::PipelineBaseCreateInfo pci;
 		      pci.add_glsl(util::read_entire_file((root / "examples/triangle.vert").generic_string()), (root / "examples/triangle.vert").generic_string());
 		      pci.add_glsl(util::read_entire_file((root / "examples/triangle.frag").generic_string()), (root / "examples/triangle.frag").generic_string());
 		      // The pipeline is stored with a user give name for simplicity
-		      runner.runtime->create_named_pipeline("triangle", pci);
+		      runtime.create_named_pipeline("triangle", pci);
 		    },
 		// Code ran every frame
 		.render =

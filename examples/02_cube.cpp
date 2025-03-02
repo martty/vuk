@@ -24,7 +24,7 @@ namespace {
 		.name = "02_cube",
 		// Same setup as previously
 		.setup =
-		    [](vuk::ExampleRunner& runner, vuk::Allocator& allocator) {
+		    [](vuk::ExampleRunner& runner, vuk::Allocator& allocator, vuk::Runtime& runtime) {
 		      vuk::PipelineBaseCreateInfo pci;
 		      pci.add_glsl(util::read_entire_file((root / "examples/ubo_test.vert").generic_string()), (root / "examples/ubo_test.vert").generic_string());
 		      pci.add_glsl(util::read_entire_file((root / "examples/triangle_depthshaded.frag").generic_string()),

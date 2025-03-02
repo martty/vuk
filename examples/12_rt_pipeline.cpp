@@ -24,11 +24,11 @@ namespace {
 	vuk::Example x{
 		.name = "12_rt_pipeline",
 		.setup =
-		    [](vuk::ExampleRunner& runner, vuk::Allocator& allocator) {
+		    [](vuk::ExampleRunner& runner, vuk::Allocator& allocator, vuk::Runtime& runtime) {
 		      auto& ctx = allocator.get_context();
 
 		      // If the runner has detected that there is no RT support, this example won't run
-		      if (!runner.has_rt) {
+		      if (!runtime.vkCmdBuildAccelerationStructuresKHR) {
 			      return;
 		      }
 
@@ -40,7 +40,7 @@ namespace {
 			      // new for RT: a hit group is a collection of shaders identified by their index in the PipelineBaseCreateInfo
 			      // 2 => rt.rchit
 			      pci.add_hit_group(vuk::HitGroup{ .type = vuk::HitGroupType::eTriangles, .closest_hit = 2 });
-			      runner.runtime->create_named_pipeline("raytracing", pci);
+			      runtime.create_named_pipeline("raytracing", pci);
 		      }
 
 		      // We set up the cube data, same as in example 02_cube
@@ -218,7 +218,7 @@ namespace {
 		    },
 		.render =
 		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator, vuk::Value<vuk::ImageAttachment> target) {
-		      if (!runner.has_rt) {
+		      if (!runner.app->runtime->vkCmdBuildAccelerationStructuresKHR) {
 			      return target;
 		      }
 

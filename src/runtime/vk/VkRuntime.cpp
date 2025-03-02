@@ -579,7 +579,7 @@ namespace vuk {
 	}
 
 	void Runtime::set_shader_target_version(const uint32_t target_version) {
-		assert((target_version >= VK_API_VERSION_1_0 && target_version <= VK_API_VERSION_1_3) && "Invalid target version was passed.");
+		assert((target_version >= VK_API_VERSION_1_0 && target_version < VK_MAKE_API_VERSION(0, 1, 5, 0)) && "Invalid target version was passed.");
 		shader_compiler_target_version = target_version;
 	}
 

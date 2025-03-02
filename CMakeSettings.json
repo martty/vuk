@@ -51,6 +51,11 @@
           "name": "VUK_USE_VCC",
           "value": "False",
           "type": "BOOL"
+        },
+        {
+          "name": "VUK_EXTRA",
+          "value": "True",
+          "type": "BOOL"
         }
       ]
     },

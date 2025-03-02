@@ -103,7 +103,7 @@ namespace {
 				pci.add_glsl(util::read_entire_file(VUK_EX_PATH_TO_ROOT "benchmarks/dependent_texture_fetch_explicit_lod.frag"),
 			               VUK_EX_PATH_TO_ROOT "examples/dependent_texture_fetch_explicit_lod.frag");
 
-				runner.runtime->create_named_pipeline("dependent", pci);
+				runtime.create_named_pipeline("dependent", pci);
 			}
 			{
 				vuk::PipelineBaseCreateInfo pci;
@@ -111,14 +111,14 @@ namespace {
 				pci.add_glsl(util::read_entire_file(VUK_EX_PATH_TO_ROOT "benchmarks/nondependent_texture_fetch_explicit_lod.frag"),
 			               VUK_EX_PATH_TO_ROOT "examples/nondependent_texture_fetch_explicit_lod.frag");
 
-				runner.runtime->create_named_pipeline("nondependent", pci);
+				runtime.create_named_pipeline("nondependent", pci);
 			}
 			{
 				vuk::PipelineBaseCreateInfo pci;
 				pci.add_glsl(util::read_entire_file(VUK_EX_PATH_TO_ROOT "benchmarks/fullscreen.vert"), VUK_EX_PATH_TO_ROOT "examples/fullscreen.vert");
 				pci.add_glsl(util::read_entire_file(VUK_EX_PATH_TO_ROOT "benchmarks/blit.frag"), VUK_EX_PATH_TO_ROOT "examples/blit.frag");
 
-				runner.runtime->create_named_pipeline("blit", pci);
+				runtime.create_named_pipeline("blit", pci);
 			}
 
 			int x, y, chans;

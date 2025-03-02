@@ -4,6 +4,21 @@ project(vuk-examples)
 if(NOT VUK_USE_SHADERC)
     message(FATAL_ERROR "Building vuk examples require shaderc for building shaders, enable VUK_USE_SHADERC")
 endif()
+if(NOT VUK_EXTRA_IMGUI)
+    message(FATAL_ERROR "Building vuk examples requires the imgui integration, enable VUK_EXTRA and VUK_EXTRA_IMGUI")
+endif()
+if(NOT VUK_EXTRA_INIT)
+    message(FATAL_ERROR "Building vuk examples requires the simple init, enable VUK_EXTRA and VUK_EXTRA_INIT")
+endif()
+
+set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(
+  glfw
+  GIT_REPOSITORY https://github.com/glfw/glfw
+  GIT_TAG        3.3.6
+)
 
 if (NOT APPLE)
     option(TRACY_ENABLE "Enable Tracy Profiler" ON)
@@ -13,23 +28,11 @@ endif()
 set(TRACY_ON_DEMAND OFF)
 FetchContent_Declare(tracy
     GIT_REPOSITORY https://github.com/wolfpld/tracy.git
-    GIT_TAG master
+    GIT_TAG 2183962ef7fc8f721019c01d9170f5ea0d509555
     GIT_SHALLOW TRUE
     GIT_PROGRESS TRUE
 )
-FetchContent_Declare(
-  vk-bootstrap
-  GIT_REPOSITORY https://github.com/charles-lunarg/vk-bootstrap
-  GIT_TAG        1f07cf143429c671a3dd778a8644e3f26668475d
-)
-set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
-set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-FetchContent_Declare(
-  glfw
-  GIT_REPOSITORY https://github.com/glfw/glfw
-  GIT_TAG        3.3.6
-)
+
 FetchContent_Declare(
   glm
   GIT_REPOSITORY https://github.com/g-truc/glm
@@ -40,17 +43,11 @@ FetchContent_Declare(
   GIT_REPOSITORY https://github.com/nothings/stb
   GIT_TAG 5c205738c191bcb0abc65c4febfa9bd25ff35234
 )
-FetchContent_Declare(
-  imgui
-  GIT_REPOSITORY https://github.com/ocornut/imgui.git
-  GIT_TAG 4c0604ec2ee9a9121ea4ecb55543ff507ca81bcc
-)
+
 FetchContent_MakeAvailable(
-  glm
   glfw
+  glm
   stb
-  imgui
-  vk-bootstrap
   tracy
 )
 
@@ -63,22 +60,9 @@ endif()
 add_library(stb INTERFACE)
 target_include_directories(stb INTERFACE "${stb_SOURCE_DIR}")
 
-# imgui does not provide a CMake build script, hence we create a static library
-# here.
-add_library(imgui STATIC
-  "${imgui_SOURCE_DIR}/imgui.cpp"
-  "${imgui_SOURCE_DIR}/imgui_draw.cpp"
-  "${imgui_SOURCE_DIR}/imgui_demo.cpp"
-  "${imgui_SOURCE_DIR}/imgui_widgets.cpp"
-  "${imgui_SOURCE_DIR}/imgui_tables.cpp"
-  "${imgui_SOURCE_DIR}/backends/imgui_impl_glfw.cpp"
-)
-target_include_directories(imgui PUBLIC "${imgui_SOURCE_DIR}")
-target_link_libraries(imgui PRIVATE glfw)
-
 add_library(vuk-example-framework STATIC
   "${CMAKE_CURRENT_SOURCE_DIR}/stbi.cpp"
-  "${CMAKE_CURRENT_SOURCE_DIR}/imgui.cpp"
+  example_main.cpp
 )
 target_compile_definitions(vuk-example-framework PUBLIC GLM_FORCE_SIZE_FUNC GLM_FORCE_EXPLICIT_CTOR GLM_ENABLE_EXPERIMENTAL GLM_FORCE_RADIANS GLM_FORCE_DEPTH_ZERO_TO_ONE TRACY_VK_USE_SYMBOL_TABLE)
 if(VUK_COMPILER_CLANGPP OR VUK_COMPILER_GPP)
@@ -86,16 +70,14 @@ if(VUK_COMPILER_CLANGPP OR VUK_COMPILER_GPP)
 elseif(MSVC)
   target_compile_options(vuk-example-framework PUBLIC /std:c++20 /permissive- /Zc:char8_t- /wd4068)
 endif()
-target_link_libraries(vuk-example-framework
-  PUBLIC
+target_link_libraries(vuk-example-framework PUBLIC
   vuk
-  vk-bootstrap
   glfw
   glm
   stb
   TracyClient
-  imgui
 )
+target_link_libraries(vuk-example-framework PRIVATE vuk-extra-imgui-platform)
 
 add_executable(vuk_all_examples)
 target_sources(vuk_all_examples PRIVATE example_browser.cpp)

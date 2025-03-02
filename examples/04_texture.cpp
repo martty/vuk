@@ -25,14 +25,14 @@ namespace {
 	vuk::Example x{
 		.name = "04_texture",
 		.setup =
-		    [](vuk::ExampleRunner& runner, vuk::Allocator& allocator) {
+		    [](vuk::ExampleRunner& runner, vuk::Allocator& allocator, vuk::Runtime& runtime) {
 		      {
 			      vuk::PipelineBaseCreateInfo pci;
 			      pci.add_glsl(util::read_entire_file((root / "examples/ubo_test_tex.vert").generic_string()),
 			                   (root / "examples/ubo_test_tex.vert").generic_string());
 			      pci.add_glsl(util::read_entire_file((root / "examples/triangle_depthshaded_tex.frag").generic_string()),
 			                   (root / "examples/triangle_depthshaded_tex.frag").generic_string());
-			      runner.runtime->create_named_pipeline("textured_cube", pci);
+			      runtime.create_named_pipeline("textured_cube", pci);
 		      }
 
 		      // Use STBI to load the image

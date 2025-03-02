@@ -5,7 +5,7 @@ bool render_all = true;
 void vuk::ExampleRunner::render() {
 	Compiler compiler;
 
-	vuk::wait_for_values_explicit(*superframe_allocator, compiler, futures);
+	vuk::wait_for_values_explicit(*app->superframe_allocator, compiler, futures);
 	futures.clear();
 
 	while (!glfwWindowShouldClose(window)) {
@@ -38,12 +38,12 @@ void vuk::ExampleRunner::render() {
 		}
 		ImGui::End();
 
-		auto& frame_resource = superframe_resource->get_next_frame();
-		runtime->next_frame();
+		auto& frame_resource = app->superframe_resource->get_next_frame();
+		app->next_frame();
 
 		Allocator frame_allocator(frame_resource);
 
-		auto imported_swapchain = acquire_swapchain(*swapchain);
+		auto imported_swapchain = acquire_swapchain(*app->swapchain);
 		// acquire an image on the swapchain
 		auto swapchain_image = acquire_next_image("swp_img", std::move(imported_swapchain));
 		// clear the swapchain image
@@ -55,7 +55,7 @@ void vuk::ExampleRunner::render() {
 
 			ImGui::Render();
 
-			imgui = util::ImGui_ImplVuk_Render(frame_allocator, std::move(example_result), imgui_data, ImGui::GetDrawData(), sampled_images);
+			imgui = extra::ImGui_ImplVuk_Render(frame_allocator, std::move(example_result), imgui_data);
 		} else { // render all examples as imgui windows
 			for (size_t i = 0; i < examples.size(); i++) {
 				auto& ex = examples[i];
@@ -67,33 +67,33 @@ void vuk::ExampleRunner::render() {
 				size.y = size.y <= 0 ? 1 : size.y;
 				auto small_target = vuk::clear_image(vuk::declare_ia("_img",
 				                                                     { .extent = { (uint32_t)size.x, (uint32_t)size.y, 1 },
-				                                                       .format = swapchain->images[0].format,
+				                                                       .format = app->swapchain->images[0].format,
 				                                                       .sample_count = vuk::Samples::e1,
 				                                                       .level_count = 1,
 				                                                       .layer_count = 1 }),
 				                                     vuk::ClearColor(0.1f, 0.2f, 0.3f, 1.f));
 				auto rendered_image = ex->render(*this, frame_allocator, std::move(small_target));
 
-				auto idx = sampled_images.size() + 1;
-				sampled_images.emplace_back(vuk::combine_image_sampler("_simg", std::move(rendered_image), vuk::acquire_sampler("_default_sampler", {})));
-				ImGui::Image((ImTextureID)idx, ImGui::GetContentRegionAvail());
+				ImGui::Image(imgui_data.add_image(std::move(rendered_image)), ImGui::GetContentRegionAvail());
 				ImGui::End();
 			}
 
 			ImGui::Render();
 
-			imgui = util::ImGui_ImplVuk_Render(frame_allocator, std::move(cleared_image_to_render_into), imgui_data, ImGui::GetDrawData(), sampled_images);
-
-			sampled_images.clear();
+			imgui = extra::ImGui_ImplVuk_Render(frame_allocator, std::move(cleared_image_to_render_into), imgui_data);
 		}
 
 		// compile the IRModule that contains all the rendering of the example
 		// submit and present the results to the swapchain we imported previously
 		auto entire_thing = enqueue_presentation(std::move(imgui));
 
-		entire_thing.submit(frame_allocator, compiler);
+		vuk::ProfilingCallbacks cbs;
+#ifdef TRACY_ENABLE
+		// set up some profiling callbacks for our Tracy integration
+		cbs = make_Tracy_callbacks(*tracy_context);
+#endif
 
-		sampled_images.clear();
+		entire_thing.submit(frame_allocator, compiler, {.callbacks = cbs});
 
 		if (++num_frames == 16) {
 			auto new_time = get_time();
@@ -103,18 +103,5 @@ void vuk::ExampleRunner::render() {
 			num_frames = 0;
 			set_window_title(std::string("Vuk example browser [") + std::to_string(per_frame_time) + " ms / " + std::to_string(1000 / per_frame_time) + " FPS]");
 		}
-	}
-}
-
-int main(int argc, char** argv) {
-	auto path_to_root = std::filesystem::relative(VUK_EX_PATH_ROOT, VUK_EX_PATH_TGT);
-	root = std::filesystem::canonical(std::filesystem::path(argv[0]).parent_path() / path_to_root);
-	// very simple error handling in the example framework: we don't check for errors and just let them be converted into exceptions that are caught at top level
-	try {
-		vuk::ExampleRunner::get_runner().setup();
-		vuk::ExampleRunner::get_runner().render();
-		vuk::ExampleRunner::get_runner().cleanup();
-	} catch (vuk::Exception& e) {
-		fprintf(stderr, "%s", e.what());
 	}
 }

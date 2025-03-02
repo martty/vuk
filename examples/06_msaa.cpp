@@ -24,7 +24,7 @@ namespace {
 	vuk::Example x{
 		.name = "06_msaa",
 		.setup =
-		    [](vuk::ExampleRunner& runner, vuk::Allocator& allocator) {
+		    [](vuk::ExampleRunner& runner, vuk::Allocator& allocator, vuk::Runtime& runtime) {
 		      // Same setup as for 04_texture, except we use spirv to create the pipeline
 		      // This is a good option is if you don't want to ship shaderc or if you are caching or have your sl -> spirv pipeline
 		      {
@@ -32,7 +32,7 @@ namespace {
 			      pci.add_spirv(util::read_spirv((root / "examples/ubo_test_tex.vert.spv").generic_string()), (root / "examples/ubo_test_tex.vert").generic_string());
 			      pci.add_spirv(util::read_spirv((root / "examples/triangle_depthshaded_tex.frag.spv").generic_string()),
 			                    (root / "examples/triangle_depthshaded_text.frag").generic_string());
-			      runner.runtime->create_named_pipeline("textured_cube", pci);
+			      runtime.create_named_pipeline("textured_cube", pci);
 		      }
 
 		      int x, y, chans;

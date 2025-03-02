@@ -30,7 +30,7 @@ namespace {
 	vuk::Example x{
 		.name = "07_commands",
 		.setup =
-		    [](vuk::ExampleRunner& runner, vuk::Allocator& allocator) {
+		    [](vuk::ExampleRunner& runner, vuk::Allocator& allocator, vuk::Runtime& runtime) {
 		      // Same setup as for 04_texture
 		      {
 			      vuk::PipelineBaseCreateInfo pci;
@@ -38,7 +38,7 @@ namespace {
 			                   (root / "examples/ubo_test_tex.vert").generic_string());
 			      pci.add_glsl(util::read_entire_file((root / "examples/triangle_depthshaded_tex.frag").generic_string()),
 			                   (root / "examples/triangle_depthshaded_text.frag").generic_string());
-			      runner.runtime->create_named_pipeline("textured_cube", pci);
+			      runtime.create_named_pipeline("textured_cube", pci);
 		      }
 
 		      int x, y, chans;

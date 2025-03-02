@@ -32,7 +32,7 @@ namespace {
 		                pci.add_glsl(util::read_entire_file("../../examples/triangle.vert"), "triangle.vert");
 		                pci.add_glsl(util::read_entire_file("../../examples/triangle.frag"), "triangle.frag");
 		                // The pipeline is stored with a user give name for simplicity
-		                runner.runtime->create_named_pipeline("triangle", pci);
+		                runtime.create_named_pipeline("triangle", pci);
 		              },
 		          .gui =
 		              [](vuk::BenchRunner& runner, vuk::Allocator& frame_allocator) {

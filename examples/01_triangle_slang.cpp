@@ -15,7 +15,7 @@ namespace {
 		.name = "01_triangle_dxc",
 		// Setup code, ran once in the beginning
 		.setup =
-		    [](vuk::ExampleRunner& runner, vuk::Allocator& allocator) {
+		    [](vuk::ExampleRunner& runner, vuk::Allocator& allocator, vuk::Runtime& runtime) {
 		      // Pipelines are created by filling out a vuk::PipelineCreateInfo
 		      // In this case, we only need the shaders, we don't care about the rest of the state
 		      vuk::PipelineBaseCreateInfo pci;
@@ -24,7 +24,7 @@ namespace {
 		      pci.add_slang(
 		          util::read_entire_file((root / "examples/triangle.slang").generic_string()), (root / "examples/triangle.slang").generic_string(), "PSmain");
 		      // The pipeline is stored with a user give name for simplicity
-		      runner.runtime->create_named_pipeline("triangle", pci);
+		      runtime.create_named_pipeline("triangle", pci);
 		    },
 		// Code ran every frame
 		.render =

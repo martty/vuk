@@ -6,6 +6,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
 
 include(ExternalProject)
 include(FetchContent)
+include(CMakeDependentOption)
+
 
 set(CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake" ${CMAKE_MODULE_PATH})
 
@@ -25,6 +27,12 @@ option(VUK_USE_SLANG "Use Slang for runtime compilation of Slang shaders" OFF)
 option(VUK_BUILD_TESTS "Build tests" OFF)
 option(VUK_FAIL_FAST "Trigger an assert upon encountering an error instead of propagating" OFF)
 option(VUK_DEBUG_ALLOCATIONS "Dump VMA allocations and give them debug names" OFF)
+# Non-core features
+option(VUK_EXTRA "Enable extra features" ON)
+cmake_dependent_option(VUK_EXTRA_IMGUI "Build imgui integration" ON "VUK_EXTRA" OFF)
+set(VUK_EXTRA_IMGUI_PLATFORM_BACKEND "glfw" CACHE STRING "Platform backend for the imgui integration")
+set_property(CACHE VUK_EXTRA_IMGUI_PLATFORM_BACKEND PROPERTY STRINGS glfw sdl2 sdl3 custom)
+cmake_dependent_option(VUK_EXTRA_INIT "Build init helper" ON "VUK_EXTRA" OFF)
 
 if(CMAKE_SIZEOF_VOID_P EQUAL "4")
 	message(FATAL_ERROR "x86 is not supported.")
@@ -310,7 +318,6 @@ target_compile_definitions(vuk
   VUK_OS_APPLE=$<BOOL:${VUK_OS_APPLE}>
 )
 
-# we don't enable this directly, because the order of flags disables /Zc:char8_t- on MSVC
 target_compile_features(vuk PUBLIC cxx_std_20)
 
 target_sources(vuk PRIVATE
@@ -336,6 +343,16 @@ target_sources(vuk PRIVATE
 	src/runtime/vk/VkQueueExecutor.cpp
 	src/runtime/vk/VkRuntime.cpp
 )
+
+# if extra features are enabled, add them
+if(VUK_EXTRA_IMGUI)
+	add_subdirectory(src/extra/imgui)
+endif()
+
+if(VUK_EXTRA_INIT)
+	add_subdirectory(src/extra/init)
+endif()
+
 
 target_include_directories(vuk PUBLIC include)
 

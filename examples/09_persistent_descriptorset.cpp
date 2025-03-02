@@ -42,8 +42,7 @@ namespace {
 	vuk::Example xample{
 		.name = "09_persistent_descriptorset",
 		.setup =
-		    [](vuk::ExampleRunner& runner, vuk::Allocator& allocator) {
-		      vuk::Runtime& ctx = allocator.get_context();
+		    [](vuk::ExampleRunner& runner, vuk::Allocator& allocator, vuk::Runtime& runtime) {
 		      {
 			      vuk::PipelineBaseCreateInfo pci;
 			      pci.add_glsl(util::read_entire_file((root / "examples/bindless.vert").generic_string()), (root / "examples/bindless.vert").generic_string());
@@ -53,14 +52,14 @@ namespace {
 			      pci.set_binding_flags(1, 0, vuk::DescriptorBindingFlagBits::ePartiallyBound);
 			      // Set the binding #0 in set #1 as a variable count binding, and set the maximum number of descriptors
 			      pci.set_variable_count_binding(1, 0, 1024);
-			      runner.runtime->create_named_pipeline("bindless_cube", pci);
+			      runtime.create_named_pipeline("bindless_cube", pci);
 		      }
 
 		      // creating a compute pipeline that inverts an image
 		      {
 			      vuk::PipelineBaseCreateInfo pbci;
 			      pbci.add_glsl(util::read_entire_file((root / "examples/invert.comp").generic_string()), "examples/invert.comp");
-			      runner.runtime->create_named_pipeline("invert", pbci);
+			      runtime.create_named_pipeline("invert", pbci);
 		      }
 
 		      // Use STBI to load the image
@@ -142,8 +141,8 @@ namespace {
 		      runner.enqueue_setup(std::move(v1));
 		      runner.enqueue_setup(std::move(v2));
 		      // Create persistent descriptorset for a pipeline and set index
-		      pda = ctx.create_persistent_descriptorset(allocator, *runner.runtime->get_named_pipeline("bindless_cube"), 1, 64);
-		      vuk::Sampler default_sampler = ctx.acquire_sampler({}, ctx.get_frame_count());
+		      pda = runtime.create_persistent_descriptorset(allocator, *runtime.get_named_pipeline("bindless_cube"), 1, 64);
+		      vuk::Sampler default_sampler = runtime.acquire_sampler({}, runtime.get_frame_count());
 		      // Enqueue updates to the descriptors in the array
 		      // This records the writes internally, but does not execute them
 		      // Updating can be done in parallel from different threads, only the commit call has to be synchronized
@@ -151,7 +150,7 @@ namespace {
 		      pda->update_combined_image_sampler(0, 1, *image_view_of_doge_v1, default_sampler, vuk::ImageLayout::eReadOnlyOptimalKHR);
 		      pda->update_combined_image_sampler(0, 2, *image_view_of_doge_v2, default_sampler, vuk::ImageLayout::eReadOnlyOptimalKHR);
 		      // Execute the writes
-		      pda->commit(ctx);
+		      pda->commit(runtime);
 		    },
 		.render =
 		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator, vuk::Value<vuk::ImageAttachment> target) {

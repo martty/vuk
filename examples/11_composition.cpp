@@ -75,27 +75,27 @@ namespace {
 	vuk::Example x{
 		.name = "11_composition",
 		.setup =
-		    [](vuk::ExampleRunner& runner, vuk::Allocator& allocator) {
+		    [](vuk::ExampleRunner& runner, vuk::Allocator& allocator, vuk::Runtime& runtime) {
 		      {
 			      vuk::PipelineBaseCreateInfo pci;
 			      pci.add_glsl(util::read_entire_file((root / "examples/deferred.vert").generic_string()), (root / "deferred.vert").generic_string());
 			      pci.add_glsl(util::read_entire_file((root / "examples/deferred_reflective.frag").generic_string()),
 			                   (root / "deferred_reflective.frag").generic_string());
-			      runner.runtime->create_named_pipeline("cube_deferred_reflective", pci);
+			      runtime.create_named_pipeline("cube_deferred_reflective", pci);
 		      }
 
 		      {
 			      vuk::PipelineBaseCreateInfo pci;
 			      pci.add_glsl(util::read_entire_file((root / "examples/fullscreen.vert").generic_string()), (root / "fullscreen.vert").generic_string());
 			      pci.add_glsl(util::read_entire_file((root / "examples/deferred_resolve.frag").generic_string()), (root / "deferred_resolve.frag").generic_string());
-			      runner.runtime->create_named_pipeline("deferred_resolve", pci);
+			      runtime.create_named_pipeline("deferred_resolve", pci);
 		      }
 
 		      {
 			      vuk::PipelineBaseCreateInfo pci;
 			      pci.add_glsl(util::read_entire_file((root / "examples/fullscreen.vert").generic_string()), (root / "fullscreen.vert").generic_string());
 			      pci.add_glsl(util::read_entire_file((root / "examples/fxaa.frag").generic_string()), (root / "fxaa.frag").generic_string());
-			      runner.runtime->create_named_pipeline("fxaa", pci);
+			      runtime.create_named_pipeline("fxaa", pci);
 		      }
 
 		      // We set up the cube data, same as in example 02_cube
@@ -131,7 +131,7 @@ namespace {
 		                                          (root / "examples/cubemap.vert").generic_string());
 		      equirectangular_to_cubemap.add_glsl(util::read_entire_file((root / "examples/equirectangular_to_cubemap.frag").generic_string()),
 		                                          (root / "examples/equirectangular_to_cubemap.frag").generic_string());
-		      runner.runtime->create_named_pipeline("equirectangular_to_cubemap", equirectangular_to_cubemap);
+		      runtime.create_named_pipeline("equirectangular_to_cubemap", equirectangular_to_cubemap);
 
 		      // make cubemap by rendering to individual faces - we use a layered framebuffer to achieve this
 		      // this only requires using an attachment with layers
