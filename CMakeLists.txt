@@ -367,6 +367,7 @@ if(VUK_EXTRA_INIT)
 	add_subdirectory(src/extra/init)
 endif()
 
+target_dist_spv(vuk SHADERS spd.cs.hlsl.spv)
 
 target_include_directories(vuk PUBLIC include)
 
@@ -466,6 +467,7 @@ if(VUK_BUILD_TESTS)
 					tests/04_arrays.cpp
 					tests/05_renderpass.cpp
 					tests/06_mt.cpp
+					tests/X1_SPD.cpp
 	)
 	#target_compile_features(vuk-tests PRIVATE cxx_std_17)
 	target_include_directories(vuk-tests PRIVATE ext/renderdoc)
