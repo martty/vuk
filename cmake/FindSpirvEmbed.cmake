@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.5)
 # based on: https://github.com/tomilov/sah_kd_tree/blob/develop/cmake/Shaders.cmake
 # IMPORTANT: you must use this function in the same directory as the target, otherwise CMake doesn't pick up the command
 # usage: target_shaders(<target name> COMPILER <compiler name> ARGS <compiler args> SHADERS <input shader files>)
+# last arg must be the cli flag indicating output, such as -o or -Fo
 function(target_shaders target)
     cmake_parse_arguments(PARSE_ARGV 1 target_shaders "" "COMPILER" "SHADERS;ARGS")
     foreach(shader_file IN LISTS target_shaders_SHADERS)
@@ -19,7 +20,7 @@ function(target_shaders target)
                            VERBATIM
                            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
                            COMMAND "${target_shaders_COMPILER}"
-                           ARGS ${target_shaders_ARGS} "${shader_file}" -o "${output_file}"
+                           ARGS ${target_shaders_ARGS} "${output_file}" "${shader_file}"
         )
         # generate data embedding
         # this will use incbin on non-MSVC and RC files on MSVC

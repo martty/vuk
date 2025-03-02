@@ -19,7 +19,7 @@ add_library(imgui OBJECT
 target_include_directories(imgui PUBLIC "${imgui_SOURCE_DIR}")
 
 target_sources(vuk PRIVATE ImGuiIntegration.cpp)
-target_shaders(imgui COMPILER glslangValidator ARGS --target-env vulkan1.2 SHADERS imgui.vert imgui.frag)
+target_shaders(imgui COMPILER glslangValidator ARGS --target-env vulkan1.2 -o SHADERS imgui.vert imgui.frag)
 
 if (VUK_IMGUI_PLATFORM_BACKEND STREQUAL "")
 	message(FATAL_ERROR "VUK_IMGUI_PLATFORM_BACKEND must be set to a valid imgui platform backend or to the string ''custom'")

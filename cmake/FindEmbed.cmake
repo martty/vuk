@@ -25,7 +25,7 @@
 
 cmake_minimum_required(VERSION 3.5)
 
-set(RES_ID 16384)
+set_property(GLOBAL PROPERTY RES_ID 16384)
 set(STRUCT
 "#include \"stddef.h\"
 struct Res {
@@ -40,13 +40,14 @@ macro(EMBED_TARGET Name Input)
 		set(OutputRC "${CMAKE_CURRENT_BINARY_DIR}/${Name}.rc")
 		set(OutputC "${CMAKE_CURRENT_BINARY_DIR}/${Name}.c")
 		set(Outputs ${OutputRC} ${OutputC})
-		set(RCCODE "${RES_ID} RCDATA \"${InputAbs}\"\n")
+		get_property(RES_ID_L GLOBAL PROPERTY RES_ID)
+		set(RCCODE "${RES_ID_L} RCDATA \"${InputAbs}\"\n")
 		set(CODE
 "#include \"windows.h\"
 ${STRUCT}
 struct Res ${Name}(void) {
 	HMODULE handle = GetModuleHandle(NULL)\;
-	HRSRC res = FindResource(handle, MAKEINTRESOURCE(${RES_ID}), RT_RCDATA)\;
+	HRSRC res = FindResource(handle, MAKEINTRESOURCE(${RES_ID_L}), RT_RCDATA)\;
 	struct Res r = {
 		(const char*) LockResource(LoadResource(handle, res)),
 		SizeofResource(handle, res)
@@ -56,7 +57,8 @@ struct Res ${Name}(void) {
 		)
 		file(WRITE ${OutputRC} ${RCCODE})
 		file(WRITE ${OutputC} ${CODE})
-		math(EXPR RES_ID "${RES_ID}+1")
+		math(EXPR RES_ID_L "${RES_ID_L}+1")
+		set_property(GLOBAL PROPERTY RES_ID ${RES_ID_L})
 	else()
 		if(APPLE)
 			set(Section ".const_data")
