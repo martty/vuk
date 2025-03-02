@@ -39,7 +39,7 @@ namespace vuk::extra {
 
 		auto graphics_queue = graphics_queue_executor->get_underlying();
 		tracy_context->executors = runtime.get_executors();
-		for (auto& exe : tracy_context->executors) {
+		for (size_t i = 0; i < tracy_context->executors.size(); i++) {
 			auto ctx = TracyVkContextCalibrated(runtime.instance,
 			                                    runtime.physical_device,
 			                                    runtime.device,
