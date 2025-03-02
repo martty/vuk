@@ -240,6 +240,15 @@ namespace vuk {
 		}
 	}
 
+	std::vector<Executor*> Runtime::get_executors() {
+		std::vector<Executor*> executors;
+		for (auto& exe : impl->executors) {
+			executors.push_back(exe.get());
+		}
+		return executors;
+	}
+
+
 	bool Runtime::debug_enabled() const {
 		return this->vkSetDebugUtilsObjectNameEXT != nullptr;
 	}

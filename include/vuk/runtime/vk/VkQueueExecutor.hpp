@@ -29,6 +29,7 @@ namespace vuk {
 		Result<uint64_t> get_sync_value();
 		VkSemaphore get_semaphore();
 		uint32_t get_queue_family_index();
+		VkQueue get_underlying();
 
 		void lock() override;
 		void unlock() override;

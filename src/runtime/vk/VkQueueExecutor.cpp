@@ -147,6 +147,10 @@ namespace vuk {
 		return impl->family_index;
 	}
 
+	VkQueue QueueExecutor::get_underlying() {
+		return impl->queue;
+	}
+
 	Result<void> QueueExecutor::submit_batch(std::vector<SubmitInfo> batch) {
 		std::unique_lock _(*this);
 

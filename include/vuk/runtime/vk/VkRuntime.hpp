@@ -86,6 +86,8 @@ namespace vuk {
 		Executor* get_executor(ExecutorTag tag);
 		// retrieve an executor for the given domain from the runtime
 		Executor* get_executor(DomainFlagBits domain);
+		// retrieve all executors
+		std::vector<Executor*> get_executors();
 
 		// Debug functions
 
