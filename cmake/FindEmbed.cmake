@@ -60,16 +60,18 @@ struct Res ${Name}(void) {
 	else()
 		if(APPLE)
 			set(Section ".const_data")
+			set(mangle "_")
 		else()
 			set(Section ".section .rodata")
+			set(mangle "")
 		endif()
 		set(CODE
 "${STRUCT}
 asm(
 	\"${Section}\\n\"
 	\".align ${CMAKE_SIZEOF_VOID_P}\\n\"
-	\"data: .incbin \\\"${InputAbs}\\\"\\n\"
-	\"end_data:\\n\"
+	\"${mangle}data: .incbin \\\"${InputAbs}\\\"\\n\"
+	\"${mangle}end_data:\\n\"
 )\;
 extern const char data[]\;
 extern const char end_data[]\;
