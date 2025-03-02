@@ -18,7 +18,9 @@
 #include "vuk/extra/GlfwWindow.hpp"
 #include "vuk/extra/ImGuiIntegration.hpp"
 #include "vuk/extra/SimpleInit.hpp"
+#ifdef TRACY_ENABLE
 #include "vuk/extra/TracyIntegration.hpp"
+#endif // TRACY_ENABLE
 #include <backends/imgui_impl_glfw.h>
 
 inline std::filesystem::path root;
@@ -145,7 +147,9 @@ namespace vuk {
 		~ExampleRunner() {
 			imgui_data.font_image.reset();
 			imgui_data.font_image_view.reset();
+#ifdef TRACY_ENABLE
 			tracy_context.reset();
+#endif
 			app.reset();
 			destroy_window_glfw(window);
 		}
