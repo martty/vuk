@@ -248,7 +248,6 @@ namespace vuk {
 		return executors;
 	}
 
-
 	bool Runtime::debug_enabled() const {
 		return this->vkSetDebugUtilsObjectNameEXT != nullptr;
 	}
@@ -403,7 +402,7 @@ namespace vuk {
 		std::string name = "ShaderModule: " + cinfo.filename;
 		set_name(sm, Name(name));
 		// WORKAROUND: slang doesn't seem to preserve entry point name
-		bool override_entry_point_name = cinfo.source.language == ShaderSourceLanguage::eSlang; 
+		bool override_entry_point_name = cinfo.source.language == ShaderSourceLanguage::eSlang;
 		return { sm, std::move(p), stage, override_entry_point_name };
 	}
 
@@ -782,7 +781,7 @@ namespace vuk {
 	}
 
 	Result<bool> Runtime::sync_point_ready(SyncPoint sp) {
-		auto& [executor, v] = sp; 
+		auto& [executor, v] = sp;
 		assert(executor->type == Executor::Type::eVulkanDeviceQueue);
 		auto vkq = static_cast<QueueExecutor*>(executor);
 		auto idx = vkq->get_queue_family_index();
@@ -796,6 +795,24 @@ namespace vuk {
 	Swapchain::Swapchain(Allocator alloc, size_t image_count) : allocator(alloc) {
 		semaphores.resize(image_count * 2);
 		allocator.allocate_semaphores(std::span(semaphores));
+	}
+
+	Swapchain::Swapchain(Allocator alloc, size_t image_count, VkSwapchainKHR swapchain, VkSurfaceKHR surface, VkExtent2D extent, VkFormat format, std::vector<VkImage> images, std::vector<VkImageView> views) :
+	    allocator(alloc), swapchain(swapchain), surface(surface) {
+		semaphores.resize(image_count * 2);
+		allocator.allocate_semaphores(std::span(semaphores));
+		for (auto i = 0; i < images.size(); i++) {
+			ImageAttachment ia;
+			ia.extent = { extent.width, extent.height, 1 };
+			ia.format = (Format)format;
+			ia.image = Image{ images[i], nullptr };
+			ia.image_view = ImageView{ { 0 }, views[i] };
+			ia.view_type = ImageViewType::e2D;
+			ia.sample_count = Samples::e1;
+			ia.base_level = ia.base_layer = 0;
+			ia.level_count = ia.layer_count = 1;
+			this->images.push_back(ia);
+		}
 	}
 
 	Swapchain::~Swapchain() {

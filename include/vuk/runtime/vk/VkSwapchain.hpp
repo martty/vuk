@@ -64,6 +64,14 @@ namespace vuk {
 
 	struct Swapchain {
 		Swapchain(Allocator allocator, size_t image_count);
+		Swapchain(Allocator allocator,
+		          size_t image_count,
+		          VkSwapchainKHR swapchain,
+		          VkSurfaceKHR surface,
+		          VkExtent2D extent,
+		          VkFormat format,
+		          std::vector<VkImage> images,
+		          std::vector<VkImageView> views);
 		Swapchain(const Swapchain&) = delete;
 		Swapchain(Swapchain&&) noexcept;
 
