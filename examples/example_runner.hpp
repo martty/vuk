@@ -151,7 +151,8 @@ namespace vuk {
 			tracy_context.reset();
 #endif
 			app.reset();
-			destroy_window_glfw(window);
+			glfwDestroyWindow(window);
+			glfwTerminate();
 		}
 
 		static ExampleRunner& get_runner() {

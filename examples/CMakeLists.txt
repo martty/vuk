@@ -123,5 +123,9 @@ ADD_EXAMPLE(11_composition)
 ADD_EXAMPLE(12_rt_pipeline)
 
 # standalone examples
+add_executable(standalone_triangle standalone_triangle.cpp)
+target_link_libraries(standalone_triangle PUBLIC vuk glfw glm)
+target_compile_definitions(standalone_triangle PUBLIC VUK_EX_PATH_TGT="$<TARGET_FILE_DIR:standalone_triangle>" VUK_EX_PATH_ROOT="${CMAKE_SOURCE_DIR}")
+
 #add_executable(standalone_multiwindow standalone_multiwindow.cpp)
 #target_link_libraries(standalone_multiwindow PUBLIC vuk-example-framework)

@@ -3,12 +3,6 @@
 #include "vuk/Config.hpp"
 #include <GLFW/glfw3.h>
 
-
-inline void destroy_window_glfw(GLFWwindow* window) {
-	glfwDestroyWindow(window);
-	glfwTerminate();
-}
-
 inline VkSurfaceKHR create_surface_glfw(VkInstance instance, GLFWwindow* window) {
 	VkSurfaceKHR surface = nullptr;
 	VkResult err = glfwCreateWindowSurface(instance, window, NULL, &surface);
