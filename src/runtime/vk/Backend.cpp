@@ -275,7 +275,7 @@ namespace vuk {
 			pi.waitSemaphoreCount = 1;
 			pi.pWaitSemaphores = &swp.semaphores[swp.linear_index * 2 + 1];
 			auto res = executor->queue_present(pi);
-			if (res.value() && swp.acquire_result == VK_SUBOPTIMAL_KHR) {
+			if (res && swp.acquire_result == VK_SUBOPTIMAL_KHR) {
 				return { expected_value, VK_SUBOPTIMAL_KHR };
 			}
 			return res;
@@ -1093,6 +1093,8 @@ namespace vuk {
 			return msg;
 		};
 
+		Result<void> submit_result = { expected_value };
+
 		while (!sched.work_queue.empty()) {
 			auto item = sched.work_queue.front();
 			sched.work_queue.pop_front();
@@ -1607,7 +1609,10 @@ namespace vuk {
 							if (dst_domain == DomainFlagBits::ePE) {
 								auto& swp = *sched.get_value<Swapchain*>(get_def2(node->splice.src[0])->node->acquire_next_image.swapchain);
 								assert(sched_stream->domain & DomainFlagBits::eDevice);
-								auto result = dynamic_cast<VkQueueStream*>(sched_stream)->present(swp);
+								auto present_result = dynamic_cast<VkQueueStream*>(sched_stream)->present(swp);
+								if (!present_result) {
+									submit_result = std::move(present_result);
+								}
 								// TODO: do something with the result here
 								if (acqrel) {
 									acqrel->status = Signal::Status::eHostAvailable; // TODO: ???
@@ -1893,6 +1898,6 @@ namespace vuk {
 
 		current_module->types.collect();
 
-		return { expected_value };
+		return submit_result;
 	} // namespace vuk
 } // namespace vuk
