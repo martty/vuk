@@ -190,38 +190,6 @@ namespace vuk {
 		}
 	}
 
-	Runtime::Runtime(Runtime&& o) noexcept : impl(std::exchange(o.impl, nullptr)) {
-		instance = o.instance;
-		device = o.device;
-		physical_device = o.physical_device;
-		rt_properties = o.rt_properties;
-
-		impl->pipelinebase_cache.allocator = this;
-		impl->pool_cache.allocator = this;
-		impl->sampler_cache.allocator = this;
-		impl->shader_modules.allocator = this;
-		impl->descriptor_set_layouts.allocator = this;
-		impl->pipeline_layouts.allocator = this;
-		impl->device_vk_resource->ctx = this;
-	}
-
-	Runtime& Runtime::operator=(Runtime&& o) noexcept {
-		impl = std::exchange(o.impl, nullptr);
-		instance = o.instance;
-		device = o.device;
-		physical_device = o.physical_device;
-
-		impl->pipelinebase_cache.allocator = this;
-		impl->pool_cache.allocator = this;
-		impl->sampler_cache.allocator = this;
-		impl->shader_modules.allocator = this;
-		impl->descriptor_set_layouts.allocator = this;
-		impl->pipeline_layouts.allocator = this;
-		impl->device_vk_resource->ctx = this;
-
-		return *this;
-	}
-
 	Executor* Runtime::get_executor(ExecutorTag tag) {
 		auto it = std::find_if(impl->executors.begin(), impl->executors.end(), [=](auto& exe) { return exe->tag == tag; });
 		if (it != impl->executors.end()) {

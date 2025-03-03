@@ -837,7 +837,7 @@ namespace vuk {
 	DeviceMultiFrameResource& DeviceSuperFrameResource::get_multiframe_allocator(uint32_t frame_lifetime_count) {
 		std::unique_lock _s(impl->new_frame_mutex);
 
-		auto it = impl->multi_frames.emplace(DeviceMultiFrameResource(get_context().device, *this, frame_lifetime_count));
+		auto it = impl->multi_frames.emplace(get_context().device, *this, frame_lifetime_count);
 		return *it;
 	}
 

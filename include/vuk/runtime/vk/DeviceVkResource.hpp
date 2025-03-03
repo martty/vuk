@@ -9,6 +9,12 @@ namespace vuk {
 		DeviceVkResource(Runtime& ctx);
 		~DeviceVkResource();
 
+		DeviceVkResource(DeviceVkResource&) = delete;
+		DeviceVkResource& operator=(DeviceVkResource&) = delete;
+
+		DeviceVkResource(DeviceVkResource&&) = delete;
+		DeviceVkResource& operator=(DeviceVkResource&&) = delete;
+
 		Result<void, AllocateException> allocate_semaphores(std::span<VkSemaphore> dst, SourceLocationAtFrame loc) override;
 
 		void deallocate_semaphores(std::span<const VkSemaphore> src) override;

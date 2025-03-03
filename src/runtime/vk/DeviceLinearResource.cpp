@@ -58,14 +58,6 @@ namespace vuk {
 		}
 	}
 
-	DeviceLinearResource::DeviceLinearResource(DeviceLinearResource&& o) : DeviceNestedResource(*o.upstream), impl(std::move(o.impl)) {}
-
-	DeviceLinearResource& DeviceLinearResource::operator=(DeviceLinearResource&& o) {
-		upstream = o.upstream;
-		impl = std::move(o.impl);
-		return *this;
-	}
-
 	Result<void, AllocateException> DeviceLinearResource::allocate_semaphores(std::span<VkSemaphore> dst, SourceLocationAtFrame loc) {
 		VUK_DO_OR_RETURN(upstream->allocate_semaphores(dst, loc));
 		auto& vec = impl->semaphores;

@@ -64,8 +64,8 @@ namespace vuk {
 		Runtime(const Runtime&) = delete;
 		Runtime& operator=(const Runtime&) = delete;
 
-		Runtime(Runtime&&) noexcept;
-		Runtime& operator=(Runtime&&) noexcept;
+		Runtime(Runtime&&) = delete;
+		Runtime& operator=(Runtime&&) = delete;
 
 		// Vulkan instance and device
 

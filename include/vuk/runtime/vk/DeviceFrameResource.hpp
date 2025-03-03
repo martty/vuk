@@ -15,6 +15,12 @@ namespace vuk {
 	/// Allocations from this resource are tied to the "frame" - all allocations recycled when a DeviceFrameResource is recycled.
 	/// Furthermore all resources allocated are also deallocated at recycle time - it is not necessary (but not an error) to deallocate them.
 	struct DeviceFrameResource : DeviceNestedResource {
+		DeviceFrameResource(const DeviceFrameResource&) = delete;
+		DeviceFrameResource& operator=(const DeviceFrameResource&) = delete;
+
+		DeviceFrameResource(DeviceFrameResource&&) = delete;
+		DeviceFrameResource& operator=(DeviceFrameResource&&) = delete;
+
 		Result<void, AllocateException> allocate_semaphores(std::span<VkSemaphore> dst, SourceLocationAtFrame loc) override;
 
 		void deallocate_semaphores(std::span<const VkSemaphore> src) override; // noop
@@ -121,13 +127,15 @@ namespace vuk {
 		DeviceFrameResource(VkDevice device, DeviceSuperFrameResource& upstream);
 	};
 
-	/// @brief Represents temporary allocations that persist through multiple frames, eg. history buffers. Handed out by DeviceSuperFrameResource, cannot be
-	/// constructed directly.
+	/// @brief Represents temporary allocations that persist through multiple frames, eg. history buffers. Handed out by DeviceSuperFrameResource. Don't
+	/// construct it directly.
 	///
 	/// Allocations from this resource are tied to the "multi-frame" - all allocations recycled when a DeviceMultiFrameResource is recycled.
 	/// All resources allocated are also deallocated at recycle time - it is not necessary (but not an error) to deallocate them.
 	struct DeviceMultiFrameResource final : DeviceFrameResource {
 		Result<void, AllocateException> allocate_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc) override;
+
+		DeviceMultiFrameResource(VkDevice device, DeviceSuperFrameResource& upstream, uint32_t frame_lifetime);
 
 	private:
 		uint32_t frame_lifetime;
@@ -137,7 +145,11 @@ namespace vuk {
 		friend struct DeviceSuperFrameResource;
 		friend struct DeviceSuperFrameResourceImpl;
 
-		DeviceMultiFrameResource(VkDevice device, DeviceSuperFrameResource& upstream, uint32_t frame_lifetime);
+		DeviceMultiFrameResource(const DeviceMultiFrameResource&) = delete;
+		DeviceMultiFrameResource& operator=(const DeviceMultiFrameResource&) = delete;
+
+		DeviceMultiFrameResource(DeviceMultiFrameResource&&) = delete;
+		DeviceMultiFrameResource& operator=(DeviceMultiFrameResource&&) = delete;
 	};
 
 	/// @brief DeviceSuperFrameResource is an allocator that gives out DeviceFrameResource allocators, and manages their resources
@@ -149,6 +161,12 @@ namespace vuk {
 	struct DeviceSuperFrameResource : DeviceNestedResource {
 		DeviceSuperFrameResource(Runtime& ctx, uint64_t frames_in_flight);
 		DeviceSuperFrameResource(DeviceResource& upstream, uint64_t frames_in_flight);
+
+		DeviceSuperFrameResource(const DeviceSuperFrameResource&) = delete;
+		DeviceSuperFrameResource& operator=(const DeviceSuperFrameResource&) = delete;
+
+		DeviceSuperFrameResource(DeviceSuperFrameResource&&) = delete;
+		DeviceSuperFrameResource& operator=(DeviceSuperFrameResource&&) = delete;
 
 		void deallocate_semaphores(std::span<const VkSemaphore> src) override;
 

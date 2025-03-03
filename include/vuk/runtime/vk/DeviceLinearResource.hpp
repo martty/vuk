@@ -15,8 +15,11 @@ namespace vuk {
 		DeviceLinearResource(DeviceResource& upstream);
 		~DeviceLinearResource();
 
-		DeviceLinearResource(DeviceLinearResource&&);
-		DeviceLinearResource& operator=(DeviceLinearResource&&);
+		DeviceLinearResource(DeviceLinearResource&) = delete;
+		DeviceLinearResource& operator=(DeviceLinearResource&) = delete;
+
+		DeviceLinearResource(DeviceLinearResource&&) = delete;
+		DeviceLinearResource& operator=(DeviceLinearResource&&) = delete;
 
 		Result<void, AllocateException> allocate_semaphores(std::span<VkSemaphore> dst, SourceLocationAtFrame loc) override;
 
