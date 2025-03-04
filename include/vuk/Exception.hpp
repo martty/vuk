@@ -107,6 +107,10 @@ namespace vuk {
 				error_message = "Out of date.";
 				break;
 			}
+			case VK_ERROR_NATIVE_WINDOW_IN_USE_KHR: {
+				error_message = "Native window in use.";
+				break;
+			}
 			default:
 				assert(0 && "Unimplemented error.");
 				break;
