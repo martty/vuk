@@ -1165,7 +1165,7 @@ namespace vuk {
 	}                                                                                                                                                            \
 	dst = *reinterpret_cast<decltype(dst)*>(UNIQUE_NAME(A)->value);                                                                                              \
 	if (UNIQUE_NAME(A)->owned) {                                                                                                                                 \
-		delete[] (char*)UNIQUE_NAME(A)->value;                                                                                                                            \
+		delete[] (char*)UNIQUE_NAME(A)->value;                                                                                                                     \
 	}
 			case Node::CONSTRUCT: { // when encountering a CONSTRUCT, allocate the thing if needed
 				if (sched.process(item)) {
@@ -1399,7 +1399,14 @@ namespace vuk {
 					if (fn_type->kind == Type::OPAQUE_FN_TY) {
 						CommandBuffer cobuf(*dst_stream, ctx, alloc, vk_rec->cbuf);
 						if (!fn_type->debug_info.name.empty()) {
-							ctx.begin_region(vk_rec->cbuf, fn_type->debug_info.name.c_str());
+							auto name_hash = static_cast<uint32_t>(std::hash<std::string>{}(fn_type->debug_info.name));
+							auto name_color = std::array<float, 4>{
+								static_cast<float>(name_hash & 255) / 255.0f,
+								static_cast<float>((name_hash >> 8) & 255) / 255.0f,
+								static_cast<float>((name_hash >> 16) & 255) / 255.0f,
+								1.0,
+							};
+							ctx.begin_region(vk_rec->cbuf, fn_type->debug_info.name.c_str(), name_color);
 						}
 
 						void* rpass_profile_data = nullptr;
@@ -1431,7 +1438,14 @@ namespace vuk {
 					} else if (fn_type->kind == Type::SHADER_FN_TY) {
 						CommandBuffer cobuf(*dst_stream, ctx, alloc, vk_rec->cbuf);
 						if (!fn_type->debug_info.name.empty()) {
-							ctx.begin_region(vk_rec->cbuf, fn_type->debug_info.name.c_str());
+							auto name_hash = static_cast<uint32_t>(std::hash<std::string>{}(fn_type->debug_info.name));
+							auto name_color = std::array<float, 4>{
+								static_cast<float>(name_hash & 255) / 255.0f,
+								static_cast<float>((name_hash >> 8) & 255) / 255.0f,
+								static_cast<float>((name_hash >> 16) & 255) / 255.0f,
+								1.0,
+							};
+							ctx.begin_region(vk_rec->cbuf, fn_type->debug_info.name.c_str(), name_color);
 						}
 
 						void* rpass_profile_data = nullptr;
