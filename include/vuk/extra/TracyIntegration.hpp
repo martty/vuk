@@ -84,7 +84,7 @@ namespace vuk::extra {
 			return pass_data;
 		};
 		// runs whenever a pass has ended, we end the GPU zone we started
-		cbs.on_end_pass = [](void* user_data, void* pass_data) {
+		cbs.on_end_pass = [](void* user_data, void* pass_data, CommandBuffer&) {
 			auto tracy_scope = reinterpret_cast<tracy::VkCtxScope*>(pass_data);
 			if (tracy_scope) {
 				tracy_scope->~VkCtxScope();
