@@ -802,7 +802,7 @@ namespace vuk {
 		void (*on_end_command_buffer)(void* user_data, void* cbuf_data) = nullptr;
 
 		void* (*on_begin_pass)(void* user_data, Name pass_name, class CommandBuffer& cmdbuf, DomainFlagBits domain) = nullptr;
-		void (*on_end_pass)(void* user_data, void* pass_data) = nullptr;
+		void (*on_end_pass)(void* user_data, void* pass_data, class CommandBuffer& cmdbuf) = nullptr;
 
 		void* user_data = nullptr;
 	};

@@ -1434,7 +1434,7 @@ namespace vuk {
 							ctx.end_region(vk_rec->cbuf);
 						}
 						if (vk_rec->callbacks->on_end_pass)
-							vk_rec->callbacks->on_end_pass(vk_rec->callbacks->user_data, rpass_profile_data);
+							vk_rec->callbacks->on_end_pass(vk_rec->callbacks->user_data, rpass_profile_data, cobuf);
 					} else if (fn_type->kind == Type::SHADER_FN_TY) {
 						CommandBuffer cobuf(*dst_stream, ctx, alloc, vk_rec->cbuf);
 						if (!fn_type->debug_info.name.empty()) {
@@ -1503,7 +1503,7 @@ namespace vuk {
 							ctx.end_region(vk_rec->cbuf);
 						}
 						if (vk_rec->callbacks->on_end_pass)
-							vk_rec->callbacks->on_end_pass(vk_rec->callbacks->user_data, rpass_profile_data);
+							vk_rec->callbacks->on_end_pass(vk_rec->callbacks->user_data, rpass_profile_data, cobuf);
 					} else {
 						assert(0);
 					}
