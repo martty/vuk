@@ -61,7 +61,7 @@ namespace vuk {
 		} else if (parm.node->kind == Node::PLACEHOLDER) {
 			return std::string("?");
 		} else {
-			return fmt::format("%{}_{}", parm.node->kind_to_sv(), parm.node->execution_info->naming_index + parm.index);
+			return fmt::format("%{}_{}", Node::kind_to_sv(parm.node->execution_info->kind), parm.node->execution_info->naming_index + parm.index);
 		}
 		assert(0);
 		return std::string("???");
@@ -101,7 +101,7 @@ namespace vuk {
 		if (node->kind == Node::CONSTRUCT) {
 			return fmt::format("construct<{}> ", Type::to_string(node->type[0].get()));
 		} else {
-			return fmt::format("{} ", node->kind_to_sv());
+			return fmt::format("{} ", Node::kind_to_sv(node->kind));
 		}
 	};
 
@@ -204,15 +204,14 @@ namespace vuk {
 		}
 
 		void add_dependency(Stream* dep) override {
+			dependencies.push_back(dep);
 			if (dep->domain == DomainFlagBits::eHost) {
-				dep->submit();
 				return;
 			}
 			if (is_recording) {
 				end_cbuf();
 				batch.emplace_back();
 			}
-			dependencies.push_back(dep);
 		}
 
 		Signal* make_signal() override {
@@ -257,6 +256,16 @@ namespace vuk {
 				}
 			}
 			batch.clear();
+
+			// propagate signal to nodes in submit scope
+			auto& propsig = dependent_signals.back();
+			for (auto& node : current_submit) {
+				if (node->rel_acq) {
+					node->rel_acq->status = propsig->status;
+					node->rel_acq->source = propsig->source;
+				}
+			}
+			current_submit.clear();
 			dependent_signals.clear();
 			return { expected_value };
 		}
@@ -607,6 +616,13 @@ namespace vuk {
 			for (auto& sig : dependent_signals) {
 				sig->status = Signal::Status::eHostAvailable;
 			}
+			for (auto& node : current_submit) {
+				if (node->rel_acq) {
+					node->rel_acq->status = Signal::Status::eHostAvailable;
+					node->rel_acq->source.executor = executor;
+					node->rel_acq->source.visibility = 0;
+				}
+			}
 			return { expected_value };
 		}
 	};
@@ -641,151 +657,31 @@ namespace vuk {
 		}
 	};
 
-	enum class RW { eNop, eRead, eWrite };
-
-	struct Scheduler {
-		Scheduler(Allocator all, RGCImpl* impl) :
-		    allocator(all),
-		    pass_reads(impl->pass_reads),
-		    pass_nops(impl->pass_nops),
-		    scheduled_execables(impl->scheduled_execables),
-		    impl(impl) {
-			// these are the items that were determined to run
-			for (auto& i : scheduled_execables) {
-				scheduled.emplace(i.execable);
-				work_queue.emplace_back(i);
+	uint64_t value_identity(Type* base_ty, void* value) {
+		uint64_t key = 0;
+		if (base_ty->hash_value == current_module->types.builtin_image) {
+			auto& img_att = *reinterpret_cast<ImageAttachment*>(value);
+			key = reinterpret_cast<uint64_t>(img_att.image.image);
+		} else if (base_ty->hash_value == current_module->types.builtin_buffer) {
+			auto buf = reinterpret_cast<Buffer*>(value);
+			key = reinterpret_cast<uint64_t>(buf->allocation);
+			hash_combine(key, buf->offset);
+		} else if (base_ty->kind == Type::ARRAY_TY) {
+			if (base_ty->array.count > 0) { // for an array, we key off the the first element, as the array syncs together
+				auto elem_ty = base_ty->array.T->get();
+				auto elems = reinterpret_cast<std::byte*>(value);
+				return value_identity(elem_ty, elems);
+			} else { // zero-len arrays
+				return 0;
 			}
+		} else if (base_ty->hash_value == current_module->types.builtin_sampled_image) { // only image syncs
+			auto& img_att = reinterpret_cast<SampledImage*>(value)->ia;
+			key = reinterpret_cast<uint64_t>(img_att.image.image);
+		} else {
+			return 0;
 		}
-
-		Allocator allocator;
-		std::pmr::vector<Ref>& pass_reads;
-		std::pmr::vector<Ref>& pass_nops;
-		plf::colony<ScheduledItem>& scheduled_execables;
-
-		InlineArena<std::byte, 4 * 1024> arena;
-
-		RGCImpl* impl;
-
-		std::deque<ScheduledItem> work_queue;
-
-		size_t naming_index_counter = 0;
-		size_t instr_counter = 0;
-		std::unordered_set<Node*> scheduled;
-
-		void schedule_new(Node* node) {
-			assert(node);
-			if (node->scheduled_item) { // we have scheduling info for this
-				work_queue.push_front(*node->scheduled_item);
-			} else { // no info, just schedule it as-is
-				work_queue.push_front(ScheduledItem{ .execable = node });
-			}
-		}
-
-		// returns true if the item is ready
-		bool process(ScheduledItem& item) {
-			if (item.ready) {
-				return true;
-			} else {
-				item.ready = true;
-				work_queue.push_front(item); // requeue this item
-				return false;
-			}
-		}
-
-		void schedule_dependency(Ref parm, RW access) {
-			if (parm.node->kind == Node::CONSTANT || parm.node->kind == Node::PLACEHOLDER || parm.node->kind == Node::MATH_BINARY) {
-				return;
-			}
-			auto link = parm.link();
-
-			if (access == RW::eWrite) { // synchronize against writing
-				// we are going to write here, so schedule all reads or the def, if no read
-				if (link.reads.size() > 0) {
-					// all reads
-					for (auto& r : link.reads.to_span(pass_reads)) {
-						schedule_new(r.node);
-					}
-				} else {
-					// just the def
-					schedule_new(link.def.node);
-				}
-			} else { // just reading or nop, so don't synchronize with reads
-				// just the def
-				schedule_new(link.def.node);
-			}
-
-			// all nops
-			if (access != RW::eNop) {
-				for (auto& r : link.nops.to_span(pass_nops)) {
-					schedule_new(r.node);
-				}
-			}
-		}
-
-		template<class T>
-		  requires(!std::is_same_v<T, void*> && !std::is_same_v<T, std::span<void*>>)
-		void done(Node* node, Stream* stream, T value) {
-			auto counter = naming_index_counter;
-			naming_index_counter += node->type.size();
-			auto value_ptr = static_cast<void*>(new (arena.ensure_space(sizeof(T))) T{ value });
-			auto values = new (arena.ensure_space(sizeof(void* [1]))) void*[1];
-			values[0] = value_ptr;
-			node->execution_info = new (arena.ensure_space(sizeof(ExecutionInfo))) ExecutionInfo{ stream, counter, std::span{ values, 1 } };
-		}
-
-		void done(Node* node, Stream* stream, void* value_ptr) {
-			auto counter = naming_index_counter;
-			naming_index_counter += node->type.size();
-			auto values = new (arena.ensure_space(sizeof(void* [1]))) void*[1];
-			values[0] = value_ptr;
-			node->execution_info = new (arena.ensure_space(sizeof(ExecutionInfo))) ExecutionInfo{ stream, counter, std::span{ values, 1 } };
-		}
-
-		void done(Node* node, Stream* stream, std::span<void*> values) {
-			auto counter = naming_index_counter;
-			naming_index_counter += node->type.size();
-			auto v = new (arena.ensure_space(sizeof(void*) * values.size())) void*[values.size()];
-			std::copy(values.begin(), values.end(), v);
-			node->execution_info = new (arena.ensure_space(sizeof(ExecutionInfo))) ExecutionInfo{ stream, counter, std::span{ v, values.size() } };
-		}
-
-		template<class T>
-		T& get_value(Ref parm) {
-			return *reinterpret_cast<T*>(get_value(parm));
-		};
-
-		void* get_value(Ref parm) {
-			auto v = impl->get_value(parm);
-			return v;
-		}
-
-		std::span<void*> get_values(Node* node) {
-			auto v = impl->get_values(node);
-			return v;
-		}
-
-		std::shared_ptr<Type> base_type(Ref parm) {
-			return Type::stripped(parm.type());
-		}
-
-		std::optional<StreamResourceUse> get_dependency_info(Ref parm, Type* arg_ty, RW type, Stream* dst_stream) {
-			auto parm_ty = parm.type();
-			auto& link = parm.link();
-
-			std::optional<ResourceUse> s = {};
-
-			if (type == RW::eRead) {
-				std::exchange(s, link.read_sync);
-			} else {
-				std::exchange(s, link.undef_sync);
-			}
-			if (s) {
-				return StreamResourceUse{ *s, dst_stream };
-			} else {
-				return {};
-			}
-		}
-	};
+		return key;
+	}
 
 	uint64_t value_identity(Type* base_ty, void* value) {
 		uint64_t key = 0;
@@ -882,7 +778,7 @@ namespace vuk {
 
 			uint64_t key = value_identity(base_ty, value);
 
-			if (enforce_unique) {
+			if (enforce_unique && key != 0) {
 				assert(last_modify.find(key) == last_modify.end());
 				last_modify.emplace(key, new (this->arena.ensure_space(sizeof(PartialStreamResourceUse))) PartialStreamResourceUse(psru));
 			} else {
@@ -993,6 +889,194 @@ namespace vuk {
 		}
 	};
 
+	enum class RW { eNop, eRead, eWrite };
+
+	struct Scheduler {
+		Scheduler(Allocator all, RGCImpl* impl, Recorder& recorder) :
+		    allocator(all),
+		    recorder(recorder),
+		    pass_reads(impl->pass_reads),
+		    pass_nops(impl->pass_nops),
+		    scheduled_execables(impl->scheduled_execables),
+		    impl(impl) {
+			// these are the items that were determined to run
+			for (auto& i : scheduled_execables) {
+				scheduled.emplace(i.execable);
+				work_queue.emplace_back(i);
+			}
+		}
+
+		Allocator allocator;
+		Recorder& recorder;
+		std::pmr::vector<Ref>& pass_reads;
+		std::pmr::vector<Ref>& pass_nops;
+		plf::colony<ScheduledItem>& scheduled_execables;
+
+		InlineArena<std::byte, 4 * 1024> arena;
+
+		RGCImpl* impl;
+
+		std::deque<ScheduledItem> work_queue;
+
+		size_t naming_index_counter = 0;
+		size_t instr_counter = 0;
+		std::unordered_set<Node*> scheduled;
+
+		void schedule_new(Node* node) {
+			assert(node);
+			if (node->scheduled_item) { // we have scheduling info for this
+				work_queue.push_front(*node->scheduled_item);
+			} else { // no info, just schedule it as-is
+				work_queue.push_front(ScheduledItem{ .execable = node });
+			}
+		}
+
+		// returns true if the item is ready
+		bool process(ScheduledItem& item) {
+			if (item.ready) {
+				return true;
+			} else {
+				item.ready = true;
+				work_queue.push_front(item); // requeue this item
+				return false;
+			}
+		}
+
+		void schedule_dependency(Ref parm, RW access) {
+			if (parm.node->kind == Node::CONSTANT || parm.node->kind == Node::PLACEHOLDER) {
+				return;
+			}
+			auto link = parm.link();
+
+			if (access == RW::eWrite) { // synchronize against writing
+				// we are going to write here, so schedule all reads or the def, if no read
+				if (link.reads.size() > 0) {
+					// all reads
+					for (auto& r : link.reads.to_span(pass_reads)) {
+						schedule_new(r.node);
+					}
+				} else {
+					// just the def
+					schedule_new(link.def.node);
+				}
+			} else { // just reading or nop, so don't synchronize with reads
+				// just the def
+				schedule_new(link.def.node);
+			}
+
+			// all nops
+			if (access != RW::eNop) {
+				for (auto& r : link.nops.to_span(pass_nops)) {
+					schedule_new(r.node);
+				}
+			}
+		}
+
+		void node_to_acq(Node* node, std::span<void*> values) {
+			assert(node->execution_info);
+			node->execution_info->kind = node->kind;
+			// morph into acquire
+			node->kind = Node::ACQUIRE;
+			node->acquire = {};
+
+			// initialise storage
+			if (!node->acquire.values.data()) { // in case of errors, we might still have the allocation hanging around, we can reuse it
+				node->acquire.values = { new void*[node->type.size()], node -> type.size() };
+			} else {
+				assert(node->acquire.values.size() == node->type.size());
+			}
+			if (node->rel_acq) {
+				node->rel_acq->last_use.resize(node->type.size());
+			}
+
+			for (size_t i = 0; i < node->type.size(); i++) {
+				auto arg_ty = node->type[i];
+				node->acquire.values[i] = new std::byte[arg_ty->size];
+				memcpy(node->acquire.values[i], values[i], arg_ty->size);
+				auto stripped_ty = Type::stripped(arg_ty);
+				if (node->rel_acq) {
+					node->rel_acq->last_use[i] = recorder.last_use(stripped_ty.get(), node->acquire.values[i]);
+				}
+				node->type[i] = stripped_ty;
+			}
+		}
+
+		template<class T>
+		  requires(!std::is_same_v<T, void*> && !std::is_same_v<T, std::span<void*>>)
+		void done(Node* node, Stream* stream, T value) {
+			auto counter = naming_index_counter;
+			naming_index_counter += node->type.size();
+			node->execution_info = new (arena.ensure_space(sizeof(ExecutionInfo))) ExecutionInfo{ stream, counter };
+			auto value_ptr = static_cast<void*>(new (arena.ensure_space(sizeof(T))) T{ value });
+			auto values = new (arena.ensure_space(sizeof(void* [1]))) void*[1];
+			values[0] = value_ptr;
+			stream->current_submit.push_back(node);
+			node_to_acq(node, std::span{ values, 1 });
+		}
+
+		void done(Node* node, Stream* stream, void* value_ptr) {
+			auto counter = naming_index_counter;
+			naming_index_counter += node->type.size();
+			node->execution_info = new (arena.ensure_space(sizeof(ExecutionInfo))) ExecutionInfo{ stream, counter };
+			stream->current_submit.push_back(node);
+			node_to_acq(node, std::span{ &value_ptr, 1 });
+		}
+
+		void done(Node* node, Stream* stream, std::span<void*> values) {
+			auto counter = naming_index_counter;
+			naming_index_counter += node->type.size();
+			node->execution_info = new (arena.ensure_space(sizeof(ExecutionInfo))) ExecutionInfo{ stream, counter };
+			stream->current_submit.push_back(node);
+			node_to_acq(node, values);
+		}
+
+		void done(Node* node, Stream* stream) {
+			auto counter = naming_index_counter;
+			naming_index_counter += node->type.size();
+			node->execution_info = new (arena.ensure_space(sizeof(ExecutionInfo))) ExecutionInfo{ stream, counter };
+			stream->current_submit.push_back(node);
+			assert(node->kind == Node::ACQUIRE);
+			node->execution_info->kind = Node::ACQUIRE;
+		}
+
+		template<class T>
+		T& get_value(Ref parm) {
+			return *reinterpret_cast<T*>(get_value(parm));
+		};
+
+		void* get_value(Ref parm) {
+			auto v = impl->get_value(parm);
+			return v;
+		}
+
+		std::span<void*> get_values(Node* node) {
+			auto v = impl->get_values(node);
+			return v;
+		}
+
+		std::shared_ptr<Type> base_type(Ref parm) {
+			return Type::stripped(parm.type());
+		}
+
+		std::optional<StreamResourceUse> get_dependency_info(Ref parm, Type* arg_ty, RW type, Stream* dst_stream) {
+			auto parm_ty = parm.type();
+			auto& link = parm.link();
+
+			std::optional<ResourceUse> s = {};
+
+			if (type == RW::eRead) {
+				std::exchange(s, link.read_sync);
+			} else {
+				std::exchange(s, link.undef_sync);
+			}
+			if (s) {
+				return StreamResourceUse{ *s, dst_stream };
+			} else {
+				return {};
+			}
+		}
+	};
+
 	std::string_view domain_to_string(DomainFlagBits domain) {
 		domain = (DomainFlagBits)(domain & DomainFlagBits::eDomainMask).m_mask;
 
@@ -1040,7 +1124,7 @@ namespace vuk {
 			item.scheduled_stream = recorder.stream_for_domain(item.scheduled_domain);
 		}
 
-		Scheduler sched(alloc, impl);
+		Scheduler sched(alloc, impl, recorder);
 
 		// DYNAMO
 		// loop through scheduled items
@@ -1059,7 +1143,7 @@ namespace vuk {
 				if (node->debug_info && !node->debug_info->result_names.empty()) {
 					msg += fmt::format("%{}", node->debug_info->result_names[i]);
 				} else {
-					msg += fmt::format("%{}_{}", node->kind_to_sv(), sched.naming_index_counter + i);
+					msg += fmt::format("%{}_{}", Node::kind_to_sv(node->kind), sched.naming_index_counter + i);
 				}
 			}
 			return msg;
@@ -1194,8 +1278,8 @@ namespace vuk {
 							}
 							bound = **buf;
 						}
+						recorder.init_sync(node->type[0].get(), { to_use(eNone), host_stream }, &bound);
 						sched.done(node, host_stream, bound);
-						recorder.init_sync(node->type[0].get(), { to_use(eNone), host_stream }, sched.get_value(first(node)));
 					} else if (node->type[0]->hash_value == current_module->types.builtin_image) {
 						auto& attachment = *reinterpret_cast<ImageAttachment*>(node->construct.args[0].node->constant.value);
 						// collapse inferencing
@@ -1264,8 +1348,8 @@ namespace vuk {
 								ctx.set_name(attachment.image.image, node->debug_info->result_names[0].c_str());
 							}
 						}
+						recorder.init_sync(node->type[0].get(), { to_use(eNone), host_stream }, &attachment);
 						sched.done(node, host_stream, attachment);
-						recorder.init_sync(node->type[0].get(), { to_use(eNone), host_stream }, sched.get_value(first(node)));
 					} else if (node->type[0]->hash_value == current_module->types.builtin_swapchain) {
 #ifdef VUK_DUMP_EXEC
 						print_results(node);
@@ -1526,166 +1610,129 @@ namespace vuk {
 				}
 				break;
 			}
-			case Node::SPLICE: {
+			case Node::RELEASE: {
 				if (sched.process(item)) {
-					auto acqrel = node->splice.rel_acq;
+					auto acqrel = node->rel_acq;
 
-					if (!acqrel || acqrel->status == Signal::Status::eDisarmed) {
-						Stream* dst_stream;
+					assert(acqrel && acqrel->status == Signal::Status::eDisarmed);
 
-						bool is_release = false;
-						if (node->splice.dst_domain == DomainFlagBits::ePE) {
-							auto& swp = *sched.get_value<Swapchain*>(get_def2(node->splice.src[0])->node->acquire_next_image.swapchain);
-							auto it = std::find_if(pe_streams.begin(), pe_streams.end(), [&](auto& pe_stream) { return pe_stream.swp == &swp; });
-							assert(it != pe_streams.end());
-							dst_stream = &*it;
-							is_release = true;
-						} else if (node->splice.dst_domain == DomainFlagBits::eAny) {
-							for (size_t i = 0; i < node->splice.src.size(); i++) {
-								auto parm = node->splice.src[i];
-								auto arg_ty = node->type[i];
-								auto di = sched.get_dependency_info(parm, arg_ty.get(), RW::eWrite, parm.node->execution_info->stream);
-								memcpy(node->splice.values[i], impl->get_value(parm), parm.type()->size);
-							}
-#ifdef VUK_DUMP_EXEC
-							print_results(node);
-							fmt::print(" <- ");
-							print_args(node->splice.src);
-							fmt::print("\n");
-#endif
-							sched.done(node, host_stream, node->splice.values);
-
-							break;
-						} else if (node->splice.dst_domain == DomainFlagBits::eDevice) {
-							dst_stream = item.scheduled_stream;
-							is_release = true;
-						} else {
-							dst_stream = recorder.stream_for_domain(node->splice.dst_domain);
-							is_release = true;
-						}
-						auto sched_stream = item.scheduled_stream;
-						DomainFlagBits sched_domain = sched_stream->domain;
-						assert(dst_stream);
-						DomainFlagBits dst_domain = dst_stream->domain;
-
-						for (size_t i = 0; i < node->splice.src.size(); i++) {
-							auto parm = node->splice.src[i];
-							auto arg_ty = node->type[i];
-							auto di = sched.get_dependency_info(parm, arg_ty.get(), RW::eWrite, dst_stream);
-							auto value = sched.get_value(parm);
-							memcpy(node->splice.values[i], impl->get_value(parm), parm.type()->size);
-							recorder.add_sync(sched.base_type(parm).get(), di, value);
-
-							auto last_use = recorder.last_use(sched.base_type(parm).get(), value);
-							// SANITY: if we change streams, then we must've had sync
-							// TODO: remove host exception here
-							assert(di || last_use.stream->domain == DomainFlagBits::eHost || (last_use.stream == item.scheduled_stream));
-							if (acqrel) {
-								acqrel->last_use.push_back(last_use);
-								if (i == 0) {
-									sched_stream->add_dependent_signal(acqrel);
-								}
-							}
-						}
-						if (is_release) {
-							// for releases, run deferred splices before submission
-							auto it = impl->deferred_splices.find(node);
-							if (it != impl->deferred_splices.end()) {
-								for (auto& splice_ref : it->second) {
-									assert(splice_ref.node->kind == Node::SPLICE);
-									auto pending = ++impl->pending_splice_sigs.at(splice_ref.node);
-									auto& splice = splice_ref.node->splice;
-									assert(splice.rel_acq);
-									auto& parm = splice.src[splice_ref.index];
-									splice.rel_acq->last_use[splice_ref.index] = recorder.last_use(sched.base_type(parm).get(), sched.get_value(parm));
-									memcpy(splice.values[splice_ref.index], impl->get_value(parm), parm.type()->size);
-
-									// if all of the splice was encountered, add signal to the stream where this node ran
-									if (pending == splice_ref.node->splice.src.size()) {
-										sched_stream->add_dependent_signal(splice.rel_acq);
-									}
-								}
-								impl->deferred_splices.erase(it);
-							}
-
-							if (acqrel && sched_domain == DomainFlagBits::eHost) {
-								acqrel->status = Signal::Status::eHostAvailable;
-							}
-
-							if (dst_domain == DomainFlagBits::ePE) {
-								auto& swp = *sched.get_value<Swapchain*>(get_def2(node->splice.src[0])->node->acquire_next_image.swapchain);
-								assert(sched_stream->domain & DomainFlagBits::eDevice);
-								auto present_result = dynamic_cast<VkQueueStream*>(sched_stream)->present(swp);
-								if (!present_result) {
-									submit_result = std::move(present_result);
-								}
-								// TODO: do something with the result here
-								if (acqrel) {
-									acqrel->status = Signal::Status::eHostAvailable; // TODO: ???
-								}
-							} else {
-								sched_stream->submit();
-							}
-#ifdef VUK_DUMP_EXEC
-							print_results(node);
-							fmt::print(" = release ${} -> ${} ", domain_to_string(sched_domain), domain_to_string(dst_domain));
-							print_args(node->splice.src);
-							fmt::print("\n");
-#endif
-						}
-						sched.done(node, item.scheduled_stream, node->splice.values);
+					Stream* dst_stream;
+					Swapchain* swp = nullptr;
+					if (node->release.dst_domain == DomainFlagBits::ePE) {
+						swp = reinterpret_cast<Swapchain*>(image_to_swapchain.at(value_identity(node->release.src[0].type().get(), sched.get_value(node->release.src[0]))));
+						auto it = std::find_if(pe_streams.begin(), pe_streams.end(), [=](auto& pe_stream) { return pe_stream.swp == swp; });
+						assert(it != pe_streams.end());
+						dst_stream = &*it;
+					} else if (node->release.dst_domain == DomainFlagBits::eDevice) {
+						dst_stream = item.scheduled_stream;
 					} else {
-						auto src_stream =
-						    acqrel->source.executor ? recorder.stream_for_executor(acqrel->source.executor) : recorder.stream_for_domain(DomainFlagBits::eHost);
-#ifdef VUK_DUMP_EXEC
-						print_results(node);
-						fmt::print(" = acquire<");
-#endif
-						for (size_t i = 0; i < node->splice.values.size(); i++) {
-							auto& link = node->links[i];
-							// TODO: array exception
-							if (!link.undef && link.reads.size() == 0 && !link.next && node->type[0]->kind != Type::ARRAY_TY) { // it is never used
-								continue;
-							}
-							StreamResourceUse src_use = { acqrel->last_use[i], src_stream };
-							recorder.init_sync(node->type[i].get(), src_use, node->splice.values[i], false);
-							if (node->type[i]->hash_value == current_module->types.builtin_buffer) {
-#ifdef VUK_DUMP_EXEC
-								fmt::print("buffer");
-#endif
-							} else if (node->type[i]->hash_value == current_module->types.builtin_image) {
-#ifdef VUK_DUMP_EXEC
-								fmt::print("image");
-#endif
-							} else if (node->type[0]->kind == Type::ARRAY_TY) {
-#ifdef VUK_DUMP_EXEC
-								fmt::print("{}[]", (*node->type[0]->array.T)->hash_value == current_module->types.builtin_buffer ? "buffer" : "image");
-#endif
-							}
-#ifdef VUK_DUMP_EXEC
-							if (i + 1 < node->splice.values.size()) {
-								fmt::print(", ");
-							}
-#endif
+						dst_stream = recorder.stream_for_domain(node->release.dst_domain);
+					}
+					assert(dst_stream);
+
+					auto sched_stream = item.scheduled_stream;
+					DomainFlagBits sched_domain = sched_stream->domain;
+					DomainFlagBits dst_domain = dst_stream->domain;
+
+					node->rel_acq->last_use.resize(node->type.size());
+					auto values = new (sched.arena.ensure_space(sizeof(void*) * node->type.size())) void*[node->type.size()];
+
+					for (size_t i = 0; i < node->release.src.size(); i++) {
+						auto parm = node->release.src[i];
+						auto arg_ty = node->type[i];
+						auto di = sched.get_dependency_info(parm, arg_ty.get(), RW::eWrite, dst_stream);
+						auto value = sched.get_value(parm);
+						values[i] = value;
+						recorder.add_sync(sched.base_type(parm).get(), di, value);
+
+						auto last_use = recorder.last_use(sched.base_type(parm).get(), value);
+						// SANITY: if we change streams, then we must've had sync
+						// TODO: remove host exception here
+						assert(di || last_use.stream->domain == DomainFlagBits::eHost || (last_use.stream == item.scheduled_stream));
+						acqrel->last_use.push_back(last_use);
+						if (i == 0) {
+							sched_stream->add_dependent_signal(acqrel);
 						}
+					}
+
+					if (acqrel && sched_domain == DomainFlagBits::eHost) {
+						acqrel->status = Signal::Status::eHostAvailable;
+					}
+
+					if (dst_domain == DomainFlagBits::ePE) {
+						assert(sched_stream->domain & DomainFlagBits::eDevice);
+						assert(swp);
+						auto present_result = dynamic_cast<VkQueueStream*>(sched_stream)->present(*swp);
+						if (!present_result) {
+							submit_result = std::move(present_result);
+						}
+						if (acqrel) {
+							acqrel->status = Signal::Status::eHostAvailable; // TODO: ???
+						}
+					} else {
+						sched_stream->submit();
+					}
+					host_stream->submit();
 #ifdef VUK_DUMP_EXEC
-						fmt::print(">\n");
+					print_results(node);
+					fmt::print(" = release ${} -> ${} ", domain_to_string(sched_domain), domain_to_string(dst_domain));
+					print_args(node->release.src);
+					fmt::print("\n");
 #endif
 
-						sched.done(node, src_stream, node->splice.values);
-					}
+					sched.done(node, item.scheduled_stream, std::span(values, node->type.size()));
+
 				} else {
-					auto acqrel = node->splice.rel_acq;
+					auto acqrel = node->rel_acq;
 					if (!acqrel || acqrel->status == Signal::Status::eDisarmed) {
-						bool is_release = !(node->splice.dst_access == Access::eNone && node->splice.dst_domain == DomainFlagBits::eAny);
-						for (size_t i = 0; i < node->splice.src.size(); i++) {
-							sched.schedule_dependency(node->splice.src[i], is_release ? RW::eWrite : RW::eNop);
-							if (!is_release) { // if we share a nop group, the dependency will not get scheduled - explicitly schedule it here
-								sched.schedule_new(node->splice.src[i].node);
-							}
+						for (size_t i = 0; i < node->release.src.size(); i++) {
+							sched.schedule_dependency(node->release.src[i], RW::eWrite);
 						}
 					}
 				}
+				break;
+			}
+			case Node::ACQUIRE: {
+				if (!sched.process(item)) { // ACQUIRE does not have any deps
+					break;
+				}
+				auto acqrel = node->rel_acq;
+				assert(acqrel && acqrel->status != Signal::Status::eDisarmed);
+
+				auto src_stream = acqrel->source.executor ? recorder.stream_for_executor(acqrel->source.executor) : recorder.stream_for_domain(DomainFlagBits::eHost);
+#ifdef VUK_DUMP_EXEC
+				print_results(node);
+				fmt::print(" = acquire<");
+#endif
+				for (size_t i = 0; i < node->acquire.values.size(); i++) {
+					auto& link = node->links[i];
+
+					StreamResourceUse src_use = { acqrel->last_use[i], src_stream };
+					recorder.init_sync(node->type[i].get(), src_use, node->acquire.values[i], false);
+					if (node->type[i]->hash_value == current_module->types.builtin_buffer) {
+#ifdef VUK_DUMP_EXEC
+						fmt::print("buffer");
+#endif
+					} else if (node->type[i]->hash_value == current_module->types.builtin_image) {
+#ifdef VUK_DUMP_EXEC
+						fmt::print("image");
+#endif
+					} else if (node->type[0]->kind == Type::ARRAY_TY) {
+#ifdef VUK_DUMP_EXEC
+						fmt::print("{}[]", (*node->type[0]->array.T)->hash_value == current_module->types.builtin_buffer ? "buffer" : "image");
+#endif
+					}
+#ifdef VUK_DUMP_EXEC
+					if (i + 1 < node->acquire.values.size()) {
+						fmt::print(", ");
+					}
+#endif
+				}
+#ifdef VUK_DUMP_EXEC
+				fmt::print(">\n");
+#endif
+
+				sched.done(node, src_stream);
 				break;
 			}
 
@@ -1716,104 +1763,123 @@ namespace vuk {
 				}
 				break;
 			}
-			case Node::EXTRACT: {
-				if (sched.process(item)) {
-					// no sync - currently no extract composite needs sync
-					/* recorder.add_sync(sched.base_type(node->extract.composite),
-					                  sched.get_dependency_info(node->extract.composite, node->extract.composite.type(), RW::eWrite, nullptr),
-					                  sched.get_value(node->extract.composite));*/
-#ifdef VUK_DUMP_EXEC
-					print_results(node);
-					fmt::print(" = ");
-					print_args(std::span{ &node->extract.composite, 1 });
-					fmt::print("[{}]", constant<uint64_t>(node->extract.index));
-					fmt::print("\n");
-#endif
-					sched.done(node, item.scheduled_stream, sched.get_value(first(node))); // extract doesn't execute
-				} else {
-					sched.schedule_new(node->extract.composite.node);
-					sched.schedule_dependency(node->extract.index, RW::eRead);
-				}
-				break;
-			}
 			case Node::SLICE: {
 				if (sched.process(item)) {
-					Subrange::Image r = { constant<uint32_t>(node->slice.base_level),
-						                    constant<uint32_t>(node->slice.level_count),
-						                    constant<uint32_t>(node->slice.base_layer),
-						                    constant<uint32_t>(node->slice.layer_count) };
-
 					// half sync
-					recorder.add_sync(sched.base_type(node->slice.image).get(),
-					                  sched.get_dependency_info(node->slice.image, node->slice.image.type().get(), RW::eRead, nullptr),
-					                  sched.get_value(node->slice.image));
-
+					recorder.add_sync(sched.base_type(node->slice.src).get(),
+					                  sched.get_dependency_info(node->slice.src, node->slice.src.type().get(), RW::eRead, item.scheduled_stream),
+					                  sched.get_value(node->slice.src));
+					auto composite = node->slice.src;
+					void* composite_v = sched.get_value(composite);
+					auto t = Type::stripped(composite.type());
+					auto axis = node->slice.axis;
+					auto start = sched.get_value<uint64_t>(node->slice.start);
+					auto count = sched.get_value<uint64_t>(node->slice.count);
 #ifdef VUK_DUMP_EXEC
 					print_results(node);
 					fmt::print(" = ");
-					print_args(std::span{ &node->slice.image, 1 });
-					if (r.base_level > 0 || r.level_count != VK_REMAINING_MIP_LEVELS) {
-						fmt::print("[m{}:{}]", r.base_level, r.base_level + r.level_count - 1);
-					}
-					if (r.base_layer > 0 || r.layer_count != VK_REMAINING_ARRAY_LAYERS) {
-						fmt::print("[l{}:{}]", r.base_layer, r.base_layer + r.layer_count - 1);
+					print_args(std::span{ &node->slice.src, 1 });
+					if (start > 0 || count != Range::REMAINING) {
+						if (node->slice.axis != 0) {
+							if (count > 1) {
+								fmt::print("[{}->{}:{}]", node->slice.axis, start, start + count - 1);
+							} else {
+								fmt::print("[{}->{}]", node->slice.axis, start);
+							}
+						} else {
+							if (count > 1) {
+								fmt::print("[{}:{}]", start, start + count - 1);
+							} else {
+								fmt::print("[{}]", start);
+							}
+						}
 					}
 					fmt::print("\n");
 #endif
 
-					// assert(elem_ty == current_module->builtin_image);
-					auto sliced = ImageAttachment(*(ImageAttachment*)sched.get_value(node->slice.image));
-					sliced.base_level += r.base_level;
-					if (r.level_count != VK_REMAINING_MIP_LEVELS) {
-						sliced.level_count = r.level_count;
-					}
-					sliced.base_layer += r.base_layer;
-					if (r.layer_count != VK_REMAINING_ARRAY_LAYERS) {
-						sliced.layer_count = r.layer_count;
-					}
-
 					if (!(node->debug_info && node->debug_info->result_names.size() > 0 && !node->debug_info->result_names[0].empty())) {
-						std::string name = fmt::format("{}_{}[m{}:{}][l{}:{}]",
-						                               node->slice.image.node->kind_to_sv(),
-						                               node->slice.image.node->execution_info->naming_index,
-						                               sliced.base_level,
-						                               sliced.base_level + sliced.level_count - 1,
-						                               sliced.base_layer,
-						                               sliced.base_layer + sliced.layer_count - 1);
+						std::string name = fmt::format("{}_{}[{}->{}:{}]",
+						                               Node::kind_to_sv(node->slice.src.node->execution_info->kind),
+						                               node->slice.src.node->execution_info->naming_index,
+						                               node->slice.axis,
+						                               start,
+						                               start + count - 1);
 						current_module->name_output(first(node), name);
 					}
-					std::vector<void*, short_alloc<void*>> rets(2, *impl->arena_);
-					rets[0] = static_cast<void*>(new (impl->arena_->allocate(sizeof(ImageAttachment))) ImageAttachment{ sliced });
-					rets[1] = static_cast<void*>(new (impl->arena_->allocate(sizeof(ImageAttachment)))
-					                                 ImageAttachment{ *(ImageAttachment*)sched.get_value(node->slice.image) });
-					sched.done(node, node->slice.image.node->execution_info->stream, std::span(rets));
+					std::vector<void*, short_alloc<void*>> rets(3, *impl->arena_);
+
+					if (node->slice.src.type()->hash_value == current_module->types.builtin_image) {
+						auto sliced = ImageAttachment(*(ImageAttachment*)composite_v);
+						if (axis == Node::NamedAxis::MIP) {
+							sliced.base_level += start;
+							if (count != Range::REMAINING) {
+								sliced.level_count = count;
+							}
+							rets[0] = static_cast<void*>(new (impl->arena_->allocate(sizeof(ImageAttachment))) ImageAttachment{ sliced });
+						} else if (axis == Node::NamedAxis::LAYER) {
+							sliced.base_layer += start;
+							if (count != Range::REMAINING) {
+								sliced.layer_count = count;
+							}
+							rets[0] = static_cast<void*>(new (impl->arena_->allocate(sizeof(ImageAttachment))) ImageAttachment{ sliced });
+						} else if (axis == Node::NamedAxis::FIELD) {
+							assert(t->kind == Type::COMPOSITE_TY);
+							assert(count == 1);
+							auto offset = t->offsets[start];
+							rets[0] = reinterpret_cast<std::byte*>(composite_v) + offset;
+						} else {
+							assert(0);
+						}
+					} else if (node->slice.src.type()->hash_value == current_module->types.builtin_buffer) {
+						if (axis == 0) {
+							auto sliced = Buffer(*(Buffer*)composite_v);
+							sliced.offset += start * sliced.size;
+							if (count != Range::REMAINING) {
+								sliced.size = count * sliced.size;
+							}
+							rets[0] = static_cast<void*>(new (impl->arena_->allocate(sizeof(Buffer))) Buffer{ sliced });
+						} else if (axis == Node::NamedAxis::FIELD) {
+							assert(t->kind == Type::COMPOSITE_TY);
+							assert(count == 1);
+							auto offset = t->offsets[start];
+							rets[0] = reinterpret_cast<std::byte*>(composite_v) + offset;
+						}
+					} else if (node->slice.src.type()->kind == Type::ARRAY_TY) {
+						assert(axis == 0);
+						assert(t->kind == Type::ARRAY_TY);
+						assert(count == 1);
+						rets[0] = reinterpret_cast<std::byte*>(composite_v) + t->array.stride * start;
+					} else {
+						assert(0);
+					}
+					rets[1] = impl->arena_->allocate(node->slice.src.type()->size);
+					memcpy(rets[1], sched.get_value(node->slice.src), node->slice.src.type()->size);
+					rets[2] = impl->arena_->allocate(node->slice.src.type()->size);
+					memcpy(rets[2], sched.get_value(node->slice.src), node->slice.src.type()->size);
+					sched.done(node, node->slice.src.node->execution_info->stream, std::span(rets));
 				} else {
-					sched.schedule_dependency(node->slice.image, RW::eRead);
-					sched.schedule_dependency(node->slice.base_level, RW::eRead);
-					sched.schedule_dependency(node->slice.level_count, RW::eRead);
-					sched.schedule_dependency(node->slice.base_layer, RW::eRead);
-					sched.schedule_dependency(node->slice.layer_count, RW::eRead);
+					sched.schedule_dependency(node->slice.src, RW::eWrite);
+					sched.schedule_dependency(node->slice.start, RW::eRead);
+					sched.schedule_dependency(node->slice.count, RW::eRead);
 				}
 				break;
 			}
 			case Node::CONVERGE: {
 				if (sched.process(item)) {
 					auto base = node->converge.diverged[0];
-					auto def = get_def2slice(base);
+					/*auto def = get_def2slice(base);
 					if (def && def->node->kind == Node::SLICE) {
-						base = def->node->slice.image;
+					  base = def->node->slice.src;
 					} else {
-						assert(0);
-					}
-					auto sliced = ImageAttachment(*(ImageAttachment*)sched.get_value(base));
+					  assert(0);
+					}*/
 
 					// half sync
 					for (size_t i = 0; i < node->converge.diverged.size(); i++) {
 						auto& div = node->converge.diverged[i];
-						recorder.add_sync(
-						    sched.base_type(div).get(),
-						    sched.get_dependency_info(div, div.type().get(), node->converge.write[i] ? RW::eWrite : RW::eRead, base.node->execution_info->stream),
-						    sched.get_value(div));
+						recorder.add_sync(sched.base_type(div).get(),
+						                  sched.get_dependency_info(div, div.type().get(), RW::eWrite, base.node->execution_info->stream),
+						                  sched.get_value(div));
 					}
 
 #ifdef VUK_DUMP_EXEC
@@ -1825,37 +1891,16 @@ namespace vuk {
 					fmt::print("\n");
 #endif
 
-					sched.done(node, base.node->execution_info->stream, sliced); // converge doesn't execute
+					sched.done(node, base.node->execution_info->stream, sched.get_value(base));
 				} else {
 					for (size_t i = 0; i < node->converge.diverged.size(); i++) {
-						sched.schedule_dependency(node->converge.diverged[i], node->converge.write[i] ? RW::eWrite : RW::eRead);
+						sched.schedule_dependency(node->converge.diverged[i], RW::eWrite);
 					}
 				}
 				break;
 			}
 			default:
 				assert(0);
-			}
-
-			// run splice signalling
-			if (node->execution_info) {
-				auto it = impl->deferred_splices.find(node);
-				if (it != impl->deferred_splices.end()) {
-					for (auto& splice_ref : it->second) {
-						assert(splice_ref.node->kind == Node::SPLICE);
-						auto pending = ++impl->pending_splice_sigs.at(splice_ref.node);
-						auto& splice = splice_ref.node->splice;
-						assert(splice.rel_acq);
-						auto& parm = splice.src[splice_ref.index];
-						splice.rel_acq->last_use[splice_ref.index] = recorder.last_use(sched.base_type(parm).get(), sched.get_value(parm));
-						memcpy(splice.values[splice_ref.index], impl->get_value(parm), parm.type()->size);
-
-						// if all of the splice was encountered, add signal to the stream where this node ran
-						if (pending == splice_ref.node->splice.src.size()) {
-							node->execution_info->stream->add_dependent_signal(splice.rel_acq);
-						}
-					}
-				}
 			}
 		}
 
@@ -1869,25 +1914,52 @@ namespace vuk {
 
 		impl->depnodes.clear();
 
-		for (auto& node : impl->nodes) {
-			// reset any nodes we ran
-			node->execution_info = nullptr;
-			node->links = nullptr;
-			// if we ran any non-splice nodes: they are garbage now
-			if (node->kind != Node::SPLICE && node->kind != Node::CONVERGE) {
-				current_module->destroy_node(node);
+		// populate values and last_use
+		for (auto& [def_link, lr] : impl->live_ranges) {
+			assert(def_link);
+			if (def_link->def.node->kind == Node::CONSTANT) {
+				continue;
+			}
+
+			// get final value
+			Ref final_use;
+			if (lr.undef_link->undef) {
+				if (lr.undef_link->undef.node->execution_info->kind == Node::CONVERGE) {
+					final_use = first(lr.undef_link->undef.node);
+				} else if (lr.undef_link->undef.node->execution_info->kind == Node::SLICE) {
+					final_use = lr.undef_link->def;
+				} else {
+					assert(0);
+				}
 			} else {
-				// SANITY: if we ran any splice nodes as release, they must be pending now
-				// SPLICE nodes are unlinked
-				if (node->kind == Node::SPLICE) {
-					assert(!node->splice.rel_acq || node->splice.rel_acq->status != Signal::Status::eDisarmed);
-					delete node->splice.src.data();
-					node->splice.src = {};
+				final_use = lr.undef_link->def;
+			}
+			assert(!final_use.node->rel_acq || final_use.node->rel_acq->status != Signal::Status::eDisarmed);
+			lr.last_value = sched.get_value(final_use);
+			lr.last_use = recorder.last_use(Type::stripped(final_use.type()).get(), lr.last_value);
+
+			// put the values on the nodes
+			for (auto link = def_link; link; link = link->next) {
+				auto assign = [&](Ref ref) {
+					assert(ref.node->kind == Node::ACQUIRE);
+					memcpy(ref.node->acquire.values[ref.index], lr.last_value, ref.node->type[ref.index]->size);
+				};
+				assert(link->def);
+				assign(link->def);
+				if (link->def.node->rel_acq && final_use.node->rel_acq) {
+					link->def.node->rel_acq->source = final_use.node->rel_acq->source;
+					link->def.node->rel_acq->status = final_use.node->rel_acq->status;
 				}
 			}
 		}
 
-		impl->deferred_splices.clear();
+		for (auto& node : impl->nodes) {
+			// reset any nodes we ran
+			node->execution_info = nullptr;
+			node->links = nullptr;
+			node->scheduled_item = nullptr;
+		}
+
 		impl->garbage_nodes.insert(impl->garbage_nodes.end(), current_module->garbage.begin(), current_module->garbage.end());
 		std::sort(impl->garbage_nodes.begin(), impl->garbage_nodes.end());
 		impl->garbage_nodes.erase(std::unique(impl->garbage_nodes.begin(), impl->garbage_nodes.end()), impl->garbage_nodes.end());

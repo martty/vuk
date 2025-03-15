@@ -54,7 +54,7 @@ namespace vuk {
 					return;
 				}
 			}
-			if (node->kind == Node::PLACEHOLDER || (bridge_splices && node->kind == Node::SPLICE) || (bridge_slices && node->kind == Node::SLICE)) {
+			if (node->kind == Node::PLACEHOLDER ||  (bridge_slices && node->kind == Node::SLICE)) {
 				return;
 			}
 
@@ -75,7 +75,7 @@ namespace vuk {
 				ss << "</TD>";
 			}
 			ss << "<TD>";
-			ss << node->kind_to_sv();
+			ss << Node::kind_to_sv(node->kind);
 			if (node->kind == Node::CALL) {
 				auto opaque_fn_ty = node->call.args[0].type()->opaque_fn;
 
@@ -136,35 +136,13 @@ namespace vuk {
 				if (arg.node->kind == Node::PLACEHOLDER) {
 					continue;
 				}
-				if (bridge_splices && arg.node->kind == Node::SPLICE && arg.node->splice.rel_acq &&
-				    arg.node->splice.rel_acq->status == Signal::Status::eDisarmed) { // bridge splices
-					auto bridged_arg = arg.node->splice.src[arg.index];
-					ss << current_cluster << uintptr_t(bridged_arg.node) << " :r" << bridged_arg.index << " -> " << current_cluster << uintptr_t(node) << " :a" << i
-					   << " :n [color=red]\n";
-				} else if (bridge_splices && arg.node->kind == Node::SPLICE && arg.node->splice.rel_acq) {
-					ss << current_cluster << "EXT\n";
-					ss << current_cluster << "EXT -> " << current_cluster << uintptr_t(node) << " :a" << i << " :n [color=red]\n";
-				} else if (bridge_splices && arg.node->kind == Node::SPLICE) { // disabled
-					auto bridged_arg = arg.node->splice.src[arg.index];
-					ss << current_cluster << uintptr_t(bridged_arg.node) << " :r" << bridged_arg.index << " -> " << current_cluster << uintptr_t(node) << " :a" << i
-					   << " :n [color=blue]\n";
-				} else if (bridge_slices && arg.node->kind == Node::SLICE) { // bridge slices
-					auto bridged_arg = arg.node->slice.image;
-					if (bridged_arg.node->kind == Node::SPLICE) {
-						bridged_arg = bridged_arg.node->splice.src[arg.index];
-					}
-					Subrange::Image r = { constant<uint32_t>(arg.node->slice.base_level),
-						                    constant<uint32_t>(arg.node->slice.level_count),
-						                    constant<uint32_t>(arg.node->slice.base_layer),
-						                    constant<uint32_t>(arg.node->slice.layer_count) };
+				if (bridge_slices && arg.node->kind == Node::SLICE) { // bridge slices
+					auto bridged_arg = arg.node->slice.src;
 					ss << current_cluster << uintptr_t(bridged_arg.node) << " :r" << bridged_arg.index << " -> " << current_cluster << uintptr_t(node) << " :a" << i
 					   << " :n [color=green, label=\"";
-					if (r.base_level > 0 || r.level_count != VK_REMAINING_MIP_LEVELS) {
+					/* if (r.base_level > 0 || r.level_count != VK_REMAINING_MIP_LEVELS) {
 						ss << fmt::format("[m{}:{}]", r.base_level, r.base_level + r.level_count - 1);
-					}
-					if (r.base_layer > 0 || r.layer_count != VK_REMAINING_ARRAY_LAYERS) {
-						ss << fmt::format("[l{}:{}]", r.base_layer, r.base_layer + r.layer_count - 1);
-					}
+					}*/
 					ss << "\"]\n";
 				} else {
 					ss << current_cluster << uintptr_t(arg.node) << " :r" << arg.index << " -> " << current_cluster << uintptr_t(node) << " :a" << i << " :n\n";

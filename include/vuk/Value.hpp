@@ -39,6 +39,7 @@ namespace vuk {
 		Result<void> wait(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options = {});
 
 		std::shared_ptr<ExtNode> node;
+
 	protected:
 		size_t index;
 	};
@@ -174,7 +175,7 @@ namespace vuk {
 		auto operator[](size_t index)
 		  requires std::is_array_v<T>
 		{
-			assert(get_head().type()->kind == Type::ARRAY_TY);
+			assert(Type::stripped(get_head().type())->kind == Type::ARRAY_TY);
 			Ref item = current_module->make_extract(get_head(), current_module->make_constant(index));
 			return Value<std::remove_reference_t<decltype(std::declval<T>()[0])>>(ExtRef(std::make_shared<ExtNode>(item.node, node), item));
 		}
@@ -182,23 +183,17 @@ namespace vuk {
 		auto mip(uint32_t mip)
 		  requires std::is_same_v<T, ImageAttachment>
 		{
-			Ref item = current_module->make_slice(get_head(),
-			                                     current_module->make_constant(mip),
-			                                     current_module->make_constant(1u),
-			                                     current_module->make_constant(0u),
-			                                     current_module->make_constant(VK_REMAINING_ARRAY_LAYERS));
-			return Value(ExtRef(std::make_shared<ExtNode>(item, node), item));
+			Ref item = current_module->make_slice(
+			    get_head(), Node::NamedAxis::MIP, current_module->make_constant<uint64_t>(mip), current_module->make_constant<uint64_t>(1u));
+			return Value(ExtRef(std::make_shared<ExtNode>(item.node, node), item));
 		}
 
 		auto layer(uint32_t layer)
 		  requires std::is_same_v<T, ImageAttachment>
 		{
-			Ref item = current_module->make_slice(get_head(),
-			                                     current_module->make_constant(0u),
-			                                     current_module->make_constant(VK_REMAINING_MIP_LEVELS),
-			                                     current_module->make_constant(layer),
-			                                     current_module->make_constant(1u));
-			return Value(ExtRef(std::make_shared<ExtNode>(item, node), item));
+			Ref item = current_module->make_slice(
+			    get_head(), Node::NamedAxis::LAYER, current_module->make_constant<uint64_t>(layer), current_module->make_constant<uint64_t>(1u));
+			return Value(ExtRef(std::make_shared<ExtNode>(item.node, node), item));
 		}
 
 		void replace_arg_with_extract_or_constant(Ref construct, Ref src_composite, uint64_t index) {
@@ -217,14 +212,13 @@ namespace vuk {
 				ty = stripped->composite.types[index];
 			}
 
-			auto constant_node = Node{ .kind = Node::CONSTANT, .type = std::span{ &ty, 1 } };
-			constant_node.constant.value = &index; // writing these out for clang workaround
-
-			auto candidate_node = Node{ .kind = Node::EXTRACT, .type = std::span{ &ty, 1 } };
-			candidate_node.extract.composite = composite; // writing these out for clang workaround
-			candidate_node.extract.index = first(&constant_node);
+			auto candidate_node = Node{ .kind = Node::SLICE, .type = std::span{ &ty, 1 } };
+			candidate_node.slice.src = composite; // writing these out for clang workaround
+			candidate_node.slice.axis = Node::NamedAxis::FIELD;
+			candidate_node.slice.start = current_module->make_constant<uint64_t>(index);
+			candidate_node.slice.count = current_module->make_constant<uint64_t>(1);
 			current_module->garbage.push_back(def.node->construct.args[index + 1].node);
-			auto res = [&]() -> Result<void>{
+			auto res = [&]() -> Result<void> {
 				if (ty->kind == Type::INTEGER_TY && ty->integer.width == 64) {
 					auto result_ = eval<uint64_t>(first(&candidate_node));
 					if (!result_) {
@@ -244,7 +238,7 @@ namespace vuk {
 				}
 				return { expected_value };
 			}();
-			if(!res) {
+			if (!res) {
 				(void)res.error();
 				def.node->construct.args[index + 1] = current_module->make_extract(composite, index);
 			}

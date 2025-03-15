@@ -294,22 +294,7 @@ namespace vuk {
 		static constexpr uint8_t MAX_ARGS = 5;
 
 		enum class BinOp { ADD, SUB, MUL, DIV, MOD };
-		enum Kind {
-			PLACEHOLDER,
-			CONSTANT,
-			CONSTRUCT,
-			EXTRACT,
-			SLICE,
-			CONVERGE,
-			IMPORT,
-			CALL,
-			CLEAR,
-			SPLICE, // for joining subgraphs
-			ACQUIRE_NEXT_IMAGE,
-			CAST,
-			MATH_BINARY,
-			GARBAGE
-		} kind;
+		enum Kind { PLACEHOLDER, CONSTANT, CONSTRUCT, SLICE, CONVERGE, IMPORT, CALL, CLEAR, ACQUIRE, RELEASE, ACQUIRE_NEXT_IMAGE, CAST, MATH_BINARY, GARBAGE } kind;
 		uint8_t flag = 0;
 		std::span<std::shared_ptr<Type>> type;
 		NodeDebugInfo* debug_info = nullptr;
@@ -318,6 +303,8 @@ namespace vuk {
 		ExecutionInfo* execution_info = nullptr;
 		struct ScheduledItem* scheduled_item = nullptr;
 		size_t index;
+		AcquireRelease* rel_acq = nullptr;
+		bool held = false;
 
 		template<uint8_t c>
 		struct Fixed {
@@ -327,6 +314,13 @@ namespace vuk {
 
 		struct Variable {
 			uint8_t arg_count = (uint8_t)~0u;
+		};
+
+		enum NamedAxis : uint8_t {
+			FIELD = 254,
+			MIP = 253,
+			LAYER = 252,
+			COMPONENT = 251,
 		};
 
 		union {
@@ -349,12 +343,11 @@ namespace vuk {
 				Ref composite;
 				Ref index;
 			} extract;
-			struct : Fixed<5> {
-				Ref image;
-				Ref base_level;
-				Ref level_count;
-				Ref base_layer;
-				Ref layer_count;
+			struct : Fixed<3> {
+				Ref src;
+				Ref start;
+				Ref count;
+				uint8_t axis;
 			} slice;
 			struct : Fixed<0> {
 				void* value;
@@ -368,8 +361,6 @@ namespace vuk {
 			} clear;
 			struct : Variable {
 				std::span<Ref> diverged;
-				std::span<bool> write;
-				Subrange::Image range;
 			} converge;
 			struct : Fixed<3> {
 				const Ref source_ms;
@@ -384,14 +375,14 @@ namespace vuk {
 				const Ref dst;
 				Signal* signal;
 			} wait;
+			struct : Fixed<0> {
+				std::span<void*> values;
+			} acquire;
 			struct : Variable {
 				std::span<Ref> src;
-				AcquireRelease* rel_acq;
-				std::span<void*> values;
 				Access dst_access;
 				DomainFlagBits dst_domain;
-				bool held = true;
-			} splice;
+			} release;
 			struct : Fixed<1> {
 				Ref swapchain;
 			} acquire_next_image;
@@ -416,7 +407,7 @@ namespace vuk {
 			} variable_node;
 		};
 
-		std::string_view kind_to_sv() const {
+		static std::string_view kind_to_sv(Node::Kind kind) {
 			switch (kind) {
 			case PLACEHOLDER:
 				return "placeholder";
@@ -430,10 +421,6 @@ namespace vuk {
 				return "acquire_next_image";
 			case CALL:
 				return "call";
-			case EXTRACT:
-				return "extract";
-			case SPLICE:
-				return "splice";
 			case MATH_BINARY:
 				return "math_b";
 			case SLICE:
@@ -446,6 +433,10 @@ namespace vuk {
 				return "cast";
 			case GARBAGE:
 				return "garbage";
+			case RELEASE:
+				return "release";
+			case ACQUIRE:
+				return "acquire";
 			}
 			assert(0);
 			return "";
@@ -511,15 +502,9 @@ namespace vuk {
 		case Node::CONSTRUCT:
 		case Node::CONSTANT:
 		case Node::ACQUIRE_NEXT_IMAGE:
-		case Node::SLICE:
 			return { expected_value, RefOrValue::from_ref(ref) };
-		case Node::SPLICE: {
-			if (ref.node->splice.rel_acq == nullptr || ref.node->splice.rel_acq->status == Signal::Status::eDisarmed || ref.node->splice.src.size() > ref.index) {
-				return get_def(ref.node->splice.src[ref.index]);
-			} else {
-				return { expected_value, RefOrValue::from_value(ref.node->splice.values[ref.index]) };
-			}
-		}
+		case Node::ACQUIRE:
+			return { expected_value, RefOrValue::from_value(ref.node->acquire.values[ref.index]) };
 		case Node::CALL: {
 			auto t = ref.type();
 			if (t->kind != Type::ALIASED_TY) {
@@ -527,8 +512,8 @@ namespace vuk {
 			}
 			return get_def(ref.node->call.args[t->aliased.ref_idx]);
 		}
-		case Node::EXTRACT: {
-			auto composite = get_def(ref.node->extract.composite);
+		case Node::SLICE: {
+			auto composite = get_def(ref.node->slice.src);
 			return composite;
 		}
 		default:
@@ -621,14 +606,9 @@ namespace vuk {
 		}
 		case Node::CONSTRUCT:
 		case Node::ACQUIRE_NEXT_IMAGE:
-		case Node::SLICE:
 			return { expected_value, RefOrValue::from_ref(ref) };
-		case Node::SPLICE:
-			if (!ref.node->splice.rel_acq || ref.node->splice.rel_acq->status == Signal::Status::eDisarmed) {
-				return eval2(ref.node->splice.src[ref.index]);
-			} else {
-				return { expected_value, RefOrValue::from_value(ref.node->splice.values[ref.index]) };
-			}
+		case Node::ACQUIRE:
+			return { expected_value, RefOrValue::from_value(ref.node->acquire.values[ref.index]) };
 		case Node::CALL: {
 			auto t = ref.type();
 			if (t->kind != Type::ALIASED_TY) {
@@ -661,13 +641,13 @@ namespace vuk {
 			return { expected_value, RefOrValue::adopt_value(eval_binop(math_binary.op, ref.type(), a, b)) };
 
 		} break;
-		case Node::EXTRACT: {
-			auto composite_ = eval2(ref.node->extract.composite);
+		case Node::SLICE: {
+			auto composite_ = eval2(ref.node->slice.src);
 			if (!composite_) {
 				return composite_;
 			}
 			auto composite = *composite_;
-			auto index_ = eval2(ref.node->extract.index);
+			auto index_ = eval2(ref.node->slice.start);
 			if (!index_) {
 				return index_;
 			}
@@ -699,7 +679,7 @@ namespace vuk {
 						return { expected_error, CannotBeConstantEvaluated{ ref } };
 					}
 				} else if (composite.ref.node->kind == Node::SLICE) {
-					auto slice_def_ = get_def(composite.ref.node->slice.image);
+					auto slice_def_ = get_def(composite.ref.node->slice.src);
 					if (!slice_def_) {
 						return slice_def_;
 					}
@@ -788,18 +768,18 @@ namespace vuk {
 			assert(0);
 		}
 
-		case Node::EXTRACT: {
+		case Node::SLICE: {
 			auto composite_ = get_def(ref);
 			if (!composite_) {
 				return composite_;
 			}
 			auto composite = *composite_;
-			auto index_ = eval<uint64_t>(ref.node->extract.index);
+			auto index_ = eval<uint64_t>(ref.node->slice.start);
 			if (!index_) {
 				return index_;
 			}
 			auto index = *index_;
-			auto type = ref.node->extract.composite.type();
+			auto type = ref.node->slice.src.type();
 			if (composite.is_ref) {
 				if (composite.ref.node->kind == Node::CONSTRUCT) {
 					return eval<T>(composite.ref.node->construct.args[index + 1]);
@@ -821,7 +801,7 @@ namespace vuk {
 						return { expected_error, CannotBeConstantEvaluated{ ref } };
 					}
 				} else if (composite.ref.node->kind == Node::SLICE) {
-					auto slice_def_ = get_def(composite.ref.node->slice.image);
+					auto slice_def_ = get_def(composite.ref.node->slice.src);
 					if (!slice_def_) {
 						return slice_def_;
 					}
@@ -861,15 +841,10 @@ namespace vuk {
 		case Node::CONSTANT: {
 			return { expected_value, static_cast<T>(ref.node->constant.value) };
 		}
+		case Node::ACQUIRE:
+			return { expected_value, static_cast<T>(ref.node->acquire.values[ref.index]) };
 		case Node::CONSTRUCT: {
 			return eval<T>(ref.node->construct.args[0]);
-		}
-		case Node::SPLICE: {
-			if (!ref.node->splice.rel_acq || (ref.node->splice.rel_acq->status == Signal::Status::eDisarmed)) {
-				return eval<T>(ref.node->splice.src[ref.index]);
-			} else {
-				return { expected_value, static_cast<T>(ref.node->splice.values[ref.index]) };
-			}
 		}
 		case Node::ACQUIRE_NEXT_IMAGE: {
 			Swapchain* swp = **eval<Swapchain**>(ref.node->acquire_next_image.swapchain);
@@ -893,29 +868,29 @@ namespace vuk {
 			return {};
 		}
 		switch (def.node->kind) {
+		case Node::CONSTANT:
 		case Node::CONSTRUCT:
-		case Node::SPLICE:
+		case Node::ACQUIRE:
 		case Node::ACQUIRE_NEXT_IMAGE:
 			return def;
-		case Node::EXTRACT: {
-			auto compdef_ = get_def2(def.node->extract.composite);
+		case Node::SLICE: {
+			auto compdef_ = get_def2(def.node->slice.src);
 			if (!compdef_) {
 				return {};
 			}
 			auto compdef = *compdef_;
-			auto index = *eval<uint64_t>(def.node->extract.index);
+			auto index = *eval<uint64_t>(def.node->slice.start);
 
 			switch (compdef.node->kind) {
 			case Node::CONSTRUCT:
 				return get_def2(compdef.node->construct.args[index + 1]);
-			case Node::SPLICE:
+			case Node::ACQUIRE:
+			case Node::CONSTANT:
 				return compdef;
 			default:
 				VUK_UNREACHABLE("invalid node kind");
 			}
 		}
-		case Node::SLICE:
-			return get_def2(def.node->slice.image);
 		case Node::CALL:
 			if (def.type()->kind == Type::ALIASED_TY) {
 				return get_def2(def.node->call.args[def.type()->aliased.ref_idx]);
@@ -938,26 +913,7 @@ namespace vuk {
 		auto def = link->def;
 		switch (def.node->kind) {
 		case Node::CONSTRUCT:
-		case Node::SPLICE:
 		case Node::ACQUIRE_NEXT_IMAGE:
-			return def;
-		case Node::EXTRACT: {
-			auto compdef_ = get_def2(def.node->extract.composite);
-			if (!compdef_) {
-				return {};
-			}
-			auto compdef = *compdef_;
-			auto index = *eval<uint64_t>(def.node->extract.index);
-
-			switch (compdef.node->kind) {
-			case Node::CONSTRUCT:
-				return get_def2(compdef.node->construct.args[index + 1]);
-			case Node::SPLICE:
-				return compdef;
-			default:
-				VUK_UNREACHABLE("invalid node kind");
-			}
-		}
 		case Node::SLICE:
 			return def;
 		default:
@@ -1372,6 +1328,14 @@ namespace vuk {
 					std::destroy_at<SamplerCreateInfo>((SamplerCreateInfo*)v);
 				} else if (t->hash_value == builtin_swapchain) {
 					std::destroy_at<Swapchain*>((Swapchain**)v);
+				} else if (t->kind == Type::INTEGER_TY) {
+					// nothing to do
+				} else if (t->kind == Type::MEMORY_TY) {
+					// nothing to do
+				} else if (t->kind == Type::IMBUED_TY) {
+					destroy(t->imbued.T->get(), v);
+				} else if (t->kind == Type::ALIASED_TY) {
+					destroy(t->aliased.T->get(), v);
 				} else if (t->kind == Type::ARRAY_TY) {
 					// currently arrays don't own their values
 					/* auto cv = (char*)v;
@@ -1424,6 +1388,7 @@ namespace vuk {
 		}
 
 		std::optional<plf::colony<Node>::iterator> destroy_node(Node* node) {
+			delete node->rel_acq;
 			switch (node->kind) {
 			case Node::CONSTANT: {
 				if (node->constant.owned) {
@@ -1431,17 +1396,12 @@ namespace vuk {
 				}
 				break;
 			}
-			case Node::CONVERGE: {
-				delete[] node->converge.write.data();
-				break;
-			}
-			case Node::SPLICE: {
-				for (auto i = 0; i < node->splice.values.size(); i++) {
-					auto& v = node->splice.values[i];
-					types.destroy(node->type[i].get(), v);
+			case Node::ACQUIRE: {
+				for (auto i = 0; i < node->acquire.values.size(); i++) {
+					auto& v = node->acquire.values[i];
+					types.destroy(Type::stripped(node->type[i]).get(), v);
 				}
-				delete node->splice.values.data();
-				delete node->splice.rel_acq;
+				delete node->acquire.values.data();
 				break;
 			}
 			default: // nothing extra to be done here
@@ -1616,45 +1576,50 @@ namespace vuk {
 		Ref make_extract(Ref composite, Ref index) {
 			auto stripped = Type::stripped(composite.type());
 			assert(stripped->kind == Type::ARRAY_TY);
-			auto ty = new std::shared_ptr<Type>[1]{ *stripped->array.T };
-			return first(emplace_op(Node{ .kind = Node::EXTRACT, .type = std::span{ ty, 1 }, .extract = { .composite = composite, .index = index } }));
+			auto ty = new std::shared_ptr<Type>[3]{ *stripped->array.T, stripped, stripped };
+			return first(emplace_op(Node{
+			    .kind = Node::SLICE, .type = std::span{ ty, 3 }, .slice = { .src = composite, .start = index, .count = make_constant<uint64_t>(1), .axis = 0 } }));
 		}
 
 		Ref make_extract(Ref composite, uint64_t index) {
-			auto ty = new std::shared_ptr<Type>[1];
+			auto ty = new std::shared_ptr<Type>[3];
 			auto stripped = Type::stripped(composite.type());
+			uint8_t axis = 0;
 			if (stripped->kind == Type::ARRAY_TY) {
-				*ty = *stripped->array.T;
+				ty[0] = *stripped->array.T;
 			} else if (stripped->kind == Type::COMPOSITE_TY) {
-				*ty = stripped->composite.types[index];
+				ty[0] = stripped->composite.types[index];
+				axis = Node::NamedAxis::FIELD;
+			} else {
+				assert(0);
 			}
-			return first(emplace_op(
-			    Node{ .kind = Node::EXTRACT, .type = std::span{ ty, 1 }, .extract = { .composite = composite, .index = make_constant<uint64_t>(index) } }));
+			ty[1] = ty[2] = stripped;
+			return first(emplace_op(Node{ .kind = Node::SLICE,
+			                              .type = std::span{ ty, 3 },
+			                              .slice = { .src = composite, .start = make_constant<uint64_t>(index), .count = make_constant<uint64_t>(1), .axis = axis } }));
 		}
 
-		Ref make_slice(Ref image, Ref base_level, Ref level_count, Ref base_layer, Ref layer_count) {
-			auto stripped = Type::stripped(image.type());
-			auto ty = new std::shared_ptr<Type>[2]{ stripped, stripped };
-			return first(emplace_op(
-			    Node{ .kind = Node::SLICE,
-			          .type = std::span{ ty, 2 },
-			          .slice = { .image = image, .base_level = base_level, .level_count = level_count, .base_layer = base_layer, .layer_count = layer_count } }));
+		Ref make_slice(Ref src, uint8_t axis, Ref base, Ref count) {
+			auto stripped = Type::stripped(src.type());
+			auto ty = new std::shared_ptr<Type>[3]{ stripped, stripped, stripped };
+			return first(emplace_op(Node{ .kind = Node::SLICE, .type = std::span{ ty, 3 }, .slice = { .src = src, .start = base, .count = count, .axis = axis } }));
+		}
+
+		Ref make_slice(std::shared_ptr<Type> type_ex, Ref src, uint8_t axis, Ref base, Ref count) {
+			auto ty = new std::shared_ptr<Type>[3]{ Type::stripped(type_ex), Type::stripped(src.type()), Type::stripped(src.type()) };
+			return first(emplace_op(Node{ .kind = Node::SLICE, .type = std::span{ ty, 3 }, .slice = { .src = src, .start = base, .count = count, .axis = axis } }));
 		}
 
 		// slice splits a range into two halves
 		// converge is essentially an unslice -> it returns back to before the slice was made
 		// since a slice source is always a single range, converge produces a single range too
-		Ref make_converge(std::span<Ref> deps, std::span<char> write) {
-			auto stripped = Type::stripped(deps[0].type());
+		Ref make_converge(std::shared_ptr<Type> type, std::span<Ref> deps) {
+			auto stripped = Type::stripped(type);
 			auto ty = new std::shared_ptr<Type>[1]{ stripped };
 
 			auto deps_ptr = new Ref[deps.size()];
 			std::copy(deps.begin(), deps.end(), deps_ptr);
-			auto rw_ptr = new bool[deps.size()];
-			std::copy(write.begin(), write.end(), rw_ptr);
-			return first(emplace_op(Node{ .kind = Node::CONVERGE,
-			                              .type = std::span{ ty, 1 },
-			                              .converge = { .diverged = std::span{ deps_ptr, deps.size() }, .write = std::span{ rw_ptr, deps.size() } } }));
+			return first(emplace_op(Node{ .kind = Node::CONVERGE, .type = std::span{ ty, 1 }, .converge = { .diverged = std::span{ deps_ptr, deps.size() } } }));
 		}
 
 		Ref make_cast(std::shared_ptr<Type> dst_type, Ref src) {
@@ -1699,27 +1664,13 @@ namespace vuk {
 			return emplace_op(n);
 		}
 
-		Node* make_splice(Node* src, AcquireRelease* acq_rel, Access dst_access = Access::eNone, DomainFlagBits dst_domain = DomainFlagBits::eAny) {
-			Ref* args_ptr = new Ref[src->type.size()];
-			auto tys = new std::shared_ptr<Type>[src->type.size()];
-			for (size_t i = 0; i < src->type.size(); i++) {
-				args_ptr[i] = Ref{ src, i };
-				tys[i] = Type::stripped(src->type[i]);
-			}
-			return emplace_op(
-			    Node{ .kind = Node::SPLICE,
-			          .type = std::span{ tys, src->type.size() },
-			          .splice = { .src = std::span{ args_ptr, src->type.size() }, .rel_acq = acq_rel, .dst_access = dst_access, .dst_domain = dst_domain } });
-		}
-
-		Ref make_ref_splice(Ref src, AcquireRelease* acq_rel, Access dst_access = Access::eNone, DomainFlagBits dst_domain = DomainFlagBits::eAny) {
+		Ref make_release(Ref src, Access dst_access = Access::eNone, DomainFlagBits dst_domain = DomainFlagBits::eAny) {
 			Ref* args_ptr = new Ref[1]{ src };
-			auto tys = new std::shared_ptr<Type>[1]{ src.type() };
-			return first(emplace_op(Node{ .kind = Node::SPLICE,
+			auto tys = new std::shared_ptr<Type>[1]{ Type::stripped(src.type()) };
+			return first(emplace_op(Node{ .kind = Node::RELEASE,
 			                              .type = std::span{ tys, 1 },
-			                              .splice = { .src = std::span{ args_ptr, 1 }, .rel_acq = acq_rel, .dst_access = dst_access, .dst_domain = dst_domain } }));
+			                              .release = { .src = std::span{ args_ptr, 1 }, .dst_access = dst_access, .dst_domain = dst_domain } }));
 		}
-
 		template<class T>
 		Ref acquire(std::shared_ptr<Type> type, AcquireRelease* acq_rel, T value) {
 			auto val_ptr = new T(value);
@@ -1729,10 +1680,11 @@ namespace vuk {
 
 			// spelling this out due to clang bug
 			Node node{};
-			node.kind = Node::SPLICE;
+			node.kind = Node::ACQUIRE;
 			node.type = std::span{ tys, 1 };
-			node.splice.rel_acq = acq_rel;
-			node.splice.values = std::span{ vals, 1 };
+			node.rel_acq = acq_rel;
+			node.acquire = {};
+			node.acquire.values = std::span{ vals, 1 };
 			return first(emplace_op(std::move(node)));
 		}
 
@@ -1756,24 +1708,24 @@ namespace vuk {
 	inline thread_local std::shared_ptr<IRModule> current_module = std::make_shared<IRModule>();
 
 	struct ExtNode {
-		ExtNode(Node* node) {
+		ExtNode(Node* node) : node(node) {
 			acqrel = new AcquireRelease;
-			this->node = current_module->make_splice(node, acqrel);
-			this->node->splice.held = true;
+			node->rel_acq = acqrel;
+			this->node->held = true;
 			source_module = current_module;
 		}
 
-		ExtNode(Node* node, std::vector<std::shared_ptr<ExtNode>> deps) : deps(std::move(deps)) {
+		ExtNode(Node* node, std::vector<std::shared_ptr<ExtNode>> deps) : node(node), deps(std::move(deps)) {
 			acqrel = new AcquireRelease;
-			this->node = current_module->make_splice(node, acqrel);
-			this->node->splice.held = true;
+			node->rel_acq = acqrel;
+			this->node->held = true;
 			source_module = current_module;
 		}
 
-		ExtNode(Node* node, std::shared_ptr<ExtNode> dep) {
+		ExtNode(Node* node, std::shared_ptr<ExtNode> dep) : node(node) {
 			acqrel = new AcquireRelease;
-			this->node = current_module->make_splice(node, acqrel);
-			this->node->splice.held = true;
+			node->rel_acq = acqrel;
+			this->node->held = true;
 			deps.push_back(std::move(dep));
 
 			source_module = current_module;
@@ -1781,17 +1733,9 @@ namespace vuk {
 
 		ExtNode(Ref ref, std::shared_ptr<ExtNode> dep, Access access = Access::eNone, DomainFlagBits domain = DomainFlagBits::eAny) {
 			acqrel = new AcquireRelease;
-			this->node = current_module->make_ref_splice(ref, acqrel, access, domain).node;
-			this->node->splice.held = true;
-			deps.push_back(std::move(dep));
-
-			source_module = current_module;
-		}
-		// for releases
-		ExtNode(Node* node, std::shared_ptr<ExtNode> dep, Access access, DomainFlagBits domain) {
-			acqrel = new AcquireRelease;
-			this->node = current_module->make_splice(node, acqrel, access, domain);
-			this->node->splice.held = true;
+			this->node = current_module->make_release(ref, access, domain).node;
+			node->rel_acq = acqrel;
+			this->node->held = true;
 			deps.push_back(std::move(dep));
 
 			source_module = current_module;
@@ -1799,23 +1743,19 @@ namespace vuk {
 
 		// for acquires - adopt the node
 		ExtNode(Node* node, ResourceUse use) : node(node) {
-			assert(node->kind == Node::SPLICE);
-
 			acqrel = new AcquireRelease;
 			acqrel->status = Signal::Status::eHostAvailable;
 			acqrel->last_use.resize(1);
 			acqrel->last_use[0] = use;
 
-			node->splice.rel_acq = acqrel;
-			this->node->splice.held = true;
+			node->rel_acq = acqrel;
+			this->node->held = true;
 			source_module = current_module;
 		}
 
 		~ExtNode() {
 			if (acqrel) {
-				assert(node->kind == Node::SPLICE);
-
-				node->splice.held = false;
+				node->held = false;
 			}
 		}
 
@@ -1823,15 +1763,13 @@ namespace vuk {
 		ExtNode& operator=(ExtNode&& o) = delete;
 
 		Node* get_node() {
-			assert(node->kind == Node::SPLICE);
 			return node;
 		}
 
 		void mutate(Node* new_node) {
-			current_module->garbage.push_back(node);
-			assert(node->kind == Node::SPLICE);
-			node->splice.rel_acq = nullptr;
-			node = current_module->make_splice(new_node, acqrel);
+			node->held = false;
+			node = new_node;
+			new_node->held = true;
 		}
 
 		AcquireRelease* acqrel;

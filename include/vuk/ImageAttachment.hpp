@@ -207,6 +207,21 @@ namespace vuk {
 		} buffer;
 	};
 
+	struct Range {
+		static constexpr uint64_t REMAINING = (~0ULL);
+
+		uint64_t offset = 0;
+		uint64_t count = REMAINING;
+
+		constexpr bool operator==(const Range& o) const noexcept {
+			return offset == o.offset && count == o.count;
+		}
+
+		constexpr bool operator<=(const Range& o) const noexcept {
+			return offset >= o.offset && (offset + count) <= (o.offset + o.count);
+		}
+	};
+
 	// high level type around binding a sampled image with a sampler
 	struct SampledImage {
 		ImageAttachment ia;

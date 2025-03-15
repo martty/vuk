@@ -7,6 +7,7 @@ namespace vuk {
 		Allocator alloc;
 		Executor* executor = nullptr;
 		DomainFlagBits domain;
+		std::vector<Node*> current_submit;
 		std::vector<Stream*> dependencies;
 		std::vector<Signal*> dependent_signals;
 

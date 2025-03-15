@@ -17,7 +17,7 @@ namespace vuk {
 			if (node->acqrel->status == Signal::Status::eHostAvailable || node->acqrel->status == Signal::Status::eSynchronizable) {
 				// nothing to do
 			} else {
-				if (node->get_node()->splice.dst_access == Access::eNone && node->get_node()->splice.dst_domain == DomainFlagBits::eAny) {
+				if (node->get_node()->kind != Node::RELEASE) {
 					value.release();
 				}
 				extnodes.push_back(node);

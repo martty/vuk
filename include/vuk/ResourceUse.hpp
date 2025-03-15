@@ -1,5 +1,6 @@
 #pragma once
 
+#include "vuk/SyncPoint.hpp"
 #include "vuk/Types.hpp"
 #include "vuk/runtime/vk/VkTypes.hpp" // TODO: leaking vk
 
@@ -14,12 +15,5 @@ namespace vuk {
 
 	struct StreamResourceUse : ResourceUse {
 		struct Stream* stream;
-	};
-
-	struct Acquire {
-		ResourceUse src_use;
-		DomainFlagBits initial_domain = DomainFlagBits::eAny;
-		uint64_t initial_visibility;
-		bool unsynchronized = false;
 	};
 } // namespace vuk

@@ -106,6 +106,29 @@ TEST_CASE("buffer size with inference with math") {
 	CHECK(std::span((uint32_t*)res->mapped_ptr, 3) == std::span(data));
 }
 
+
+TEST_CASE("extract-convergence use") {
+	auto data = { 1u, 2u, 3u };
+	auto [b0, buf0] = create_buffer(*test_context.allocator, MemoryUsage::eGPUonly, DomainFlagBits::eAny, std::span(data));
+	auto buf1 = declare_buf("b1");
+	buf1->memory_usage = MemoryUsage::eGPUonly;
+	buf1.same_size(buf0);
+	auto buf2 = declare_buf("b2");
+	buf2->memory_usage = MemoryUsage::eGPUonly;
+	auto size = buf2.get_size();
+	buf2.same_size(buf1);
+	auto buf3 = declare_buf("b3");
+	copy(buf2, buf1);
+	buf3.set_size(size * 2);
+	buf3->memory_usage = MemoryUsage::eGPUonly;
+
+	auto data2 = { 1u, 2u, 3u, 4u, 5u, 6u };
+	auto [b4, buf4] = create_buffer(*test_context.allocator, MemoryUsage::eGPUonly, DomainFlagBits::eAny, std::span(data2));
+
+	auto res = download_buffer(copy(std::move(buf4), std::move(buf3))).get(*test_context.allocator, test_context.compiler);
+	CHECK(std::span((uint32_t*)res->mapped_ptr, 3) == std::span(data));
+}
+
 TEST_CASE("lift compute") {
 	auto data = { 1u, 2u, 3u };
 	auto [b0, buf0] = create_buffer(*test_context.allocator, MemoryUsage::eGPUonly, DomainFlagBits::eAny, std::span(data));

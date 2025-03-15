@@ -78,7 +78,7 @@ TEST_CASE("graph is cleaned up after submit") {
 
 	current_module->collect_garbage();
 	for (auto& op : current_module->op_arena) {
-		fmt::println("{}", op.kind_to_sv());
+		fmt::println("{}, held: {}", Node::kind_to_sv(op.kind), op.held);
 	}
 #ifndef VUK_GARBAGE_SAN
 	CHECK(current_module->op_arena.size() == 2);
@@ -356,7 +356,8 @@ TEST_CASE("multi-queue buffers") {
 	}
 	{
 #ifndef VUK_GARBAGE_SAN
-		CHECK(current_module->op_arena.size() == 3);
+		current_module->collect_garbage();
+		CHECK(current_module->op_arena.size() == 0);
 #endif
 		auto written = write(discard_buf("src0", **buf0));
 		written.wait(*test_context.allocator, test_context.compiler);
@@ -366,7 +367,8 @@ TEST_CASE("multi-queue buffers") {
 	}
 	{
 #ifndef VUK_GARBAGE_SAN
-		CHECK(current_module->op_arena.size() == 3);
+		current_module->collect_garbage();
+		CHECK(current_module->op_arena.size() == 0);
 #endif
 		auto written = write(discard_buf("src0", **buf0));
 		written.wait(*test_context.allocator, test_context.compiler);
@@ -376,7 +378,8 @@ TEST_CASE("multi-queue buffers") {
 	}
 	{
 #ifndef VUK_GARBAGE_SAN
-		// CHECK(current_module->op_arena.size() == 3);
+		current_module->collect_garbage();
+		CHECK(current_module->op_arena.size() == 0);
 #endif
 		auto written = write(discard_buf("src0", **buf0));
 		read(written).wait(*test_context.allocator, test_context.compiler);
@@ -385,7 +388,8 @@ TEST_CASE("multi-queue buffers") {
 	}
 	{
 #ifndef VUK_GARBAGE_SAN
-		// CHECK(current_module->op_arena.size() == 3);
+		current_module->collect_garbage();
+		CHECK(current_module->op_arena.size() == 0);
 #endif
 		auto written = write(discard_buf("src0", **buf0));
 		read(std::move(written)).wait(*test_context.allocator, test_context.compiler);
@@ -394,7 +398,8 @@ TEST_CASE("multi-queue buffers") {
 	}
 	{
 #ifndef VUK_GARBAGE_SAN
-		// CHECK(current_module->op_arena.size() == 1);
+		current_module->collect_garbage();
+		CHECK(current_module->op_arena.size() == 0);
 #endif
 		auto written = write(discard_buf("src0", **buf0));
 		write2(read(std::move(written))).wait(*test_context.allocator, test_context.compiler);
@@ -485,4 +490,15 @@ TEST_CASE("multi fn calls") {
 	});
 
 	p(p(discard_buf("src0", **buf0))).get(*test_context.allocator, test_context.compiler);
+}
+
+TEST_CASE("release sync") {
+	auto data = { 1u, 2u, 3u, 4u };
+	auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, Samples::e1);
+	ia.level_count = 1;
+	auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data));
+
+	auto i2 = fut.as_released(Access::eFragmentSampled, DomainFlagBits::eGraphicsQueue).get(*test_context.allocator, test_context.compiler);
+
+	CHECK(i2->layout == ImageLayout::eReadOnlyOptimalKHR);
 }

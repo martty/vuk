@@ -75,19 +75,10 @@ namespace vuk {
 				it = op_arena.erase(it);
 				continue;
 			}
-			if (node->kind == Node::SPLICE) {
-				// dropped splices not in the initial set
-				if (!node->splice.held) {
-					++it;
-					continue;
-				}
-			}
-			if (node->index < (module_id << 32 | link_frontier)) {
-				if (node->kind != Node::SPLICE) { // non-splice nodes before the link frontier are not in the initial set
-					++it;
-					continue;
-				}
-				// splice nodes that are not potential garbage are in the initial set even before the link frontier
+			// nodes which have been linked before and are no longer held can be dropped from the initial set
+			if (node->index < (module_id << 32 | link_frontier) && !node->held) {
+				++it;
+				continue;
 			}
 			// everything else is in the initial set
 			node->flag = ALIVE;
@@ -279,135 +270,97 @@ namespace vuk {
 		}
 	}
 
-	void collect_tails(Ref head, std::pmr::vector<Ref>& tails, std::pmr::vector<Ref>& pass_reads) {
-		auto link = &head.link();
+	struct NodeContext {
+		IRModule* module;
+		std::pmr::vector<Ref>& pass_reads;
+		std::pmr::vector<ChainLink*>& child_chains;
+		std::pmr::vector<Node*>& new_nodes;
+		std::pmr::polymorphic_allocator<std::byte> allocator;
+		bool do_ssa;
 
-		if (link->next) {
-			do {
-				if (link->undef && link->undef.node->kind == Node::SLICE) {
-					collect_tails(nth(link->undef.node, 0), tails, pass_reads);
-					collect_tails(nth(link->undef.node, 1), tails, pass_reads);
-				}
-				link = link->next;
-			} while (link->next);
-		}
+		void collect_tails(Ref head, std::pmr::vector<Ref>& tails) {
+			auto link = &head.link();
 
-		if (link->undef && link->undef.node->kind == Node::SLICE) {
-			collect_tails(nth(link->undef.node, 0), tails, pass_reads);
-			collect_tails(nth(link->undef.node, 1), tails, pass_reads);
-		} else if (link->undef) {
-			tails.push_back(link->undef); // TODO: RREF
-		} else if (link->reads.size() > 0) {
-			for (auto read : link->reads.to_span(pass_reads)) {
-				tails.push_back(read);
+			if (link->next) {
+				do {
+					if (link->undef && link->undef.node->kind == Node::SLICE) {
+						collect_tails(nth(link->undef.node, 0), tails);
+						collect_tails(nth(link->undef.node, 1), tails);
+					}
+					link = link->next;
+				} while (link->next);
 			}
-		} else if (link->def.node->kind != Node::SLICE) {
-			tails.push_back(link->def);
-		}
-	}
 
-	void RGCImpl::process_node_links(IRModule* module,
-	                                 Node* node,
-	                                 std::pmr::vector<Ref>& pass_reads,
-	                                 std::pmr::vector<Ref>& pass_nops,
-	                                 std::pmr::vector<ChainLink*>& child_chains,
-	                                 std::pmr::vector<Node*>& new_nodes,
-	                                 std::pmr::polymorphic_allocator<std::byte> allocator,
-	                                 bool do_ssa) {
-		auto walk_writes = [&](Ref parm, Subrange::Image requested) -> Ref {
+			if (link->undef && link->undef.node->kind == Node::SLICE) {
+				collect_tails(nth(link->undef.node, 0), tails);
+				collect_tails(nth(link->undef.node, 1), tails);
+			} else if (link->undef) { // this is only an exec dep?
+				tails.push_back(Ref{ link->undef.node, 0 });
+			} else if (link->reads.size() > 0) { // this is only an exec dep?
+				for (auto read : link->reads.to_span(pass_reads)) {
+					tails.push_back(Ref{ read.node, 0 });
+				}
+			} else if (link->def.node->kind != Node::SLICE) {
+				tails.push_back(link->def);
+			}
+		}
+
+		Ref walk_writes(Node* node, Ref parm) {
 			auto link = &parm.link();
 			Ref last_write;
 
-			MultiSubrange current_range = MultiSubrange::all();
-
 			do {
-				if (link->undef && link->undef.node->kind == Node::SLICE) {
-					auto& slice = link->undef.node->slice;
-					// TODO: support const eval here
-					Subrange::Image existing_slice_range = { constant<uint32_t>(slice.base_level),
-						                                       constant<uint32_t>(slice.level_count),
-						                                       constant<uint32_t>(slice.base_layer),
-						                                       constant<uint32_t>(slice.layer_count) };
-					auto left = current_range.set_intersect(existing_slice_range);
-					if (auto isection = left.set_intersect(requested)) {        // requested range overlaps with split -> we might need to converge
-						if (!MultiSubrange(requested).set_difference(isection)) { // if fully contained in the left -> no converge needed
-							link = &nth(link->undef.node, 0).link();
-							current_range = left;
-						} else { // requested range is partially in left and in right -> converge needed of the tails
-							std::pmr::vector<Ref> tails;
-							// walk left and walk right
-							collect_tails(nth(link->undef.node, 0), tails, pass_reads);
-							collect_tails(nth(link->undef.node, 1), tails, pass_reads);
-							std::pmr::vector<char> ws(tails.size(), true);
-
-							last_write = module->make_converge(tails, ws);
-							last_write.node->index = node->index - 1;
-							allocate_node_links(last_write.node, allocator);
-							link->undef = last_write;
-							link->next = &last_write.link();
-							last_write.link().prev = link;
-							last_write.link().def = last_write;
-							new_nodes.push_back(last_write.node);
-							break;
-						}
-					} else { // requested range is fully contained in rest, switch to rest
-						link = &nth(link->undef.node, 1).link();
-						auto right = current_range.set_difference(left);
-						current_range = right;
-					}
-				} else if (link->undef && link->undef.node->kind == Node::CONVERGE) {
-					// TODO: this does not support walking converges properly yet!
-					current_range = MultiSubrange::all();
-				}
 				if (link->next) {
 					link = link->next;
 				}
-			} while (link->next || link->child_chains.size() > 0);
+			} while (link->next);
 
-			if (!last_write.node) {
-				assert(!link->undef);
+			if (link->undef) {
+				// this was consumed by a slice S
+				// if we are a slice S' ourselves, we might get to elide a convergence if
+				// 1. the cut introduced by slice S' is contained in the cut introduced by slice S (shrinking)
+				// 2. the cut introduced by slice S' is equal to the cut introduced by slice S (identity)
+				// 3. the cut introduced by slice S' is contained by S^ \ S (shrinking the remainder)
+				if (link->undef.node->kind == Node::SLICE) {
+					auto& slice_node = link->undef.node;
+					if (node->kind == Node::SLICE) {
+						auto scope_S = Cut{ slice_node->slice.axis, *eval<uint64_t>(slice_node->slice.start), *eval<uint64_t>(slice_node->slice.count) };
+						auto scope_Sp = Cut{ node->slice.axis, *eval<uint64_t>(node->slice.start), *eval<uint64_t>(node->slice.count) };
+
+						if (scope_Sp.shrinks(scope_S)) { // cases 1 and 2, we can elide the convergence
+							node->slice.start = current_module->make_constant<uint64_t>(scope_Sp.range.offset - scope_S.range.offset);
+							node->slice.count = current_module->make_constant<uint64_t>(scope_Sp.range.count);
+							return walk_writes(node, nth(slice_node, 0));
+						} else if (!scope_Sp.intersects(scope_S)) { // case 3, we can elide the convergence
+							return walk_writes(node, nth(slice_node, 1));
+						}
+					}
+					std::array tails{ nth(slice_node, 2), nth(slice_node, 0), nth(slice_node, 1) };
+					last_write = module->make_converge(slice_node->slice.src.type(), tails);
+					last_write.node->index = node->index;
+					allocate_node_links(last_write.node, allocator);
+					process_node_links(last_write.node);
+					new_nodes.push_back(last_write.node);
+					// this was consumed by a converge - this means we need to replicate the slice
+				} else if (link->undef.node->kind == Node::CONVERGE) {
+					last_write = module->make_slice(parm.node->type[0], first(link->undef.node), parm.node->slice.axis, parm.node->slice.start, parm.node->slice.count);
+					last_write.node->index = node->index;
+					allocate_node_links(last_write.node, allocator);
+					process_node_links(last_write.node);
+					new_nodes.push_back(last_write.node);
+				}
+			} else {
 				last_write = link->def;
 			}
 
 			return last_write;
 		};
 
-		auto add_breaking_result = [&](Node* node, size_t output_idx) {
-			Ref out = Ref{ node, output_idx };
-			out.link().def = { node, output_idx };
-		};
-
-		auto add_result = [&](Node* node, size_t output_idx, Ref parm) {
-			Ref out = Ref{ node, output_idx };
-			out.link().def = { node, output_idx };
-
-			bool see_through_splice = parm.node->kind == Node::SPLICE && parm.node->splice.dst_access == Access::eNone &&
-			                          parm.node->splice.dst_domain == DomainFlagBits::eAny &&
-			                          (!parm.node->splice.rel_acq || parm.node->splice.rel_acq->status == Signal::Status::eDisarmed);
-			auto& st_parm = see_through_splice ? parm.node->splice.src[parm.index] : parm;
+		void add_write(Node* node, Ref& parm, size_t index) {
+			VUK_ICE(parm.node->kind != Node::GARBAGE);
+			auto& st_parm = parm;
 			if (!st_parm.node->links) {
-				assert(do_ssa);
-				return;
-			}
-
-			auto link = &st_parm.link();
-			auto& prev = out.link().prev;
-			if (!do_ssa) {
-				VUK_ICE(!link->next);
-				assert(!prev);
-			}
-			link->next = &out.link();
-			prev = link;
-		};
-
-		auto add_write = [&](Node* node, Ref& parm, size_t index, Subrange::Image requested = {}) -> void {
-			assert(parm.node->kind != Node::GARBAGE);
-			bool see_through_splice = parm.node->kind == Node::SPLICE && parm.node->splice.dst_access == Access::eNone &&
-			                          parm.node->splice.dst_domain == DomainFlagBits::eAny &&
-			                          (!parm.node->splice.rel_acq || parm.node->splice.rel_acq->status == Signal::Status::eDisarmed);
-			auto& st_parm = see_through_splice ? parm.node->splice.src[parm.index] : parm;
-			if (!st_parm.node->links) {
-				assert(do_ssa);
+				VUK_ICE(do_ssa);
 				// external node -> init
 				allocate_node_links(st_parm.node, allocator);
 				for (size_t i = 0; i < st_parm.node->type.size(); i++) {
@@ -416,27 +369,54 @@ namespace vuk {
 			}
 			auto link = &st_parm.link();
 			if (link->undef.node != nullptr) { // there is already a write -> do SSA rewrite
-				assert(do_ssa);
-				auto old_ref = link->undef;                 // this is an rref
-				assert(node->index >= old_ref.node->index); // we are after the existing write
+				VUK_ICE(do_ssa);
+				auto old_ref = link->undef;                  // this is an rref
+				VUK_ICE(node->index >= old_ref.node->index); // we are after the existing write
 
 				// attempt to find the final revision of this
 				// this could be either the last write on the main chain, or the last write on a child chain
-				auto last_write = walk_writes(see_through_splice ? parm.node->splice.src[parm.index] : parm, requested);
+				auto last_write = walk_writes(node, parm);
 				parm = last_write;
 				link = &parm.link();
 			}
 			link->undef = { node, index };
 		};
 
-		auto add_read = [&](Node* node, Ref& parm, size_t index) {
-			assert(parm.node->kind != Node::GARBAGE);
-			bool see_through_splice = parm.node->kind == Node::SPLICE && parm.node->splice.dst_access == Access::eNone &&
-			                          parm.node->splice.dst_domain == DomainFlagBits::eAny &&
-			                          (!parm.node->splice.rel_acq || parm.node->splice.rel_acq->status == Signal::Status::eDisarmed);
-			auto& st_parm = see_through_splice ? parm.node->splice.src[parm.index] : parm;
+		void add_breaking_result(Node* node, size_t output_idx) {
+			Ref out = Ref{ node, output_idx };
+			out.link().def = { node, output_idx };
+		};
+
+		void add_result(Node* node, size_t output_idx, Ref parm) {
+			if (!node->links) {
+				VUK_ICE(do_ssa);
+				// external node -> init
+				allocate_node_links(node, allocator);
+			}
+			Ref out = Ref{ node, output_idx };
+			out.link().def = { node, output_idx };
+
+			auto& st_parm = parm;
 			if (!st_parm.node->links) {
-				assert(do_ssa);
+				VUK_ICE(do_ssa);
+				return;
+			}
+
+			auto link = &st_parm.link();
+			auto& prev = out.link().prev;
+			if (!do_ssa) {
+				VUK_ICE(!link->next);
+				VUK_ICE(!prev);
+			}
+			link->next = &out.link();
+			prev = link;
+		};
+
+		void add_read(Node* node, Ref& parm, size_t index) {
+			VUK_ICE(parm.node->kind != Node::GARBAGE);
+			auto& st_parm = parm;
+			if (!st_parm.node->links) {
+				VUK_ICE(do_ssa);
 				// external node -> init
 				allocate_node_links(st_parm.node, allocator);
 				for (size_t i = 0; i < st_parm.node->type.size(); i++) {
@@ -445,187 +425,148 @@ namespace vuk {
 			}
 			auto link = &st_parm.link();
 			if (link->undef.node != nullptr && node->index > link->undef.node->index) { // there is already a write and it is earlier than us
-				assert(do_ssa);
-				auto last_write = walk_writes(see_through_splice ? parm.node->splice.src[parm.index] : parm, {});
+				VUK_ICE(do_ssa);
+				auto last_write = walk_writes(node, parm);
 				parm = last_write;
 				link = &parm.link();
 			}
 			link->reads.append(pass_reads, { node, index });
 		};
 
-		switch (node->kind) {
-		case Node::CONSTANT:
-		case Node::PLACEHOLDER:
-			break;
-		case Node::CONSTRUCT:
-			first(node).link().def = first(node);
+		void process_node_links(Node* node) {
+			switch (node->kind) {
+			case Node::CONSTANT:
+			case Node::PLACEHOLDER:
+				add_breaking_result(node, 0);
+				break;
+			case Node::CONSTRUCT:
+				first(node).link().def = first(node);
 
-			for (size_t i = 0; i < node->construct.args.size(); i++) {
-				auto& parm = node->construct.args[i];
-				if (node->type[0]->kind == Type::ARRAY_TY) {
-					add_write(node, parm, i);
-				} else {
-					add_read(node, parm, i);
-				}
-			}
-
-			if (node->type[0]->kind == Type::ARRAY_TY || node->type[0]->hash_value == current_module->types.builtin_sampled_image) {
-				for (size_t i = 1; i < node->construct.args.size(); i++) {
+				for (size_t i = 0; i < node->construct.args.size(); i++) {
 					auto& parm = node->construct.args[i];
-					bool see_through_splice = parm.node->kind == Node::SPLICE && parm.node->splice.dst_access == Access::eNone &&
-					                          parm.node->splice.dst_domain == DomainFlagBits::eAny &&
-					                          (!parm.node->splice.rel_acq || parm.node->splice.rel_acq->status == Signal::Status::eDisarmed);
-					auto& st_parm = see_through_splice ? parm.node->splice.src[parm.index] : parm;
-					st_parm.link().next = &first(node).link();
-				}
-			}
-
-			break;
-		case Node::MATH_BINARY:
-			add_read(node, node->math_binary.a, 0);
-			add_read(node, node->math_binary.b, 1);
-			add_breaking_result(node, 0);
-			break;
-		case Node::SPLICE: { // ~~ nop joiner
-			                   /*
-                 " results must be through splices "
-                 a -> splice
-			             -> b (r or w)
-                 must rewrite into
-                 a -> splice -> b
-			             
-                 " dependencies must not bypass splices "
-                 a -> splice -> b
-                 must not rewrite into
-                 a -> b
-			             
-                 splice -> a -> splice
-                 -> b
-                 must not rewrite into
-                 splice -> a -> splice -> b
-			                 */
-			for (size_t i = 0; i < node->type.size(); i++) {
-				if (!node->splice.rel_acq || (node->splice.rel_acq && node->splice.rel_acq->status == Signal::Status::eDisarmed)) {
-					if (node->splice.dst_access == Access::eNone && node->splice.dst_domain == DomainFlagBits::eAny) {
-						if (do_ssa) {
-							add_write(node, node->splice.src[i], i);
-							add_result(node, i, node->splice.src[i]);
-						} else {
-							node->splice.src[i].link().nops.append(pass_nops, { node, i });
-							Ref{ node, i }.link().def = { node, i };
-							Ref{ node, i }.link().prev = &node->splice.src[i].link();
-						}
-
-					} else { // releases are still writes...
-						add_write(node, node->splice.src[i], i);
-						add_result(node, i, node->splice.src[i]);
-					}
-				} else { // acquire
-					Ref{ node, i }.link().def = { node, i };
-				}
-			}
-			break;
-		}
-		case Node::CALL: {
-			// args
-			auto fn_type = node->call.args[0].type();
-			size_t first_parm = fn_type->kind == Type::OPAQUE_FN_TY ? 1 : 4;
-			auto& args = fn_type->kind == Type::OPAQUE_FN_TY ? fn_type->opaque_fn.args : fn_type->shader_fn.args;
-			for (size_t i = first_parm; i < node->call.args.size(); i++) {
-				auto& arg_ty = args[i - first_parm];
-				auto& parm = node->call.args[i];
-				// TODO: assert same type when imbuement is stripped
-				if (arg_ty->kind == Type::IMBUED_TY) {
-					auto access = arg_ty->imbued.access;
-					if (is_write_access(access)) { // Write and ReadWrite
+					if (node->type[0]->kind == Type::ARRAY_TY) {
 						add_write(node, parm, i);
-					}
-					if (!is_write_access(access)) { // Read and ReadWrite
+					} else {
 						add_read(node, parm, i);
 					}
-					auto& base = *arg_ty->imbued.T;
-					if (do_ssa && base->hash_value == current_module->types.builtin_image) {
-						auto def = get_def2(parm);
-						if (def && def->node->kind == Node::CONSTRUCT) {
-							auto& ia = *reinterpret_cast<ImageAttachment*>(def->node->construct.args[0].node->constant.value);
-							if (!ia.image) {
-								access_to_usage(ia.usage, access);
-							}
-						} else if (def && (def->node->kind == Node::SPLICE || def->node->kind == Node::ACQUIRE_NEXT_IMAGE)) { // nop
-						} else if (!def) {
-						} else {
-							assert(0);
+				}
+
+				if (node->type[0]->kind == Type::ARRAY_TY || node->type[0]->hash_value == current_module->types.builtin_sampled_image) {
+					for (size_t i = 1; i < node->construct.args.size(); i++) {
+						auto& parm = node->construct.args[i];
+						auto& st_parm = parm;
+						st_parm.link().next = &first(node).link();
+					}
+				}
+
+				break;
+			case Node::MATH_BINARY:
+				add_read(node, node->math_binary.a, 0);
+				add_read(node, node->math_binary.b, 1);
+				add_breaking_result(node, 0);
+				break;
+			case Node::CALL: {
+				// args
+				auto fn_type = node->call.args[0].type();
+				size_t first_parm = fn_type->kind == Type::OPAQUE_FN_TY ? 1 : 4;
+				auto& args = fn_type->kind == Type::OPAQUE_FN_TY ? fn_type->opaque_fn.args : fn_type->shader_fn.args;
+				for (size_t i = first_parm; i < node->call.args.size(); i++) {
+					auto& arg_ty = args[i - first_parm];
+					auto& parm = node->call.args[i];
+					// TODO: assert same type when imbuement is stripped
+					if (arg_ty->kind == Type::IMBUED_TY) {
+						auto access = arg_ty->imbued.access;
+						if (is_write_access(access)) { // Write and ReadWrite
+							add_write(node, parm, i);
 						}
-					}
-				} else {
-					assert(0);
-				}
-			}
-			size_t index = 0;
-			for (auto& ret_t : node->type) {
-				assert(ret_t->kind == Type::ALIASED_TY);
-				auto ref_idx = ret_t->aliased.ref_idx;
-				auto& arg_ty = args[ref_idx - first_parm];
-				if (arg_ty->kind == Type::IMBUED_TY) {
-					auto access = arg_ty->imbued.access;
-					if (is_write_access(access)) {
-						add_result(node, index, node->call.args[ref_idx]);
+						if (!is_write_access(access)) { // Read and ReadWrite
+							add_read(node, parm, i);
+						}
+						auto& base = *arg_ty->imbued.T;
+						if (do_ssa && base->hash_value == current_module->types.builtin_image) {
+							auto def = get_def2(parm);
+							if (def && def->node->kind == Node::CONSTRUCT) {
+								auto& ia = *reinterpret_cast<ImageAttachment*>(def->node->construct.args[0].node->constant.value);
+								if (!ia.image) {
+									access_to_usage(ia.usage, access);
+								}
+							} else if (def && (def->node->kind == Node::ACQUIRE_NEXT_IMAGE || def->node->kind == Node::ACQUIRE || def->node->kind == Node::CONSTANT)) { // nop
+							} else if (!def) {
+							} else {
+								assert(0);
+							}
+						}
 					} else {
-						Ref{ node, index }.link().def = { node, index };
-						Ref{ node, index }.link().prev = &node->call.args[ref_idx].link();
+						assert(0);
 					}
-				} else {
-					assert(0);
 				}
-				index++;
+				size_t index = 0;
+				for (auto& ret_t : node->type) {
+					assert(ret_t->kind == Type::ALIASED_TY);
+					auto ref_idx = ret_t->aliased.ref_idx;
+					auto& arg_ty = args[ref_idx - first_parm];
+					if (arg_ty->kind == Type::IMBUED_TY) {
+						auto access = arg_ty->imbued.access;
+						if (is_write_access(access)) {
+							add_result(node, index, node->call.args[ref_idx]);
+						} else {
+							Ref{ node, index }.link().def = { node, index };
+							Ref{ node, index }.link().prev = &node->call.args[ref_idx].link();
+						}
+					} else {
+						assert(0);
+					}
+					index++;
+				}
+				break;
 			}
-			break;
-		}
+			case Node::RELEASE:
+				for (size_t i = 0; i < node->release.src.size(); i++) {
+					add_write(node, node->release.src[i], i);
+					add_result(node, i, node->release.src[i]);
+				}
+				break;
+			case Node::ACQUIRE:
+				for (size_t i = 0; i < node->type.size(); i++) {
+					add_breaking_result(node, i);
+				}
+				break;
 
-		case Node::EXTRACT:
-			first(node).link().def = first(node);
-			break;
+			case Node::SLICE: {
+				add_write(node, node->slice.src, 0);
+				nth(node, 0).link().def = nth(node, 0); // we introduce the slice image def
+				nth(node, 1).link().def = nth(node, 1); // we introduce the rest image def
+				add_breaking_result(node, 2);
+				if (node->slice.src.node->links) {
+					node->slice.src.link().child_chains.append(child_chains, &nth(node, 0).link()); // add child chain for sliced
+				} else {
+					assert(do_ssa);
+				}
 
-		case Node::SLICE: {
-			Subrange::Image slice_range = { constant<uint32_t>(node->slice.base_level),
-				                              constant<uint32_t>(node->slice.level_count),
-				                              constant<uint32_t>(node->slice.base_layer),
-				                              constant<uint32_t>(node->slice.layer_count) };
-			add_write(node, node->slice.image, 0, slice_range);
-			nth(node, 0).link().def = nth(node, 0); // we introduce the slice image def
-			nth(node, 1).link().def = nth(node, 1); // we introduce the rest image def
-			if (node->slice.image.node->links) {
-				node->slice.image.link().child_chains.append(child_chains, &nth(node, 0).link()); // add child chain for sliced
-			} else {
-				assert(do_ssa);
+				break;
 			}
-
-			break;
-		}
-		case Node::CONVERGE:
-			for (size_t i = 0; i < node->converge.diverged.size(); i++) {
-				auto& parm = node->converge.diverged[i];
-				auto write = node->converge.write[i];
-				if (write) {
+			case Node::CONVERGE:
+				assert(node->converge.diverged[0].node->kind == Node::SLICE);
+				add_result(node->converge.diverged[0].node, 2, node->converge.diverged[0].node->slice.src);
+				add_result(node, 0, node->converge.diverged[0]);
+				for (size_t i = 1; i < node->converge.diverged.size(); i++) {
+					auto& parm = node->converge.diverged[i];
 					add_write(node, parm, i);
-				} else {
-					add_read(node, parm, i);
 				}
+				break;
+
+			case Node::ACQUIRE_NEXT_IMAGE:
+				first(node).link().def = first(node);
+				break;
+
+			case Node::GARBAGE:
+				break;
+
+			default:
+				assert(0);
 			}
-			add_result(node, 0, node->converge.diverged[0]);
-			break;
-
-		case Node::ACQUIRE_NEXT_IMAGE:
-			first(node).link().def = first(node);
-			break;
-
-		case Node::GARBAGE:
-			break;
-
-		default:
-			assert(0);
 		}
-	}
+	};
 
 	Result<void> RGCImpl::build_links(std::vector<Node*>& working_set, std::pmr::polymorphic_allocator<std::byte> allocator) {
 		pass_reads.clear();
@@ -645,24 +586,10 @@ namespace vuk {
 		}
 
 		std::pmr::vector<Node*> new_nodes;
-		for (auto& node : working_set) {
-			process_node_links(current_module.get(), node, pass_reads, pass_nops, child_chains, new_nodes, allocator, false);
-		}
+		NodeContext nc{ current_module.get(), pass_reads, child_chains, new_nodes, allocator, false };
 
-		// fixup splice links - they are bridged
 		for (auto& node : working_set) {
-			switch (node->kind) {
-			case Node::SPLICE: {
-				for (size_t i = 0; i < node->type.size(); i++) {
-					if (!node->splice.rel_acq || (node->splice.rel_acq && node->splice.rel_acq->status == Signal::Status::eDisarmed)) {
-						if (node->splice.dst_access == Access::eNone && node->splice.dst_domain == DomainFlagBits::eAny) {
-							Ref{ node, i }.link() = node->splice.src[i].link();
-						}
-					}
-				}
-			}
-			default:;
-			}
+			nc.process_node_links(node);
 		}
 
 		working_set.insert(working_set.end(), new_nodes.begin(), new_nodes.end());
@@ -688,8 +615,10 @@ namespace vuk {
 		for (auto it = start; it != end; ++it) {
 			allocate_node_links(*it, allocator);
 		}
+		NodeContext nc{ current_module.get(), pass_reads, child_chains, new_nodes, allocator, true };
+
 		for (auto it = start; it != end; ++it) {
-			process_node_links(module, *it, pass_reads, pass_nops, child_chains, new_nodes, allocator, true);
+			nc.process_node_links(*it);
 		}
 
 		return { expected_value };
@@ -857,15 +786,29 @@ namespace vuk {
 		return { expected_value };
 	}
 
+	ChainLink* to_head(ChainLink* tail) {
+		while (tail->prev) {
+			tail = tail->prev;
+		}
+		return tail;
+	}
+
 	Result<void> RGCImpl::collect_chains() {
 		chains.clear();
+		live_ranges.clear();
 		// collect chains by looking at links without a prev
 		for (auto& node : nodes) {
 			size_t result_count = node->type.size();
 			for (auto i = 0; i < result_count; i++) {
-				auto& link = node->links[i];
-				if (!link.prev) {
-					chains.push_back(&link);
+				auto link = &node->links[i];
+				if (!link->prev) { // head, add to chains
+					chains.push_back(link);
+					LiveRange& lr = live_ranges[link];
+					lr.def_link = link;
+					while (link->next) { // tail
+						link = link->next;
+					}
+					lr.undef_link = link;
 				}
 			}
 		}
@@ -917,9 +860,7 @@ namespace vuk {
 									} else {
 										assert(0);
 									}
-								} else if (r.node->kind == Node::CONVERGE) {
-									continue;
-								} else if (r.node->kind == Node::SPLICE) {
+								} else if (r.node->kind == Node::CONVERGE || r.node->kind == Node::CONSTRUCT) {
 									continue;
 								} else {
 									assert(0);
@@ -958,39 +899,26 @@ namespace vuk {
 					}
 				}
 			} break;
-			case Node::SPLICE: {
-				if (node->scheduled_item) {
-					auto& node_si = *node->scheduled_item;
-
-					for (size_t i = 0; i < node->splice.src.size(); i++) {
-						auto& parm = node->splice.src[i];
-						auto& link = parm.link();
-
-						if (node->splice.dst_access != Access::eNone) {
-							link.undef_sync = to_use(node->splice.dst_access);
-						} else {
-							if (parm.node->scheduled_item) {
-								auto& parm_si = *parm.node->scheduled_item;
-								if (parm_si.scheduled_domain != node_si.scheduled_domain) { // parameters are scheduled on different domain
-									// we don't know anything about future use, so put "anything"
-									parm.link().undef_sync = to_use(Access::eMemoryRW);
-								}
+			case Node::RELEASE: {
+				assert(node->scheduled_item);
+				auto& node_si = *node->scheduled_item;
+				for (size_t i = 0; i < node->release.src.size(); i++) {
+					auto& parm = node->release.src[i];
+					auto& link = parm.link();
+					assert(!link.undef_sync);
+					if (node->release.dst_access != Access::eNone) {
+						link.undef_sync = to_use(node->release.dst_access);
+					} else {
+						if (parm.node->scheduled_item) {
+							auto& parm_si = *parm.node->scheduled_item;
+							if (parm_si.scheduled_domain != node_si.scheduled_domain) { // parameters are scheduled on different domain
+								// we don't know anything about future use, so put "anything"
+								parm.link().undef_sync = to_use(Access::eMemoryRW);
 							}
 						}
 					}
-				} else {
-					assert(node->splice.dst_access == Access::eNone);
 				}
 			} break;
-			default: {
-				if (node->scheduled_item) {
-					auto& node_si = *node->scheduled_item;
-
-					// SANITY: parameters on the same domain as node
-					apply_generic_args([&](Ref parm) { assert(!parm.node->scheduled_item || parm.node->scheduled_item->scheduled_domain == node_si.scheduled_domain); },
-					                   node);
-				}
-			}
 			}
 		}
 
@@ -1139,10 +1067,6 @@ namespace vuk {
 				    node->type[0]->hash_value != current_module->types.builtin_sampled_image) { // we are trying to read from it :(
 					auto reads = node->links->reads.to_span(impl->pass_reads);
 					for (auto offender : reads) {
-						if (offender.node->kind == Node::SPLICE) { // TODO: not actually a read
-							continue;
-						}
-
 						auto message0 = format_graph_message(Level::eError, offender.node, "tried to read something that was never written:\n");
 						std::string message1;
 						if (node->debug_info && node->debug_info->result_names.size() > 0) {
@@ -1162,23 +1086,6 @@ namespace vuk {
 					// TODO: DCE
 					break;
 				}
-				// in case we have CONSTRUCT -> (SPLICE ->)* READ
-				// there is an undef and no read - unravel splices that are never read
-				auto undef = node;
-				while (undef->links->reads.size() == 0 && undef->links->undef && undef->links->undef.node->kind == Node::SPLICE) {
-					undef = undef->links->undef.node;
-				}
-				// it is either not splice or there are reads
-				if (undef->links->reads.size() > 0) {
-					auto reads = undef->links->reads.to_span(impl->pass_reads);
-					for (auto offender : reads) {
-						if (offender.node->kind == Node::SPLICE) {
-							continue;
-						}
-						return { expected_error,
-							       RenderGraphException{ format_graph_message(Level::eError, offender.node, "tried to read something that was never written.") } };
-					}
-				}
 				break;
 			}
 			default:
@@ -1193,85 +1100,57 @@ namespace vuk {
 		std::unordered_map<Buffer, Node*> bufs;
 		std::unordered_map<ImageAttachment, Node*> ias;
 		std::unordered_map<Swapchain*, Node*> swps;
+		auto add_one = [&](Type* type, Node* node, void* value) -> std::optional<Node*> {
+			if (type->hash_value == current_module->types.builtin_image) {
+				auto ia = reinterpret_cast<ImageAttachment*>(value);
+				if (ia->image) {
+					auto [_, succ] = ias.emplace(*ia, node);
+					if (!succ) {
+						return ias.at(*ia);
+					}
+				}
+			} else if (type->hash_value == current_module->types.builtin_buffer) {
+				auto buf = reinterpret_cast<Buffer*>(value);
+				if (buf->buffer != VK_NULL_HANDLE) {
+					auto [_, succ] = bufs.emplace(*buf, node);
+					if (!succ) {
+						return bufs.at(*buf);
+					}
+				}
+			} else if (type->hash_value == current_module->types.builtin_swapchain) {
+				auto swp = reinterpret_cast<Swapchain*>(value);
+				auto [_, succ] = swps.emplace();
+				if (!succ) {
+					return swps.at(swp);
+				}
+			} else { // TODO: it is an array, no val yet
+			}
+
+			return {};
+		};
 		for (auto node : impl->nodes) {
+			std::optional<Node*> fail = {};
 			switch (node->kind) {
 			case Node::CONSTRUCT: {
-				std::optional<Node*> fail = {};
-				if (node->type[0]->hash_value == current_module->types.builtin_image) {
-					auto ia = reinterpret_cast<ImageAttachment*>(node->construct.args[0].node->constant.value);
-					if (ia->image) {
-						auto [_, succ] = ias.emplace(*ia, node);
-						if (!succ) {
-							fail = ias.at(*ia);
-						}
-					}
-				} else if (node->type[0]->hash_value == current_module->types.builtin_buffer) {
-					auto buf = reinterpret_cast<Buffer*>(node->construct.args[0].node->constant.value);
-					if (buf->buffer != VK_NULL_HANDLE) {
-						auto [_, succ] = bufs.emplace(*buf, node);
-						if (!succ) {
-							fail = bufs.at(*buf);
-						}
-					}
-				} else if (node->type[0]->hash_value == current_module->types.builtin_swapchain) {
-					auto swp = reinterpret_cast<Swapchain*>(node->construct.args[0].node->constant.value);
-					auto [_, succ] = swps.emplace();
-					if (!succ) {
-						fail = swps.at(swp);
-					}
-				} else { // TODO: it is an array, no val yet
-				}
-				if (fail) {
-					auto loc = format_source_location(*fail);
-					auto msg = fmt::format("tried to acquire something that was already known. Previously acquired by {} with callstack:\n{}", node_to_string(*fail), loc);
-					return { expected_error, RenderGraphException{ format_graph_message(Level::eError, node, msg) } };
-				}
+				fail = add_one(node->type[0].get(), node, node->construct.args[0].node->constant.value);
 			} break;
-			case Node::SPLICE: {
-				if (!node->splice.rel_acq || node->splice.rel_acq->status == Signal::Status::eDisarmed) {
-					break;
-				}
-				std::optional<Node*> fail = {};
-				assert(node->type.size() == node->splice.values.size());
-				for (auto i = 0; i < node->type.size(); i++) {
-					// is this ever used?
-					auto& link = node->links[i];
-					if (!link.undef && link.reads.size() == 0 && !link.next) { // it is never used
+			case Node::ACQUIRE: {
+				for (size_t i = 0; i < node->type.size(); i++) {
+					auto as_ref = nth(node, i);
+					auto& link = as_ref.link();
+					if (link.reads.size() == 0 && !link.undef && !link.next) { // if not used, we don't care about it
 						continue;
 					}
-					if (node->type[i]->hash_value == current_module->types.builtin_image) {
-						auto ia = reinterpret_cast<ImageAttachment*>(node->splice.values[i]);
-						auto [_, succ] = ias.emplace(*ia, node);
-						if (!succ) {
-							fail = ias.at(*ia);
-						}
-					} else if (node->type[i]->hash_value == current_module->types.builtin_buffer) {
-						auto buf = reinterpret_cast<Buffer*>(node->splice.values[i]);
-						auto [_, succ] = bufs.emplace(*buf, node);
-						if (!succ) {
-							fail = bufs.at(*buf);
-						}
-					} else if (node->type[i]->hash_value == current_module->types.builtin_swapchain) {
-						auto swp = reinterpret_cast<Swapchain*>(node->splice.values[i]);
-						auto [_, succ] = swps.emplace(swp, node);
-						if (!succ) {
-							fail = swps.at(swp);
-						}
-					} else { // TODO: it is an array, no val yet
-					}
-					if (fail) {
-						break;
-					}
-				}
-				if (fail) {
-					auto loc = format_source_location(*fail);
-					auto msg =
-					    fmt::format("tried to acquire something that was already known. Previously acquired by {} with callstack:\n{}", node_to_string(*fail), loc);
-					return { expected_error, RenderGraphException{ format_graph_message(Level::eError, node, msg) } };
+					fail = add_one(node->type[i].get(), node, node->acquire.values[i]);
 				}
 			} break;
 			default:
 				break;
+			}
+			if (fail) {
+				auto loc = format_source_location(*fail);
+				auto msg = fmt::format("tried to acquire something that was already known. Previously acquired by {} with callstack:\n{}", node_to_string(*fail), loc);
+				return { expected_error, RenderGraphException{ format_graph_message(Level::eError, node, msg) } };
 			}
 		}
 
@@ -1462,124 +1341,9 @@ namespace vuk {
 		GraphDumper::next_cluster("modules", "full");
 		GraphDumper::dump_graph(impl->nodes, false, false);
 
-		// eliminate useless splices & bridge multiple slices
+		// bridge multiple slices
 		rewrite([&](Node* node, auto& replaces) {
 			switch (node->kind) {
-			case Node::SPLICE: {
-				// splice elimination
-				// an acquire - must be kept
-				if (node->splice.rel_acq != nullptr && node->splice.rel_acq->status != Signal::Status::eDisarmed) {
-					break;
-				}
-
-				// initialise storage
-				if (node->splice.rel_acq != nullptr) {
-					if (!node->splice.values.data()) { // in case of errors, we might still have the allocation hanging around, we can reuse it
-						node->splice.values = { new void*[node->splice.src.size()], node -> splice.src.size() };
-					} else {
-						assert(node->splice.values.size() == node->splice.src.size());
-					}
-					node->splice.rel_acq->last_use.resize(node->splice.src.size());
-
-					for (size_t i = 0; i < node->splice.src.size(); i++) {
-						auto parm = node->splice.src[i];
-						node->splice.values[i] = new std::byte[parm.type()->size];
-					}
-				}
-
-				// a release - must be kept
-				if (!(node->splice.dst_access == Access::eNone && node->splice.dst_domain == DomainFlagBits::eAny)) {
-					break;
-				}
-
-				for (size_t i = 0; i < node->splice.src.size(); i++) {
-					auto needle = Ref{ node, i };
-					auto parm = node->splice.src[i];
-
-					// a splice that requires signalling -> defer it
-					if (node->splice.rel_acq != nullptr) {
-						// find last use that is not splice that we defer away
-						auto link = &parm.link();
-						while (link->next) {
-							link = link->next;
-						}
-						Node* last_use = nullptr;
-						while (link) {
-							if (link->reads.size() > 0) { // splices never read
-								last_use = link->reads.to_span(impl->pass_reads)[0].node;
-								break;
-							}
-							if (link->def.node->kind == Node::SPLICE && (node->splice.rel_acq == nullptr || node->splice.rel_acq->status == Signal::Status::eDisarmed)) {
-								;
-							} else {
-								last_use = link->def.node;
-								break;
-							}
-							link = link->prev;
-						}
-						assert(last_use);
-						impl->deferred_splices[last_use].push_back(needle);
-						impl->pending_splice_sigs[needle.node] = 0;
-					}
-				}
-			} break;
-			case Node::SLICE: {
-				auto& slice = node->slice;
-				Subrange::Image our_slice_range = { constant<uint32_t>(slice.base_level),
-					                                  constant<uint32_t>(slice.level_count),
-					                                  constant<uint32_t>(slice.base_layer),
-					                                  constant<uint32_t>(slice.layer_count) };
-				// walk up
-				auto link = &node->slice.image.link();
-				do {
-					if (link->def.node->kind == Node::SLICE) { // it is a slice
-						Subrange::Image their_slice_range = { constant<uint32_t>(link->def.node->slice.base_level),
-							                                    constant<uint32_t>(link->def.node->slice.level_count),
-							                                    constant<uint32_t>(link->def.node->slice.base_layer),
-							                                    constant<uint32_t>(link->def.node->slice.layer_count) };
-						if (link->def.index == 0) { //  and we took left
-							auto isect = intersect_one(our_slice_range, their_slice_range);
-							if (isect == our_slice_range) {
-								replaces.replace(first(node), node->slice.image);
-								replaces.replace(nth(node, 1), node->slice.image);
-								break;
-							}
-						} else { //  and we took right
-							auto isect = intersect_one(our_slice_range, their_slice_range);
-							if (isect == our_slice_range) {
-								replaces.replace(first(node), node->slice.image);
-								replaces.replace(nth(node, 1), node->slice.image);
-								break;
-							}
-						}
-					}
-					if (!link->prev) {
-						break;
-					}
-					link = link->prev;
-				} while (link->prev);
-				if (link->def.node->kind == Node::SLICE) { // it is a slice
-					Subrange::Image their_slice_range = { constant<uint32_t>(link->def.node->slice.base_level),
-						                                    constant<uint32_t>(link->def.node->slice.level_count),
-						                                    constant<uint32_t>(link->def.node->slice.base_layer),
-						                                    constant<uint32_t>(link->def.node->slice.layer_count) };
-					if (link->def.index == 0) { //  and we took left
-						auto isect = intersect_one(our_slice_range, their_slice_range);
-						if (isect == our_slice_range) {
-							replaces.replace(first(node), node->slice.image);
-							replaces.replace(nth(node, 1), node->slice.image);
-							break;
-						}
-					} else { //  and we took right
-						auto isect = intersect_one(our_slice_range, their_slice_range);
-						if (isect == our_slice_range) {
-							replaces.replace(first(node), node->slice.image);
-							replaces.replace(nth(node, 1), node->slice.image);
-							break;
-						}
-					}
-				}
-			} break;
 			default:
 				break;
 			}
@@ -1611,17 +1375,13 @@ namespace vuk {
 
 		for (auto& node : impl->nodes) {
 			switch (node->kind) {
-			case Node::SPLICE:
-				// acquires need scheduling
-				if (!node->splice.rel_acq || node->splice.rel_acq->status == Signal::Status::eDisarmed) {
-					break;
-				}
+			case Node::SLICE:
 			case Node::CALL: {
 				ScheduledItem item{ .execable = node, .scheduled_domain = vuk::DomainFlagBits::eAny };
 				auto it = impl->scheduled_execables.emplace(item);
 				it->execable->scheduled_item = &*it;
-				break;
-			}
+			} break;
+
 			default:
 				break;
 			}
