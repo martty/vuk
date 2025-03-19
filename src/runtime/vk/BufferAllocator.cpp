@@ -3,7 +3,6 @@
 #include "vuk/Result.hpp"
 #include "vuk/SourceLocation.hpp"
 #include "vuk/runtime/vk/Allocator.hpp"
-#include <iostream>
 
 // Aligns given value down to nearest multiply of align value. For example: VmaAlignUp(11, 8) = 8.
 // Use types like uint32_t, uint64_t as T.

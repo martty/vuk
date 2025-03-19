@@ -6,8 +6,6 @@
 #include "vuk/runtime/vk/VkQueueExecutor.hpp"
 #include "vuk/runtime/vk/VkRuntime.hpp"
 
-#include <atomic>
-#include <mutex>
 #include <numeric>
 #include <plf_colony.h>
 

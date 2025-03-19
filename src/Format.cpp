@@ -1,5 +1,4 @@
 #include "vuk/runtime/vk/Image.hpp"
-#include "vuk/Util.hpp"
 #include <cassert>
 
 namespace vuk {

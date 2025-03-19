@@ -28,7 +28,7 @@ endif()
 set(TRACY_ON_DEMAND OFF)
 FetchContent_Declare(tracy
     GIT_REPOSITORY https://github.com/wolfpld/tracy.git
-    GIT_TAG 2183962ef7fc8f721019c01d9170f5ea0d509555
+    GIT_TAG 5d542dc09f3d9378d005092a4ad446bd405f819a
     GIT_SHALLOW TRUE
     GIT_PROGRESS TRUE
 )
