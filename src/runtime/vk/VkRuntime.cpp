@@ -3,10 +3,9 @@
 #include <mutex>
 
 #include "vuk/Exception.hpp"
-#include "vuk/RenderGraph.hpp"
+#include "vuk/ImageAttachment.hpp"
 #include "vuk/runtime/Cache.hpp"
 #include "vuk/runtime/vk/Allocator.hpp"
-#include "vuk/runtime/vk/AllocatorHelpers.hpp"
 #include "vuk/runtime/vk/DeviceVkResource.hpp"
 #include "vuk/runtime/vk/Program.hpp"
 #include "vuk/runtime/vk/Query.hpp"
@@ -14,6 +13,7 @@
 #include "vuk/runtime/vk/VkRuntime.hpp"
 #include "vuk/runtime/vk/VkSwapchain.hpp"
 
+#include <plf_colony.h>
 #include <robin_hood.h>
 
 namespace {
@@ -765,8 +765,17 @@ namespace vuk {
 		allocator.allocate_semaphores(std::span(semaphores));
 	}
 
-	Swapchain::Swapchain(Allocator alloc, size_t image_count, VkSwapchainKHR swapchain, VkSurfaceKHR surface, VkExtent2D extent, VkFormat format, std::vector<VkImage> images, std::vector<VkImageView> views) :
-	    allocator(alloc), swapchain(swapchain), surface(surface) {
+	Swapchain::Swapchain(Allocator alloc,
+	                     size_t image_count,
+	                     VkSwapchainKHR swapchain,
+	                     VkSurfaceKHR surface,
+	                     VkExtent2D extent,
+	                     VkFormat format,
+	                     std::vector<VkImage> images,
+	                     std::vector<VkImageView> views) :
+	    allocator(alloc),
+	    swapchain(swapchain),
+	    surface(surface) {
 		semaphores.resize(image_count * 2);
 		allocator.allocate_semaphores(std::span(semaphores));
 		for (auto i = 0; i < images.size(); i++) {

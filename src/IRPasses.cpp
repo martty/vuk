@@ -3,12 +3,8 @@
 #include "vuk/IRProcess.hpp"
 #include "vuk/RenderGraph.hpp"
 #include "vuk/SyncLowering.hpp"
-#include "vuk/Value.hpp"
 #include "vuk/runtime/CommandBuffer.hpp"
-#include "vuk/runtime/vk/VkRuntime.hpp"
 
-#include <bit>
-#include <charconv>
 #include <fmt/printf.h>
 #include <memory_resource>
 #include <random>
@@ -665,6 +661,7 @@ namespace vuk {
 					}
 				}
 			}
+			default:;
 			}
 		}
 

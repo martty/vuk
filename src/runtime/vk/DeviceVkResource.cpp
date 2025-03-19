@@ -17,7 +17,6 @@
 	} while (false)
 #endif
 #include <mutex>
-#include <numeric>
 #include <sstream>
 #include <vk_mem_alloc.h>
 

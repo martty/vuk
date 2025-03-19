@@ -1,5 +1,3 @@
-#pragma once
-
 #include "utils.hpp"
 #include "vuk/RenderGraph.hpp"
 #include "vuk/runtime/CommandBuffer.hpp"

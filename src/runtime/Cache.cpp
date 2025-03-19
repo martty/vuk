@@ -1,11 +1,10 @@
 #include "vuk/runtime/Cache.hpp"
-#include "vuk/runtime/vk/VkRuntime.hpp"
 #include "vuk/runtime/vk/PipelineInstance.hpp"
 
+#include <mutex>
 #include <plf_colony.h>
 #include <robin_hood.h>
 #include <shared_mutex>
-#include <mutex>
 
 namespace vuk {
 	template<class T>

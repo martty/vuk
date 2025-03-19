@@ -1,10 +1,8 @@
 #include "vuk/runtime/vk/VkQueueExecutor.hpp"
 #include "vuk/Exception.hpp"
-#include "vuk/RenderGraph.hpp"
 #include "vuk/runtime/vk/Allocator.hpp"
+#include "vuk/runtime/vk/VkRuntime.hpp"
 
-#include <array>
-#include <atomic>
 #include <mutex>
 #include <vector>
 
