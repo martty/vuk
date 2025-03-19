@@ -4,6 +4,7 @@
 #if VUK_OS_WINDOWS
 #include <Windows.h>
 #include <shellapi.h>
+#include <fstream>
 #endif
 
 #include "vuk/IR.hpp"
