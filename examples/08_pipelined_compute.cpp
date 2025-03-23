@@ -79,6 +79,7 @@ namespace {
 
 		      // make a GPU future
 		      scramble_buf_fut = vuk::host_data_to_buffer(allocator, vuk::DomainFlagBits::eTransferOnTransfer, scramble_buf.get(), std::span(indices));
+		      runner.enqueue_setup(scramble_buf_fut);
 		    },
 		.render =
 		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator, vuk::Value<vuk::ImageAttachment> target) {

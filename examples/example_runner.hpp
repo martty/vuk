@@ -120,7 +120,7 @@ namespace vuk {
 			});
 		}
 		// when called during setup, enqueues a device-side operation to be completed before rendering begins
-		void enqueue_setup(UntypedValue&& fut) {
+		void enqueue_setup(UntypedValue fut) {
 			std::scoped_lock _(setup_lock);
 			futures.emplace_back(std::move(fut));
 		}
