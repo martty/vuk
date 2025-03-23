@@ -3,6 +3,7 @@
 #include "vuk/runtime/vk/Allocator.hpp"
 #include "vuk/runtime/vk/VkRuntime.hpp"
 
+#include <fmt/format.h>
 #include <mutex>
 #include <vector>
 
@@ -149,6 +150,8 @@ namespace vuk {
 		return impl->queue;
 	}
 
+//#define VUK_DUMP_SUBMIT
+
 	Result<void> QueueExecutor::submit_batch(std::vector<SubmitInfo> batch) {
 		std::unique_lock _(*this);
 
@@ -168,7 +171,9 @@ namespace vuk {
 		cbufsis.reserve(num_cbufs);
 		wait_semas.reserve(num_waits);
 		signal_semas.reserve(batch.size() + 1); // 1 extra for render_complete
-
+#ifdef VUK_DUMP_SUBMIT
+		fmt::print("submitting: {} batches:\n", batch.size());
+#endif
 		for (uint64_t i = 0; i < batch.size(); i++) {
 			SubmitInfo& submit_info = batch[i];
 
@@ -179,12 +184,19 @@ namespace vuk {
 			if (submit_info.command_buffers.size() == 0) {
 				continue;
 			}
-
+#ifdef VUK_DUMP_SUBMIT
+			fmt::print("cbufs:");
+#endif
 			for (uint64_t i = 0; i < submit_info.command_buffers.size(); i++) {
 				cbufsis.emplace_back(
 				    VkCommandBufferSubmitInfoKHR{ .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO_KHR, .commandBuffer = submit_info.command_buffers[i] });
+#ifdef VUK_DUMP_SUBMIT
+				fmt::print(" {}", fmt::ptr(submit_info.command_buffers[i]));
+#endif
 			}
-
+#ifdef VUK_DUMP_SUBMIT
+			fmt::print("\nwaits:");
+#endif
 			uint32_t wait_sema_count = 0;
 			for (auto& w : submit_info.waits) {
 				assert(w->source.executor->type == Executor::Type::eVulkanDeviceQueue);
@@ -195,6 +207,9 @@ namespace vuk {
 				ssi.stageMask = (VkPipelineStageFlagBits2KHR)PipelineStageFlagBits::eAllCommands; // TODO: w now has stage info
 				wait_semas.emplace_back(ssi);
 				wait_sema_count++;
+#ifdef VUK_DUMP_SUBMIT
+				fmt::print(" {}:{}", (size_t)w->source.executor->tag.domain, ssi.value);
+#endif
 			}
 
 			for (auto& w : submit_info.pres_wait) {
@@ -203,8 +218,13 @@ namespace vuk {
 				ssi.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR;
 				wait_semas.emplace_back(ssi);
 				wait_sema_count++;
+#ifdef VUK_DUMP_SUBMIT
+				fmt::print(" present");
+#endif
 			}
-
+#ifdef VUK_DUMP_SUBMIT
+			fmt::print("\n");
+#endif
 			VkSemaphoreSubmitInfoKHR ssi{ VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO_KHR };
 			ssi.semaphore = impl->submit_sync;
 			ssi.value = ++impl->sync_value;
@@ -225,7 +245,9 @@ namespace vuk {
 				signal_semas.emplace_back(ssi);
 				signal_sema_count++;
 			}
-
+#ifdef VUK_DUMP_SUBMIT
+			fmt::print("signal: {}\n", ssi.value);
+#endif
 			VkSubmitInfo2KHR& si = sis.emplace_back(VkSubmitInfo2KHR{ VK_STRUCTURE_TYPE_SUBMIT_INFO_2_KHR });
 			VkCommandBufferSubmitInfoKHR* p_cbuf_infos = &cbufsis.back() - (submit_info.command_buffers.size() - 1);
 			VkSemaphoreSubmitInfoKHR* p_wait_semas = wait_sema_count > 0 ? &wait_semas.back() - (wait_sema_count - 1) : nullptr;
