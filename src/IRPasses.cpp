@@ -1313,17 +1313,8 @@ namespace vuk {
 		GraphDumper::next_cluster("modules", "full");
 		GraphDumper::dump_graph(impl->nodes, false, false);
 
-		// bridge multiple slices
-		rewrite([&](Node* node, auto& replaces) {
-			switch (node->kind) {
-			default:
-				break;
-			}
-		});
-
 		VUK_DO_OR_RETURN(impl->build_nodes());
 		// post replace
-		//_dump_graph(impl->nodes, false, false);
 		VUK_DO_OR_RETURN(impl->build_links(impl->nodes, allocator));
 
 		// FINAL GRAPH
@@ -1331,7 +1322,6 @@ namespace vuk {
 		GraphDumper::dump_graph(impl->nodes, false, true);
 		GraphDumper::end_cluster();
 		GraphDumper::end_graph();
-		//_dump_graph(impl->nodes, false, false);
 
 		VUK_DO_OR_RETURN(validate_read_undefined());
 		VUK_DO_OR_RETURN(validate_duplicated_resource_ref());
