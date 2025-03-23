@@ -787,6 +787,34 @@ namespace vuk {
 		}
 	};
 
+	uint64_t value_identity(Type* base_ty, void* value) {
+		uint64_t key = 0;
+		if (base_ty->hash_value == current_module->types.builtin_image) {
+			auto& img_att = *reinterpret_cast<ImageAttachment*>(value);
+			key = reinterpret_cast<uint64_t>(img_att.image.image);
+		} else if (base_ty->hash_value == current_module->types.builtin_buffer) {
+			auto buf = reinterpret_cast<Buffer*>(value);
+			key = reinterpret_cast<uint64_t>(buf->allocation);
+			hash_combine(key, buf->offset);
+		} else if (base_ty->kind == Type::ARRAY_TY) {
+			if (base_ty->array.count > 0) { // for an array, we key off the the first element, as the array syncs together
+				auto elem_ty = base_ty->array.T->get();
+				auto elems = reinterpret_cast<std::byte*>(value);
+				return value_identity(elem_ty, elems);
+			} else { // zero-len arrays
+				return 0;
+			}
+		} else if (base_ty->hash_value == current_module->types.builtin_sampled_image) { // only image syncs
+			auto& img_att = reinterpret_cast<SampledImage*>(value)->ia;
+			key = reinterpret_cast<uint64_t>(img_att.image.image);
+		} else if (base_ty->kind == Type::INTEGER_TY) { // TODO: generalise
+			return 0;
+		} else { // other types just key on the voidptr
+			key = reinterpret_cast<uint64_t>(value);
+		}
+		return key;
+	}
+
 	struct Recorder {
 		Recorder(Allocator alloc, ProfilingCallbacks* callbacks, std::pmr::vector<Ref>& pass_reads) :
 		    ctx(alloc.get_context()),
@@ -834,34 +862,6 @@ namespace vuk {
 			}
 			assert(0);
 			return nullptr;
-		}
-
-		uint64_t value_identity(Type* base_ty, void* value) {
-			uint64_t key = 0;
-			if (base_ty->hash_value == current_module->types.builtin_image) {
-				auto& img_att = *reinterpret_cast<ImageAttachment*>(value);
-				key = reinterpret_cast<uint64_t>(img_att.image.image);
-			} else if (base_ty->hash_value == current_module->types.builtin_buffer) {
-				auto buf = reinterpret_cast<Buffer*>(value);
-				key = reinterpret_cast<uint64_t>(buf->allocation);
-				hash_combine(key, buf->offset);
-			} else if (base_ty->kind == Type::ARRAY_TY) {
-				if (base_ty->array.count > 0) { // for an array, we key off the the first element, as the array syncs together
-					auto elem_ty = base_ty->array.T->get();
-					auto elems = reinterpret_cast<std::byte*>(value);
-					return value_identity(elem_ty, elems);
-				} else { // zero-len arrays
-					return 0;
-				}
-			} else if (base_ty->hash_value == current_module->types.builtin_sampled_image) { // only image syncs
-				auto& img_att = reinterpret_cast<SampledImage*>(value)->ia;
-				key = reinterpret_cast<uint64_t>(img_att.image.image);
-			} else if (base_ty->kind == Type::INTEGER_TY) { // TODO: generalise
-				return 0;
-			} else { // other types just key on the voidptr
-				key = reinterpret_cast<uint64_t>(value);
-			}
-			return key;
 		}
 
 		void init_sync(Type* base_ty, StreamResourceUse src_use, void* value, bool enforce_unique = true) {
@@ -1034,6 +1034,7 @@ namespace vuk {
 		recorder.last_modify.at(0)->stream = host_stream;
 
 		std::deque<VkPEStream> pe_streams;
+		std::unordered_map<uint64_t, Swapchain*> image_to_swapchain;
 
 		for (auto& item : impl->scheduled_execables) {
 			item.scheduled_stream = recorder.stream_for_domain(item.scheduled_domain);
@@ -1707,7 +1708,9 @@ namespace vuk {
 					fmt::print("\n");
 #endif
 					sched.done(node, pe_stream, swp.images[swp.image_index]);
-					recorder.last_use(node->type[0].get(), &swp.images[swp.image_index]).stream = pe_stream;
+					image_to_swapchain.emplace(value_identity(node->type[0].get(), &swp.images[swp.image_index]), &swp);
+					auto& lu = recorder.last_use(node->type[0].get(), &swp.images[swp.image_index]);
+					lu = StreamResourceUse{ { PipelineStageFlagBits::eAllCommands, AccessFlagBits::eNone, ImageLayout::eUndefined }, pe_stream };
 				} else {
 					sched.schedule_dependency(node->acquire_next_image.swapchain, RW::eWrite);
 				}

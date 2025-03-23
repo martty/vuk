@@ -93,6 +93,7 @@ namespace vuk {
 	}
 
 	enum class AccessFlagBits : VkAccessFlags {
+		eNone = VK_ACCESS_NONE_KHR,
 		eIndirectCommandRead = VK_ACCESS_INDIRECT_COMMAND_READ_BIT,
 		eIndexRead = VK_ACCESS_INDEX_READ_BIT,
 		eVertexAttributeRead = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT,
