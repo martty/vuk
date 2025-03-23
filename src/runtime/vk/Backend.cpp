@@ -896,8 +896,7 @@ namespace vuk {
 		    allocator(all),
 		    recorder(recorder),
 		    pass_reads(impl->pass_reads),
-		    pass_nops(impl->pass_nops),
-		    scheduled_execables(impl->scheduled_execables),
+			scheduled_execables(impl->scheduled_execables),
 		    impl(impl) {
 			// these are the items that were determined to run
 			for (auto& i : scheduled_execables) {
@@ -909,7 +908,6 @@ namespace vuk {
 		Allocator allocator;
 		Recorder& recorder;
 		std::pmr::vector<Ref>& pass_reads;
-		std::pmr::vector<Ref>& pass_nops;
 		plf::colony<ScheduledItem>& scheduled_execables;
 
 		InlineArena<std::byte, 4 * 1024> arena;
@@ -962,13 +960,6 @@ namespace vuk {
 			} else { // just reading or nop, so don't synchronize with reads
 				// just the def
 				schedule_new(link.def.node);
-			}
-
-			// all nops
-			if (access != RW::eNop) {
-				for (auto& r : link.nops.to_span(pass_nops)) {
-					schedule_new(r.node);
-				}
 			}
 		}
 

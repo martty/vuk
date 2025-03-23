@@ -42,7 +42,6 @@ namespace vuk {
 		std::vector<ScheduledItem*> partitioned_execables;
 
 		std::pmr::vector<Ref> pass_reads;
-		std::pmr::vector<Ref> pass_nops;
 
 		std::vector<std::shared_ptr<ExtNode>> refs;
 		std::vector<Node*> ref_nodes;
@@ -92,7 +91,6 @@ namespace vuk {
 		void process_node_links(IRModule* module,
 		                        Node* node,
 		                        std::pmr::vector<Ref>& pass_reads,
-		                        std::pmr::vector<Ref>& pass_nops,
 		                        std::pmr::vector<ChainLink*>& child_chains,
 		                        std::pmr::vector<Node*>& new_nodes,
 		                        std::pmr::polymorphic_allocator<std::byte> allocator,
@@ -105,7 +103,6 @@ namespace vuk {
 		                         It start,
 		                         It end,
 		                         std::pmr::vector<Ref>& pass_reads,
-		                         std::pmr::vector<Ref>& pass_nops,
 		                         std::pmr::vector<ChainLink*>& child_chains,
 		                         std::pmr::polymorphic_allocator<std::byte> allocator);
 		Result<void> implicit_linking(IRModule* module, std::pmr::polymorphic_allocator<std::byte> allocator);

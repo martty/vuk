@@ -278,33 +278,6 @@ namespace vuk {
 		std::pmr::polymorphic_allocator<std::byte> allocator;
 		bool do_ssa;
 
-		void collect_tails(Ref head, std::pmr::vector<Ref>& tails) {
-			auto link = &head.link();
-
-			if (link->next) {
-				do {
-					if (link->undef && link->undef.node->kind == Node::SLICE) {
-						collect_tails(nth(link->undef.node, 0), tails);
-						collect_tails(nth(link->undef.node, 1), tails);
-					}
-					link = link->next;
-				} while (link->next);
-			}
-
-			if (link->undef && link->undef.node->kind == Node::SLICE) {
-				collect_tails(nth(link->undef.node, 0), tails);
-				collect_tails(nth(link->undef.node, 1), tails);
-			} else if (link->undef) { // this is only an exec dep?
-				tails.push_back(Ref{ link->undef.node, 0 });
-			} else if (link->reads.size() > 0) { // this is only an exec dep?
-				for (auto read : link->reads.to_span(pass_reads)) {
-					tails.push_back(Ref{ read.node, 0 });
-				}
-			} else if (link->def.node->kind != Node::SLICE) {
-				tails.push_back(link->def);
-			}
-		}
-
 		Ref walk_writes(Node* node, Ref parm) {
 			auto link = &parm.link();
 			Ref last_write;
@@ -570,7 +543,6 @@ namespace vuk {
 
 	Result<void> RGCImpl::build_links(std::vector<Node*>& working_set, std::pmr::polymorphic_allocator<std::byte> allocator) {
 		pass_reads.clear();
-		pass_nops.clear();
 		child_chains.clear();
 
 		// in each IRModule module, look at the nodes
@@ -608,7 +580,6 @@ namespace vuk {
 	                                  It start,
 	                                  It end,
 	                                  std::pmr::vector<Ref>& pass_reads,
-	                                  std::pmr::vector<Ref>& pass_nops,
 	                                  std::pmr::vector<ChainLink*>& child_chains,
 	                                  std::pmr::polymorphic_allocator<std::byte> allocator) {
 		std::pmr::vector<Node*> new_nodes(allocator);
@@ -1167,12 +1138,11 @@ namespace vuk {
 		}
 
 		std::pmr::vector<Ref> pass_reads(allocator);
-		std::pmr::vector<Ref> pass_nops(allocator);
 		std::pmr::vector<ChainLink*> child_chains(allocator);
 
 		std::sort(nodes.begin(), nodes.end(), [](Node* a, Node* b) { return a->index < b->index; });
 		// link with SSA
-		build_links(module, nodes.begin(), nodes.end(), pass_reads, pass_nops, child_chains, allocator);
+		build_links(module, nodes.begin(), nodes.end(), pass_reads, child_chains, allocator);
 		module->link_frontier = module->node_counter;
 		return { expected_value };
 	}
