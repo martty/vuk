@@ -42,6 +42,14 @@ inline void hash_combine(size_t& seed, const T& v) noexcept {
 	seed ^= hasher(v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
 }
 
+#ifdef __APPLE__
+template<typename T>
+inline void hash_combine(uint64_t& seed, const T& v) noexcept {
+	std::hash<T> hasher;
+	seed ^= hasher(v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+}
+#endif
+
 inline constexpr void hash_combine_direct(uint32_t& seed, uint32_t v) noexcept {
 	seed ^= v + 0x9e3779b9 + (seed << 6) + (seed >> 2);
 }
