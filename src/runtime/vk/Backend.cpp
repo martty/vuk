@@ -896,7 +896,7 @@ namespace vuk {
 		    allocator(all),
 		    recorder(recorder),
 		    pass_reads(impl->pass_reads),
-			scheduled_execables(impl->scheduled_execables),
+		    scheduled_execables(impl->scheduled_execables),
 		    impl(impl) {
 			// these are the items that were determined to run
 			for (auto& i : scheduled_execables) {
