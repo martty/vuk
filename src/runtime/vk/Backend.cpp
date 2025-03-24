@@ -1883,7 +1883,7 @@ namespace vuk {
 				// SPLICE nodes are unlinked
 				if (node->kind == Node::SPLICE) {
 					assert(!node->splice.rel_acq || node->splice.rel_acq->status != Signal::Status::eDisarmed);
-					delete node->splice.src.data();
+					delete[] node->splice.src.data();
 					node->splice.src = {};
 				}
 			}
