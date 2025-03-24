@@ -1427,7 +1427,7 @@ namespace vuk {
 			switch (node->kind) {
 			case Node::CONSTANT: {
 				if (node->constant.owned) {
-					delete (char*)node->constant.value;
+					delete[] (char*)node->constant.value;
 				}
 				break;
 			}
@@ -1592,7 +1592,8 @@ namespace vuk {
 		}
 
 		Ref make_declare_swapchain(Swapchain& bundle) {
-			auto swpptr = new void*(&bundle);
+			auto swpptr = new char[sizeof(Swapchain*)];
+			new (swpptr) void*(&bundle);
 			auto args_ptr = new Ref[2];
 			auto mem_ty = new std::shared_ptr<Type>[1]{ types.memory(sizeof(Swapchain*)) };
 			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = swpptr, .owned = true } }));
