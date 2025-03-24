@@ -1597,7 +1597,7 @@ namespace vuk {
 		}
 
 		Ref make_declare_swapchain(Swapchain& bundle) {
-			auto swpptr = new void*(&bundle);
+			auto swpptr = new (new char[sizeof(Swapchain*)]) void*(&bundle);
 			auto args_ptr = new Ref[2];
 			auto mem_ty = new std::shared_ptr<Type>[1]{ types.memory(sizeof(Swapchain*)) };
 			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = swpptr, .owned = true } }));
@@ -1723,7 +1723,7 @@ namespace vuk {
 		}
 		template<class T>
 		Ref acquire(std::shared_ptr<Type> type, AcquireRelease* acq_rel, T value) {
-			auto val_ptr = new T(value);
+			auto val_ptr = new (new std::byte[sizeof(T)]) T(value);
 
 			auto tys = new std::shared_ptr<Type>[1]{ type };
 			auto vals = new void*[1]{ val_ptr };
