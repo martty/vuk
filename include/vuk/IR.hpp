@@ -1722,7 +1722,7 @@ namespace vuk {
 
 		template<class T>
 		Ref acquire(std::shared_ptr<Type> type, AcquireRelease* acq_rel, T value) {
-			auto val_ptr = new T(value);
+			auto val_ptr = new (new std::byte[sizeof(T)]) T(value);
 
 			auto tys = new std::shared_ptr<Type>[1]{ type };
 			auto vals = new void*[1]{ val_ptr };
