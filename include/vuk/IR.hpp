@@ -1440,7 +1440,7 @@ namespace vuk {
 					auto& v = node->splice.values[i];
 					types.destroy(node->type[i].get(), v);
 				}
-				delete node->splice.values.data();
+				delete[] node->splice.values.data();
 				delete node->splice.rel_acq;
 				break;
 			}
