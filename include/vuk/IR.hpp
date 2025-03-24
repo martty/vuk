@@ -1427,7 +1427,7 @@ namespace vuk {
 			switch (node->kind) {
 			case Node::CONSTANT: {
 				if (node->constant.owned) {
-					delete[] (char*)node->constant.value;
+					delete (char*)node->constant.value;
 				}
 				break;
 			}
