@@ -519,10 +519,11 @@ namespace vuk {
 				break;
 			}
 			case Node::CONVERGE:
-				assert(node->converge.diverged[0].node->kind == Node::SLICE);
-				add_result(node->converge.diverged[0].node, 2, node->converge.diverged[0].node->slice.src);
+				if (node->converge.diverged[0].node->kind == Node::SLICE) {
+					add_result(node->converge.diverged[0].node, 2, node->converge.diverged[0].node->slice.src);
+				}
 				add_result(node, 0, node->converge.diverged[0]);
-				for (size_t i = 1; i < node->converge.diverged.size(); i++) {
+				for (size_t i = 0; i < node->converge.diverged.size(); i++) {
 					auto& parm = node->converge.diverged[i];
 					add_write(node, parm, i);
 				}
@@ -1325,6 +1326,36 @@ namespace vuk {
 
 		VUK_DO_OR_RETURN(validate_read_undefined());
 		VUK_DO_OR_RETURN(validate_duplicated_resource_ref());
+
+		VUK_DO_OR_RETURN(impl->collect_chains());
+
+		std::pmr::vector<Node*> new_nodes;
+		NodeContext nc{ current_module.get(), impl->pass_reads, impl->child_chains, new_nodes, allocator, true };
+		for (auto& [def, lr] : impl->live_ranges) {
+			if (lr.def_link->def.node->kind == Node::SLICE) { // subchains - not important
+				continue;
+			}
+			while (lr.undef_link->next) {
+				lr.undef_link = lr.undef_link->next;
+			}
+			if (lr.undef_link->undef && lr.undef_link->undef.node->kind == Node::SLICE) { // main chain that ends in SLICE..
+				auto slice_node = lr.undef_link->undef.node;
+				std::array tails{ nth(slice_node, 2), nth(slice_node, 0), nth(slice_node, 1) };
+				auto last_write = nc.module->make_converge(slice_node->slice.src.type(), tails);
+				allocate_node_links(last_write.node, allocator);
+				nc.process_node_links(last_write.node);
+				new_nodes.push_back(last_write.node);
+				assert(impl->ref_nodes.back()->kind == Node::RELEASE);
+				std::array wrapping{ impl->ref_nodes.back()->release.src[0], last_write };
+				impl->ref_nodes.back()->release.src[0].link().undef = {};
+				impl->ref_nodes.back()->release.src[0].link().next = {};
+				impl->ref_nodes.back()->release.src[0] = nc.module->make_converge(impl->ref_nodes.back()->release.src[0].type(), wrapping);
+				impl->ref_nodes.back()->release.src[0].node->index = impl->ref_nodes.back()->index;
+				nc.process_node_links(impl->ref_nodes.back()->release.src[0].node);
+				allocate_node_links(impl->ref_nodes.back(), allocator);
+				nc.process_node_links(impl->ref_nodes.back());
+			}
+		}
 
 		VUK_DO_OR_RETURN(impl->collect_chains());
 		VUK_DO_OR_RETURN(impl->reify_inference());

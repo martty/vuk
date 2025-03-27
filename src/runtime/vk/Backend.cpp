@@ -957,8 +957,7 @@ namespace vuk {
 					// just the def
 					schedule_new(link.def.node);
 				}
-			} else { // just reading or nop, so don't synchronize with reads
-				// just the def
+			} else { // just reading, so don't synchronize with reads -> just the def
 				schedule_new(link.def.node);
 			}
 		}
@@ -1913,18 +1912,7 @@ namespace vuk {
 			}
 
 			// get final value
-			Ref final_use;
-			if (lr.undef_link->undef) {
-				if (lr.undef_link->undef.node->execution_info->kind == Node::CONVERGE) {
-					final_use = first(lr.undef_link->undef.node);
-				} else if (lr.undef_link->undef.node->execution_info->kind == Node::SLICE) {
-					final_use = lr.undef_link->def;
-				} else {
-					assert(0);
-				}
-			} else {
-				final_use = lr.undef_link->def;
-			}
+			Ref final_use = lr.undef_link->def;
 			assert(!final_use.node->rel_acq || final_use.node->rel_acq->status != Signal::Status::eDisarmed);
 			lr.last_value = sched.get_value(final_use);
 			lr.last_use = recorder.last_use(Type::stripped(final_use.type()).get(), lr.last_value);
