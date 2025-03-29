@@ -519,7 +519,7 @@ TEST_CASE("mip down-up") {
 }
 
 TEST_CASE("buffer slicing") {
-	auto data = { 0xfeu, 0xfeu, 0xfeu, 0xfeu };
+	auto data = { 0xfeu, 0xfeu, 0xfeu, 0xfeu, 0xfeu, 0xfeu, 0xfeu };
 	auto [alloc, buf] = create_buffer(*test_context.allocator, MemoryUsage::eGPUonly, DomainFlagBits::eAny, std::span(data));
 
 	auto fill1 = make_pass("fill some 1", [](CommandBuffer& cbuf, VUK_ARG(Buffer, Access::eTransferWrite) dst) {
@@ -535,9 +535,39 @@ TEST_CASE("buffer slicing") {
 	});
 
 	fill2(buf.subrange(3 * sizeof(uint32_t), sizeof(uint32_t)));
+	// equal reslice
+	fill1(buf.subrange(4 * sizeof(uint32_t), sizeof(uint32_t)).subrange(0, sizeof(uint32_t)));
+	// shrinking reslice
+	fill2(buf.subrange(5 * sizeof(uint32_t), 2 * sizeof(uint32_t)).subrange(sizeof(uint32_t), sizeof(uint32_t)));
 
-	auto check = { 0xfeu, 0xfdu, 0xfeu, 0xfcu };
+	auto check = { 0xfeu, 0xfdu, 0xfeu, 0xfcu, 0xfdu, 0xfeu, 0xfcu };
 	auto res = download_buffer(buf).get(*test_context.allocator, test_context.compiler);
-	auto schpen = std::span((uint32_t*)res->mapped_ptr, 4);
+	auto schpen = std::span((uint32_t*)res->mapped_ptr, check.size());
+	CHECK(schpen == std::span(check));
+}
+
+TEST_CASE("buffer slice-conv-slice") {
+	auto data = { 0xfeu, 0xfeu, 0xfeu, 0xfeu };
+	auto [alloc, buf] = create_buffer(*test_context.allocator, MemoryUsage::eGPUonly, DomainFlagBits::eAny, std::span(data));
+
+	auto fill1 = make_pass("fill some 1", [](CommandBuffer& cbuf, VUK_ARG(Buffer, Access::eTransferWrite) dst) {
+		cbuf.fill_buffer(dst, 0xfd);
+		return dst;
+	});
+
+	fill1(buf.subrange(1 * sizeof(uint32_t), sizeof(uint32_t)));
+
+	auto fill2 = make_pass("fill some 2", [](CommandBuffer& cbuf, VUK_ARG(Buffer, Access::eTransferWrite) dst) {
+		cbuf.fill_buffer(dst, 0xfc);
+		return dst;
+	});
+
+	fill2(buf);
+	// reslice
+	fill1(buf.subrange(1 * sizeof(uint32_t), sizeof(uint32_t)));
+
+	auto check = { 0xfcu, 0xfdu, 0xfcu, 0xfcu };
+	auto res = download_buffer(buf).get(*test_context.allocator, test_context.compiler);
+	auto schpen = std::span((uint32_t*)res->mapped_ptr, check.size());
 	CHECK(schpen == std::span(check));
 }
