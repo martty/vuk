@@ -367,7 +367,9 @@ if(VUK_EXTRA_INIT)
 	add_subdirectory(src/extra/init)
 endif()
 
-target_dist_spv(vuk SHADERS spd.cs.hlsl.spv)
+if(VUK_EXTRA)
+	target_dist_spv(vuk SHADERS spd.cs.hlsl.spv)
+endif()
 
 target_include_directories(vuk PUBLIC include)
 
