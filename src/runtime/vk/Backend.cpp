@@ -665,7 +665,6 @@ namespace vuk {
 		} else if (base_ty->hash_value == current_module->types.builtin_buffer) {
 			auto buf = reinterpret_cast<Buffer*>(value);
 			key = reinterpret_cast<uint64_t>(buf->allocation);
-			hash_combine(key, buf->offset);
 		} else if (base_ty->kind == Type::ARRAY_TY) {
 			if (base_ty->array.count > 0) { // for an array, we key off the the first element, as the array syncs together
 				auto elem_ty = base_ty->array.T->get();
@@ -765,6 +764,9 @@ namespace vuk {
 			if (base_ty->hash_value == current_module->types.builtin_image) {
 				auto& img_att = *reinterpret_cast<ImageAttachment*>(value);
 				psru.subrange.image = { img_att.base_level, img_att.level_count, img_att.base_layer, img_att.layer_count };
+			} else if (base_ty->hash_value == current_module->types.builtin_buffer) {
+				auto buf = reinterpret_cast<Buffer*>(value);
+				psru.subrange.buffer = { buf->offset, buf->size };
 			} else if (base_ty->kind == Type::ARRAY_TY) { // for an array, we init all elements
 				auto elem_ty = base_ty->array.T->get();
 				auto size = base_ty->array.count;
@@ -872,13 +874,57 @@ namespace vuk {
 					found->subrange.image.layer_count = isection.layer_count;
 				}
 			} else if (base_ty->hash_value == current_module->types.builtin_buffer) {
-				auto& src_use = *head;
-				if (src_use.stream && dst_use.stream && (src_use.stream != dst_use.stream)) {
-					dst_use.stream->add_dependency(src_use.stream);
-				}
-				dst_use.stream->synch_memory(src_use, dst_use, value);
+				auto& att = *reinterpret_cast<Buffer*>(value);
+				std::vector<Subrange::Buffer, inline_alloc<Subrange::Buffer, 1024>> work_queue(this->arena);
+				work_queue.emplace_back(Subrange::Buffer{ att.offset, att.size });
 
-				static_cast<StreamResourceUse&>(src_use) = dst_use;
+				while (work_queue.size() > 0) {
+					Subrange::Buffer dst_range = work_queue.back();
+					Subrange::Buffer src_range, isection;
+					work_queue.pop_back();
+					auto src = head;
+					assert(src);
+					for (; src != nullptr; src = src->next) {
+						src_range = { src->subrange.buffer.offset, src->subrange.buffer.size };
+
+						// we want to make a barrier for the intersection of the source and incoming
+						auto isection_opt = intersect_one(src_range, dst_range);
+						if (isection_opt) {
+							isection = *isection_opt;
+							break;
+						}
+					}
+					assert(src);
+					// remove the existing barrier from the candidates
+					auto found = src;
+
+					// wind to the end
+					for (; src->next != nullptr; src = src->next)
+						;
+					// splinter the source and destination ranges
+					difference_one(src_range, isection, [&](Subrange::Buffer nb) {
+						// push the splintered src uses
+						PartialStreamResourceUse psru{ *src };
+						psru.subrange.buffer = { nb.offset, nb.size };
+						src->next = new (this->arena.ensure_space(sizeof(PartialStreamResourceUse))) PartialStreamResourceUse(psru);
+						src->next->prev = src;
+						src = src->next;
+					});
+
+					// splinter the dst uses, and push into the work queue
+					difference_one(dst_range, isection, [&](Subrange::Buffer nb) { work_queue.push_back(nb); });
+
+					auto& src_use = *found;
+
+					if (src_use.stream && dst_use.stream && (src_use.stream != dst_use.stream)) {
+						dst_use.stream->add_dependency(src_use.stream);
+					}
+					dst_use.stream->synch_memory(src_use, dst_use, value);
+
+					static_cast<StreamResourceUse&>(*found) = dst_use;
+					found->subrange.buffer.offset = isection.offset;
+					found->subrange.buffer.size = isection.size;
+				}
 			}
 		}
 
@@ -1823,9 +1869,9 @@ namespace vuk {
 					} else if (node->slice.src.type()->hash_value == current_module->types.builtin_buffer) {
 						if (axis == 0) {
 							auto sliced = Buffer(*(Buffer*)composite_v);
-							sliced.offset += start * sliced.size;
+							sliced.offset += start;
 							if (count != Range::REMAINING) {
-								sliced.size = count * sliced.size;
+								sliced.size = count;
 							}
 							rets[0] = static_cast<void*>(new (impl->arena_->allocate(sizeof(Buffer))) Buffer{ sliced });
 						} else if (axis == Node::NamedAxis::FIELD) {

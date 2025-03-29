@@ -191,6 +191,22 @@ namespace vuk {
 		return result;
 	}
 
+	inline std::optional<Subrange::Buffer> intersect_one(Subrange::Buffer a, Subrange::Buffer b) {
+		Subrange::Buffer result;
+		int64_t size;
+
+		result.offset = std::max(a.offset, b.offset);
+		int64_t end = std::min(a.offset + (int64_t)a.size, b.offset + (int64_t)b.size);
+		size = end - result.offset;
+
+		if (size < 1) {
+			return {};
+		}
+		result.size = static_cast<uint32_t>(size);
+
+		return result;
+	}
+
 	template<class F>
 	void difference_one(Subrange::Image a, Subrange::Image isection, F&& func) {
 		if (!intersect_one(a, isection)) {
@@ -222,6 +238,23 @@ namespace vuk {
 			    .layer_count = a.layer_count == VK_REMAINING_ARRAY_LAYERS ? VK_REMAINING_ARRAY_LAYERS
 			                                                              : a.base_layer + a.layer_count - (isection.base_layer + isection.layer_count),
 			});
+		}
+	};
+
+	template<class F>
+	void difference_one(Subrange::Buffer a, Subrange::Buffer isection, F&& func) {
+		if (!intersect_one(a, isection)) {
+			func(a);
+			return;
+		}
+		// before
+		if (isection.offset > a.offset) {
+			func({ .offset = a.offset, .size = isection.offset - a.offset });
+		}
+		// after
+		if (a.offset + (int64_t)a.size > isection.offset + (int64_t)isection.size) {
+			func({ .offset = isection.offset + isection.size,
+			       .size = a.size == VK_REMAINING_MIP_LEVELS ? VK_REMAINING_MIP_LEVELS : a.offset + a.size - (isection.offset + isection.size) });
 		}
 	};
 	struct Cut {

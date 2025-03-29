@@ -517,3 +517,27 @@ TEST_CASE("mip down-up") {
 	bloom_pass(trace, std::move(downsample), std::move(upsample), std::move(src)).wait(*test_context.allocator, test_context.compiler);
 	CHECK(trace == "pd1d2d3d4d5d6u5u4u3u2u1u0");
 }
+
+TEST_CASE("buffer slicing") {
+	auto data = { 0xfeu, 0xfeu, 0xfeu, 0xfeu };
+	auto [alloc, buf] = create_buffer(*test_context.allocator, MemoryUsage::eGPUonly, DomainFlagBits::eAny, std::span(data));
+
+	auto fill1 = make_pass("fill some 1", [](CommandBuffer& cbuf, VUK_ARG(Buffer, Access::eTransferWrite) dst) {
+		cbuf.fill_buffer(dst, 0xfd);
+		return dst;
+	});
+
+	fill1(buf.subrange(1 * sizeof(uint32_t), sizeof(uint32_t)));
+
+	auto fill2 = make_pass("fill some 2", [](CommandBuffer& cbuf, VUK_ARG(Buffer, Access::eTransferWrite) dst) {
+		cbuf.fill_buffer(dst, 0xfc);
+		return dst;
+	});
+
+	fill2(buf.subrange(3 * sizeof(uint32_t), sizeof(uint32_t)));
+
+	auto check = { 0xfeu, 0xfdu, 0xfeu, 0xfcu };
+	auto res = download_buffer(buf).get(*test_context.allocator, test_context.compiler);
+	auto schpen = std::span((uint32_t*)res->mapped_ptr, 4);
+	CHECK(schpen == std::span(check));
+}

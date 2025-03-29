@@ -689,11 +689,11 @@ namespace vuk {
 						auto& parm = node->call.args[i];
 						if (arg_ty->kind == Type::IMBUED_TY) {
 							auto access = arg_ty->imbued.access;
-							auto& link = parm.link();
-							auto def = get_def2(parm);
-							if (def && def->node->kind == Node::CONSTRUCT) {
-								auto& args = def->node->construct.args;
-								if (is_framebuffer_attachment(access)) {
+							if (is_framebuffer_attachment(access)) {
+								auto& link = parm.link();
+								auto def = get_def2(parm);
+								if (def && def->node->kind == Node::CONSTRUCT) {
+									auto& args = def->node->construct.args;
 									if (is_placeholder(args[9])) {
 										placeholder_to_constant(args[9], 1U); // can only render to a single mip level
 									}
@@ -723,14 +723,14 @@ namespace vuk {
 									} else if (layer_count && is_placeholder(args[7])) {
 										placeholder_to_constant(args[7], *layer_count);
 									}
-								}
-							} else if (def && def->node->kind == Node::ACQUIRE_NEXT_IMAGE) {
-								auto e = eval<Swapchain**>(def->node->acquire_next_image.swapchain);
-								if (e.holds_value()) {
-									Swapchain& swp = ***e;
-									extent = Extent2D{ swp.images[0].extent.width, swp.images[0].extent.height };
-									layer_count = swp.images[0].layer_count;
-									samples = Samples::e1;
+								} else if (def && def->node->kind == Node::ACQUIRE_NEXT_IMAGE) {
+									auto e = eval<Swapchain**>(def->node->acquire_next_image.swapchain);
+									if (e.holds_value()) {
+										Swapchain& swp = ***e;
+										extent = Extent2D{ swp.images[0].extent.width, swp.images[0].extent.height };
+										layer_count = swp.images[0].layer_count;
+										samples = Samples::e1;
+									}
 								}
 							}
 						} else {

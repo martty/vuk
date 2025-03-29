@@ -146,6 +146,14 @@ namespace vuk {
 
 		// Buffer inferences
 
+		Value<Buffer> subrange(uint64_t new_offset, uint64_t new_size)
+		  requires std::is_same_v<T, Buffer>
+		{
+			Ref item =
+			    current_module->make_slice(get_head(), 0, current_module->make_constant<uint64_t>(new_offset), current_module->make_constant<uint64_t>(new_size));
+			return Value(ExtRef(std::make_shared<ExtNode>(item.node, node), item));
+		}
+
 		void same_size(const Value<Buffer>& src)
 		  requires std::is_same_v<T, Buffer>
 		{
