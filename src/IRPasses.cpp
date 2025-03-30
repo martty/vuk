@@ -530,10 +530,15 @@ namespace vuk {
 				break;
 
 			case Node::ACQUIRE_NEXT_IMAGE:
-				first(node).link().def = first(node);
+				add_breaking_result(node, 0);
 				break;
 
 			case Node::GARBAGE:
+				break;
+
+			case Node::USE:
+				add_result(node, 0, node->use.src);
+				add_write(node, node->use.src, 0);
 				break;
 
 			default:
@@ -888,6 +893,37 @@ namespace vuk {
 								parm.link().undef_sync = to_use(Access::eMemoryRW);
 							}
 						}
+					}
+				}
+			} break;
+			case Node::USE: {
+				auto& parm = node->use.src;
+				auto type = parm.type()->hash_value;
+				if (parm.type()->kind == Type::ARRAY_TY) {
+					type = (*parm.type()->array.T)->hash_value;
+				}
+				if (type != current_module->types.builtin_buffer && type != current_module->types.builtin_image) {
+					break;
+				}
+				auto& link = parm.link();
+				assert(!link.undef_sync);
+				if (node->use.access != Access::eNone) {
+					link.undef_sync = to_use(node->use.access);
+				} else {
+					assert(node->use.src.node->kind == Node::CONVERGE);
+					auto& converge = node->use.src.node->converge;
+					// find something with sync and broadcast that onto the convergence
+					// it is possible we find nothing - in this case no sync is needed
+					for (size_t i = 1; i < converge.diverged.size(); i++) {
+						ChainLink* use_link = &converge.diverged[i].link();
+						while (!use_link->read_sync && !use_link->undef_sync && use_link->prev) {
+							use_link = use_link->prev;
+						}
+						if (!use_link->read_sync && !use_link->undef_sync) {
+							continue;
+						}
+						link.undef_sync = use_link->undef_sync ? use_link->undef_sync : use_link->read_sync;
+						break;
 					}
 				}
 			} break;
@@ -1329,6 +1365,7 @@ namespace vuk {
 
 		VUK_DO_OR_RETURN(impl->collect_chains());
 
+		// do forced convergence here
 		std::pmr::vector<Node*> new_nodes;
 		NodeContext nc{ current_module.get(), impl->pass_reads, impl->child_chains, new_nodes, allocator, true };
 		for (auto& [def, lr] : impl->live_ranges) {
@@ -1339,23 +1376,35 @@ namespace vuk {
 				lr.undef_link = lr.undef_link->next;
 			}
 			if (lr.undef_link->undef && lr.undef_link->undef.node->kind == Node::SLICE) { // main chain that ends in SLICE..
+				// make force reconvergence node
 				auto slice_node = lr.undef_link->undef.node;
 				std::array tails{ nth(slice_node, 2), nth(slice_node, 0), nth(slice_node, 1) };
-				auto last_write = nc.module->make_converge(slice_node->slice.src.type(), tails);
-				allocate_node_links(last_write.node, allocator);
-				nc.process_node_links(last_write.node);
-				new_nodes.push_back(last_write.node);
+				auto f_converge = nc.module->make_converge(slice_node->slice.src.type(), tails);
+				allocate_node_links(f_converge.node, allocator);
+				nc.process_node_links(f_converge.node);
+				new_nodes.push_back(f_converge.node);
+				// add use node
+				auto use_node = nc.module->make_use(f_converge, Access::eNone);
+				allocate_node_links(use_node.node, allocator);
+				nc.process_node_links(use_node.node);
+				new_nodes.push_back(use_node.node);
+				// make the ref node depend on it
 				assert(impl->ref_nodes.back()->kind == Node::RELEASE);
-				std::array wrapping{ impl->ref_nodes.back()->release.src[0], last_write };
-				impl->ref_nodes.back()->release.src[0].link().undef = {};
-				impl->ref_nodes.back()->release.src[0].link().next = {};
-				impl->ref_nodes.back()->release.src[0] = nc.module->make_converge(impl->ref_nodes.back()->release.src[0].type(), wrapping);
-				impl->ref_nodes.back()->release.src[0].node->index = impl->ref_nodes.back()->index;
-				nc.process_node_links(impl->ref_nodes.back()->release.src[0].node);
-				allocate_node_links(impl->ref_nodes.back(), allocator);
-				nc.process_node_links(impl->ref_nodes.back());
+				auto& release_node = impl->ref_nodes.back();
+				std::array wrapping{ release_node->release.src[0], use_node };
+				release_node->release.src[0].link().undef = {};
+				release_node->release.src[0].link().next = {};
+				release_node->release.src[0] = nc.module->make_converge(release_node->release.src[0].type(), wrapping);
+				release_node->release.src[0].node->index = release_node->index;
+				allocate_node_links(release_node->release.src[0].node, allocator);
+				nc.process_node_links(release_node->release.src[0].node);
+				new_nodes.push_back(release_node->release.src[0].node);
+				allocate_node_links(release_node, allocator);
+				nc.process_node_links(release_node);
 			}
 		}
+		impl->nodes.insert(impl->nodes.end(), new_nodes.begin(), new_nodes.end());
+		new_nodes.clear();
 
 		VUK_DO_OR_RETURN(impl->collect_chains());
 		VUK_DO_OR_RETURN(impl->reify_inference());

@@ -280,7 +280,6 @@ namespace vuk {
 		ChainLink* prev = nullptr; // if this came from a previous undef, we link them together
 		Ref def;
 		RelSpan<Ref> reads;
-		RelSpan<Ref> nops;
 		Ref undef;
 		ChainLink* next = nullptr; // if this links to a def, we link them together
 		RelSpan<ChainLink*> child_chains;
@@ -294,7 +293,7 @@ namespace vuk {
 		static constexpr uint8_t MAX_ARGS = 5;
 
 		enum class BinOp { ADD, SUB, MUL, DIV, MOD };
-		enum Kind { PLACEHOLDER, CONSTANT, CONSTRUCT, SLICE, CONVERGE, IMPORT, CALL, CLEAR, ACQUIRE, RELEASE, ACQUIRE_NEXT_IMAGE, CAST, MATH_BINARY, GARBAGE } kind;
+		enum Kind { PLACEHOLDER, CONSTANT, CONSTRUCT, SLICE, CONVERGE, IMPORT, CALL, CLEAR, ACQUIRE, RELEASE, ACQUIRE_NEXT_IMAGE, USE, CAST, MATH_BINARY, GARBAGE } kind;
 		uint8_t flag = 0;
 		std::span<std::shared_ptr<Type>> type;
 		NodeDebugInfo* debug_info = nullptr;
@@ -394,6 +393,10 @@ namespace vuk {
 				Ref b;
 				BinOp op;
 			} math_binary;
+			struct : Fixed<1> {
+				Ref src;
+				Access access;
+			} use;
 			struct {
 				uint8_t arg_count;
 			} generic_node;
@@ -437,6 +440,8 @@ namespace vuk {
 				return "release";
 			case ACQUIRE:
 				return "acquire";
+			case USE:
+				return "use";
 			}
 			assert(0);
 			return "";
@@ -1620,6 +1625,11 @@ namespace vuk {
 			auto deps_ptr = new Ref[deps.size()];
 			std::copy(deps.begin(), deps.end(), deps_ptr);
 			return first(emplace_op(Node{ .kind = Node::CONVERGE, .type = std::span{ ty, 1 }, .converge = { .diverged = std::span{ deps_ptr, deps.size() } } }));
+		}
+
+		Ref make_use(Ref src, Access acc) {
+			auto ty = new std::shared_ptr<Type>[1]{ src.type()  };
+			return first(emplace_op(Node{ .kind = Node::USE, .type = std::span{ ty, 1 }, .use = { .src = src, .access = acc } }));
 		}
 
 		Ref make_cast(std::shared_ptr<Type> dst_type, Ref src) {

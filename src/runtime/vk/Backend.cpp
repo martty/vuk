@@ -1921,8 +1921,9 @@ namespace vuk {
 #ifdef VUK_DUMP_EXEC
 					print_results(node);
 					fmt::print(" = ");
+					print_args(node->converge.diverged.subspan(0, 1));
 					fmt::print("{{");
-					print_args(node->converge.diverged);
+					print_args(node->converge.diverged.subspan(1));
 					fmt::print("}}");
 					fmt::print("\n");
 #endif
@@ -1932,6 +1933,28 @@ namespace vuk {
 					for (size_t i = 0; i < node->converge.diverged.size(); i++) {
 						sched.schedule_dependency(node->converge.diverged[i], RW::eWrite);
 					}
+				}
+				break;
+			}
+			case Node::USE: {
+				if (sched.process(item)) {
+					// half sync
+					auto& div = node->use.src;
+					recorder.add_sync(sched.base_type(div).get(),
+					                  sched.get_dependency_info(div, div.type().get(), RW::eWrite, div.node->execution_info->stream),
+					                  sched.get_value(div));
+
+#ifdef VUK_DUMP_EXEC
+					print_results(node);
+					fmt::print(" = ");
+					print_args(std::span(&node->use.src, 1));
+					fmt::print(": {}", Type::to_sv(node->use.access));
+					fmt::print("\n");
+#endif
+
+					sched.done(node, div.node->execution_info->stream, sched.get_value(div));
+				} else {
+					sched.schedule_dependency(node->use.src, RW::eWrite);
 				}
 				break;
 			}
@@ -1953,6 +1976,7 @@ namespace vuk {
 		// populate values and last_use
 		for (auto& [def_link, lr] : impl->live_ranges) {
 			assert(def_link);
+			assert(lr.undef_link);
 			if (def_link->def.node->kind == Node::CONSTANT) {
 				continue;
 			}
@@ -1963,17 +1987,27 @@ namespace vuk {
 			lr.last_value = sched.get_value(final_use);
 			lr.last_use = recorder.last_use(Type::stripped(final_use.type()).get(), lr.last_value);
 
+			// get final signal
+			AcquireRelease* last_signal = nullptr;
+			for (auto link = lr.undef_link; link; link = link->prev) {
+				if (link->def.node->rel_acq) {
+					last_signal = link->def.node->rel_acq;
+					break;
+				}
+			}
+
 			// put the values on the nodes
 			for (auto link = def_link; link; link = link->next) {
-				auto assign = [&](Ref ref) {
-					assert(ref.node->kind == Node::ACQUIRE);
-					memcpy(ref.node->acquire.values[ref.index], lr.last_value, ref.node->type[ref.index]->size);
-				};
-				assert(link->def);
-				assign(link->def);
-				if (link->def.node->rel_acq && final_use.node->rel_acq) {
-					link->def.node->rel_acq->source = final_use.node->rel_acq->source;
-					link->def.node->rel_acq->status = final_use.node->rel_acq->status;
+				auto& ref = link->def;
+				assert(ref);
+				assert(ref.node->kind == Node::ACQUIRE);
+				memcpy(ref.node->acquire.values[ref.index], lr.last_value, ref.node->type[ref.index]->size);
+				if (ref.node->rel_acq) {
+					ref.node->rel_acq->last_use[ref.index] = lr.last_use;
+				}
+				if (ref.node->rel_acq && last_signal) {
+					ref.node->rel_acq->source = last_signal->source;
+					ref.node->rel_acq->status = last_signal->status;
 				}
 			}
 		}
