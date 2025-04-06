@@ -1012,6 +1012,9 @@ namespace vuk {
 			assert(node->execution_info);
 			node->execution_info->kind = node->kind;
 			// morph into acquire
+			if (node->generic_node.arg_count == (uint8_t)~0u) {
+				delete[] node->variable_node.args.data();
+			}
 			node->kind = Node::ACQUIRE;
 			node->acquire = {};
 
@@ -1176,7 +1179,7 @@ namespace vuk {
 				if (i > 0) {
 					msg += fmt::format(", ");
 				}
-				if (node->debug_info && !node->debug_info->result_names.empty()) {
+				if (node->debug_info && !node->debug_info->result_names.empty() && node->debug_info->result_names.size() > i) {
 					msg += fmt::format("%{}", node->debug_info->result_names[i]);
 				} else {
 					msg += fmt::format("%{}_{}", Node::kind_to_sv(node->kind), sched.naming_index_counter + i);
@@ -1440,6 +1443,33 @@ namespace vuk {
 						fmt::print("\n");
 #endif
 						sched.done(node, host_stream, SampledImage{ image, samp });
+					} else if (node->type[0]->kind == Type::UNION_TY) {
+						for (size_t i = 1; i < node->construct.args.size(); i++) {
+							auto arg_ty = node->construct.args[i].type();
+							auto& parm = node->construct.args[i];
+
+							recorder.add_sync(sched.base_type(parm).get(), sched.get_dependency_info(parm, arg_ty.get(), RW::eWrite, nullptr), sched.get_value(parm));
+						}
+
+#ifdef VUK_DUMP_EXEC
+						print_results(node);
+						fmt::print(" = construct<union> ");
+						print_args(node->construct.args.subspan(1));
+						fmt::print("\n");
+#endif
+						assert(node->construct.args[0].type()->kind == Type::MEMORY_TY);
+
+						char* arr_mem = static_cast<char*>(sched.arena.ensure_space(node->type[0]->size));
+						size_t offset = 0;
+						for (auto i = 0; i < node->construct.args.size() - 1; i++) {
+							auto sz = node->type[0]->composite.types[i]->size;
+							auto& elem = node->construct.args[i + 1];
+							memcpy(arr_mem + offset, sched.get_value(elem), sz);
+							offset += sz;
+						}
+
+						node->construct.args[0].node->constant.value = arr_mem;
+						sched.done(node, host_stream, (void*)arr_mem);
 					} else {
 						assert(0);
 					}
@@ -1819,7 +1849,10 @@ namespace vuk {
 						if (node->slice.axis != 0) {
 							if (count > 1) {
 								fmt::print("[{}->{}:{}]", node->slice.axis, start, start + count - 1);
-							} else {
+							} else if (axis == Node::NamedAxis::FIELD) {
+								fmt::print(".{}", start);
+							}
+							else {
 								fmt::print("[{}->{}]", node->slice.axis, start);
 							}
 						} else {
@@ -1834,13 +1867,13 @@ namespace vuk {
 #endif
 
 					if (!(node->debug_info && node->debug_info->result_names.size() > 0 && !node->debug_info->result_names[0].empty())) {
-						std::string name = fmt::format("{}_{}[{}->{}:{}]",
+						/*std::string name = fmt::format("{}_{}[{}->{}:{}]",
 						                               Node::kind_to_sv(node->slice.src.node->execution_info->kind),
 						                               node->slice.src.node->execution_info->naming_index,
 						                               node->slice.axis,
 						                               start,
 						                               start + count - 1);
-						current_module->name_output(first(node), name);
+						current_module->name_output(first(node), name);*/
 					}
 					std::vector<void*, short_alloc<void*>> rets(3, *impl->arena_);
 
@@ -1882,9 +1915,13 @@ namespace vuk {
 						}
 					} else if (node->slice.src.type()->kind == Type::ARRAY_TY) {
 						assert(axis == 0);
-						assert(t->kind == Type::ARRAY_TY);
 						assert(count == 1);
 						rets[0] = reinterpret_cast<std::byte*>(composite_v) + t->array.stride * start;
+					} else if (node->slice.src.type()->kind == Type::UNION_TY) {
+						assert(axis == Node::NamedAxis::FIELD);
+						assert(count == 1);
+						auto offset = t->offsets[start];
+						rets[0] = reinterpret_cast<std::byte*>(composite_v) + offset;
 					} else {
 						assert(0);
 					}
@@ -1940,9 +1977,8 @@ namespace vuk {
 				if (sched.process(item)) {
 					// half sync
 					auto& div = node->use.src;
-					recorder.add_sync(sched.base_type(div).get(),
-					                  sched.get_dependency_info(div, div.type().get(), RW::eWrite, div.node->execution_info->stream),
-					                  sched.get_value(div));
+					recorder.add_sync(
+					    sched.base_type(div).get(), sched.get_dependency_info(div, div.type().get(), RW::eWrite, div.node->execution_info->stream), sched.get_value(div));
 
 #ifdef VUK_DUMP_EXEC
 					print_results(node);
@@ -2013,6 +2049,12 @@ namespace vuk {
 		}
 
 		for (auto& node : impl->nodes) {
+			// shrink slice acquires
+			if (node->execution_info && node->execution_info->kind == Node::SLICE && node->rel_acq) {
+				node->acquire.values = { node->acquire.values.data(), 1 };
+				node->type = { node->type.data(), 1 };
+			}
+
 			// reset any nodes we ran
 			node->execution_info = nullptr;
 			node->links = nullptr;

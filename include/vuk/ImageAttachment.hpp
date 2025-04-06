@@ -220,6 +220,15 @@ namespace vuk {
 		constexpr bool operator<=(const Range& o) const noexcept {
 			return offset >= o.offset && (offset + count) <= (o.offset + o.count);
 		}
+
+		constexpr bool intersect(const Range& o) const noexcept {
+			if (count == REMAINING) {
+				return o.offset >= offset;
+			} else if (o.count == REMAINING) {
+				return offset >= o.offset;
+			}
+			return (offset >= o.offset && offset <= (o.offset + o.count)) || (o.offset >= offset && o.offset <= (offset + count));
+		}
 	};
 
 	// high level type around binding a sampled image with a sampler

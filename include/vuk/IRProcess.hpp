@@ -51,6 +51,8 @@ namespace vuk {
 		std::vector<ChainLink*> chains;
 		std::pmr::vector<ChainLink*> child_chains;
 
+		std::vector<std::pair<Buffer, ChainLink*>> bufs;
+
 		std::span<ScheduledItem*> transfer_passes, compute_passes, graphics_passes;
 
 		struct LiveRange {

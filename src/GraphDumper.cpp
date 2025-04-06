@@ -75,6 +75,7 @@ namespace vuk {
 				ss << "</TD>";
 			}
 			ss << "<TD>";
+			ss << (node->index & 0xffff) << " ";
 			ss << Node::kind_to_sv(node->kind);
 			if (node->kind == Node::CALL) {
 				auto opaque_fn_ty = node->call.args[0].type()->opaque_fn;

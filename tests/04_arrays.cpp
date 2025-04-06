@@ -599,3 +599,66 @@ TEST_CASE("buffer slice-conv-slice") {
 	auto schpen = std::span((uint32_t*)res->mapped_ptr, check.size());
 	CHECK(schpen == std::span(check));
 }
+
+TEST_CASE("buffer two range") {
+	auto data = { 0xfeu, 0xfeu, 0xfeu, 0xfeu };
+	auto [alloc, buf] = create_buffer(*test_context.allocator, MemoryUsage::eGPUonly, DomainFlagBits::eAny, std::span(data));
+
+	auto range1 = buf.subrange(1 * sizeof(uint32_t), sizeof(uint32_t));
+	auto range2 = buf.subrange(2 * sizeof(uint32_t), sizeof(uint32_t));
+	auto fill1 = make_pass("fill some 1", [](CommandBuffer& cbuf, VUK_ARG(Buffer, Access::eTransferWrite) dst) {
+		cbuf.fill_buffer(dst, 0xfd);
+		return dst;
+	});
+	auto fill2 = make_pass("fill some 2", [](CommandBuffer& cbuf, VUK_ARG(Buffer, Access::eTransferWrite) dst) {
+		cbuf.fill_buffer(dst, 0xfc);
+		return dst;
+	});
+	auto res = download_buffer(buf).get(*test_context.allocator, test_context.compiler);
+	fill1(range1);
+	fill2(range2);
+
+	auto check = { 0xfeu, 0xfdu, 0xfcu, 0xfeu };
+	res = download_buffer(buf).get(*test_context.allocator, test_context.compiler);
+	auto schpen = std::span((uint32_t*)res->mapped_ptr, check.size());
+	CHECK(schpen == std::span(check));
+}
+/*
+auto frw_pass = make_pass("frw", [](CommandBuffer& cbuf, VUK_IA(Access::eTransferWrite) img) {
+});
+
+TEST_CASE("alienated subresource") {
+	auto data = { 1u, 2u, 3u, 4u };
+	auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, Samples::e1);
+	ia.level_count = 2;
+	auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data));
+
+	size_t alignment = format_to_texel_block_size(fut->format);
+	size_t size = compute_image_size(fut->format, fut->extent);
+	auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
+
+	auto mip0 = fut.mip(0);
+	auto mip1 = fut.mip(1);
+	auto dst_buf = discard_buf("dst", *dst);
+	auto res = download_buffer(copy(fut, std::move(dst_buf))).get(*test_context.allocator, test_context.compiler);
+
+	{
+		auto futc = clear_image(mip0, vuk::ClearColor(5u, 5u, 5u, 5u));
+		auto futc2 = clear_image(mip1, vuk::ClearColor(6u, 6u, 6u, 6u));
+		frw_pass(mip1);
+		auto dst_buf = discard_buf("dst", *dst);
+		auto res = download_buffer(copy(mip1, std::move(dst_buf))).get(*test_context.allocator, test_context.compiler);
+		auto updata = std::span((uint32_t*)res->mapped_ptr, 1);
+		CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 6; }));
+	}
+
+	{
+		frw_pass(fut);
+		auto dst_buf = discard_buf("dst", *dst);
+		auto res = download_buffer(copy(fut.mip(0), std::move(dst_buf))).get(*test_context.allocator, test_context.compiler);
+		auto updata = std::span((uint32_t*)res->mapped_ptr, 1);
+		CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 5; }));
+	}
+}
+
+*/

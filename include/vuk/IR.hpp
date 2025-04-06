@@ -30,7 +30,7 @@ namespace vuk {
 	using UserCallbackType = fu2::unique_function<void(CommandBuffer&, std::span<void*>, std::span<void*>, std::span<void*>)>;
 
 	struct Type {
-		enum TypeKind { MEMORY_TY = 1, INTEGER_TY, COMPOSITE_TY, ARRAY_TY, IMBUED_TY, ALIASED_TY, OPAQUE_FN_TY, SHADER_FN_TY } kind;
+		enum TypeKind { MEMORY_TY = 1, INTEGER_TY, COMPOSITE_TY, ARRAY_TY, UNION_TY, IMBUED_TY, ALIASED_TY, OPAQUE_FN_TY, SHADER_FN_TY } kind;
 		size_t size = ~0ULL;
 
 		TypeDebugInfo debug_info;
@@ -123,6 +123,7 @@ namespace vuk {
 				hash_combine_direct(v, Type::hash(t->array.T->get()));
 				hash_combine_direct(v, (uint32_t)t->array.count);
 				return v;
+			case UNION_TY:
 			case COMPOSITE_TY: {
 				for (int i = 0; i < t->composite.types.size(); i++) {
 					hash_combine_direct(v, Type::hash(t->composite.types[i].get()));
@@ -243,6 +244,11 @@ namespace vuk {
 					return std::string(t->debug_info.name);
 				}
 				return "composite:" + std::to_string(t->composite.tag);
+			case UNION_TY:
+				if (!t->debug_info.name.empty()) {
+					return std::string(t->debug_info.name);
+				}
+				return "union:" + std::to_string(t->composite.tag);
 			case OPAQUE_FN_TY:
 				return "ofn";
 			case SHADER_FN_TY:
@@ -338,10 +344,6 @@ namespace vuk {
 				std::span<Ref> defs; // for preserving provenance for composite types
 				std::optional<Allocator> allocator;
 			} construct;
-			struct : Fixed<2> {
-				Ref composite;
-				Ref index;
-			} extract;
 			struct : Fixed<3> {
 				Ref src;
 				Ref start;
@@ -661,7 +663,7 @@ namespace vuk {
 				return { expected_error, CannotBeConstantEvaluated{ ref } };
 			}
 			auto index = *(uint64_t*)rov_index.value;
-			auto type = ref.node->extract.composite.type();
+			auto type = ref.node->slice.src.type();
 
 			if (composite.is_ref) {
 				if (composite.ref.node->kind == Node::CONSTRUCT) {
@@ -1070,6 +1072,8 @@ namespace vuk {
 			Type::Hash builtin_sampler = 0;
 			Type::Hash builtin_sampled_image = 0;
 
+			size_t union_tag_type_counter = 0;
+
 			// TYPES
 			std::shared_ptr<Type> make_imbued_ty(std::shared_ptr<Type> ty, Access access) {
 				auto t = new Type{ .kind = Type::IMBUED_TY, .size = ty->size, .imbued = { .access = access } };
@@ -1087,6 +1091,20 @@ namespace vuk {
 				auto t = new Type{ .kind = Type::ARRAY_TY, .size = count * ty->size, .array = { .count = count, .stride = ty->size } };
 				t->array.T = &t->child_types.emplace_back(ty);
 				return emplace_type(std::shared_ptr<Type>(t));
+			}
+
+			std::shared_ptr<Type> make_union_ty(std::vector<std::shared_ptr<Type>> types) {
+				std::vector<size_t> offsets;
+				size_t offset = 0;
+				for (auto& t : types) {
+					offsets.push_back(offset);
+					offset += t->size;
+				}
+				auto union_type = emplace_type(std::shared_ptr<Type>(new Type{ .kind = Type::UNION_TY,
+				                                                               .size = offset,
+				                                                               .offsets = offsets, .composite = { .types = types, .tag = union_tag_type_counter++ } }));
+				union_type->child_types = std::move(types);
+				return union_type;
 			}
 
 			std::shared_ptr<Type> make_opaque_fn_ty(std::span<std::shared_ptr<Type> const> args,
@@ -1341,8 +1359,8 @@ namespace vuk {
 					destroy(t->imbued.T->get(), v);
 				} else if (t->kind == Type::ALIASED_TY) {
 					destroy(t->aliased.T->get(), v);
-				} else if (t->kind == Type::ARRAY_TY) {
-					// currently arrays don't own their values
+				} else if (t->kind == Type::ARRAY_TY || t->kind == Type::UNION_TY) {
+					// currently arrays and unions don't own their values
 					/* auto cv = (char*)v;
 					for (auto i = 0; i < t->array.count; i++) {
 					  destroy(t->array.T->get(), cv);
@@ -1382,6 +1400,9 @@ namespace vuk {
 				cnt++;
 				p = p->parent;
 			} while (p != nullptr);
+			if (node->debug_info->trace.data()) {
+				delete[] node->debug_info->trace.data();
+			}
 			node->debug_info->trace = std::span(new vuk::source_location[cnt], cnt);
 			p = &loc;
 			cnt = 0;
@@ -1556,6 +1577,20 @@ namespace vuk {
 			return first(emplace_op(Node{ .kind = Node::CONSTRUCT, .type = std::span{ arr_ty, 1 }, .construct = { .args = std::span(args_ptr, args.size() + 1) } }));
 		}
 
+		Ref make_declare_union(std::span<Ref> args) {
+			std::vector<std::shared_ptr<Type>> child_types;
+			for (auto& arg : args) {
+				child_types.push_back(Type::stripped(arg.type()));
+			}
+			auto union_ty = new std::shared_ptr<Type>[1]{ types.make_union_ty(std::move(child_types)) };
+			auto args_ptr = new Ref[args.size() + 1];
+			auto mem_ty = new std::shared_ptr<Type>[1]{ types.memory(0) };
+			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = nullptr } }));
+			std::copy(args.begin(), args.end(), args_ptr + 1);
+			return first(
+			    emplace_op(Node{ .kind = Node::CONSTRUCT, .type = std::span{ union_ty, 1 }, .construct = { .args = std::span(args_ptr, args.size() + 1) } }));
+		}
+
 		Ref make_declare_swapchain(Swapchain& bundle) {
 			auto swpptr = new void*(&bundle);
 			auto args_ptr = new Ref[2];
@@ -1592,7 +1627,7 @@ namespace vuk {
 			uint8_t axis = 0;
 			if (stripped->kind == Type::ARRAY_TY) {
 				ty[0] = *stripped->array.T;
-			} else if (stripped->kind == Type::COMPOSITE_TY) {
+			} else if (stripped->kind == Type::COMPOSITE_TY || stripped->kind == Type::UNION_TY) {
 				ty[0] = stripped->composite.types[index];
 				axis = Node::NamedAxis::FIELD;
 			} else {

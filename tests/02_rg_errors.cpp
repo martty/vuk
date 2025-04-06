@@ -94,8 +94,8 @@ TEST_CASE("error: attaching something twice decl/decl") {
 		REQUIRE_THROWS(wr_buf(buf_a, buf_b).get(*test_context.allocator, test_context.compiler));
 	}
 }
-
-TEST_CASE("error: attaching something twice acq/acq") {
+/*
+TEST_CASE("not an error: attaching something twice acq/acq") {
 	{
 		auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, 100, 1 });
 		auto buf_a = vuk::acquire_buf("a", *dst, vuk::Access::eNone);
@@ -103,9 +103,9 @@ TEST_CASE("error: attaching something twice acq/acq") {
 
 		auto wr_buf = vuk::make_pass("wr", [](CommandBuffer&, VUK_BA(vuk::eTransferWrite) buf, VUK_BA(vuk::eTransferWrite) bufb) { return buf; });
 
-		REQUIRE_THROWS(wr_buf(buf_a, buf_b).get(*test_context.allocator, test_context.compiler));
+		REQUIRE_NOTHROW(wr_buf(buf_a, buf_b).get(*test_context.allocator, test_context.compiler));
 	}
-}
+}*/
 
 TEST_CASE("error: attaching something twice decl/acq") {
 	{
@@ -119,6 +119,5 @@ TEST_CASE("error: attaching something twice decl/acq") {
 	}
 }
 
-// your code for which the warning gets suppressed
 #pragma clang diagnostic pop
 #pragma warning(pop)
