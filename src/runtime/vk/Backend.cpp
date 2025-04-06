@@ -682,34 +682,6 @@ namespace vuk {
 		return key;
 	}
 
-	uint64_t value_identity(Type* base_ty, void* value) {
-		uint64_t key = 0;
-		if (base_ty->hash_value == current_module->types.builtin_image) {
-			auto& img_att = *reinterpret_cast<ImageAttachment*>(value);
-			key = reinterpret_cast<uint64_t>(img_att.image.image);
-		} else if (base_ty->hash_value == current_module->types.builtin_buffer) {
-			auto buf = reinterpret_cast<Buffer*>(value);
-			key = reinterpret_cast<uint64_t>(buf->allocation);
-			hash_combine(key, buf->offset);
-		} else if (base_ty->kind == Type::ARRAY_TY) {
-			if (base_ty->array.count > 0) { // for an array, we key off the the first element, as the array syncs together
-				auto elem_ty = base_ty->array.T->get();
-				auto elems = reinterpret_cast<std::byte*>(value);
-				return value_identity(elem_ty, elems);
-			} else { // zero-len arrays
-				return 0;
-			}
-		} else if (base_ty->hash_value == current_module->types.builtin_sampled_image) { // only image syncs
-			auto& img_att = reinterpret_cast<SampledImage*>(value)->ia;
-			key = reinterpret_cast<uint64_t>(img_att.image.image);
-		} else if (base_ty->kind == Type::INTEGER_TY) { // TODO: generalise
-			return 0;
-		} else { // other types just key on the voidptr
-			key = reinterpret_cast<uint64_t>(value);
-		}
-		return key;
-	}
-
 	struct Recorder {
 		Recorder(Allocator alloc, ProfilingCallbacks* callbacks, std::pmr::vector<Ref>& pass_reads) :
 		    ctx(alloc.get_context()),
@@ -2051,6 +2023,9 @@ namespace vuk {
 		for (auto& node : impl->nodes) {
 			// shrink slice acquires
 			if (node->execution_info && node->execution_info->kind == Node::SLICE && node->rel_acq) {
+				for (size_t i = 1; i < node->acquire.values.size(); i++) {
+					current_module->types.destroy(Type::stripped(node->type[i]).get(), node->acquire.values[i]);
+				}
 				node->acquire.values = { node->acquire.values.data(), 1 };
 				node->type = { node->type.data(), 1 };
 			}

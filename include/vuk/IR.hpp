@@ -1427,7 +1427,7 @@ namespace vuk {
 					auto& v = node->acquire.values[i];
 					types.destroy(Type::stripped(node->type[i]).get(), v);
 				}
-				delete node->acquire.values.data();
+				delete[] node->acquire.values.data();
 				break;
 			}
 			default: // nothing extra to be done here
