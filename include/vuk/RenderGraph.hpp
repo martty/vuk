@@ -640,10 +640,6 @@ public:
 		/// @param compile_options CompileOptions controlling compilation behaviour
 		Result<void> compile(std::span<std::shared_ptr<ExtNode>> rgs, const RenderGraphCompileOptions& compile_options);
 
-		/// @brief Use this RenderGraph and create an ExecutableRenderGraph
-		/// @param compile_options CompileOptions controlling compilation behaviour
-		Result<struct ExecutableRenderGraph> link(std::span<std::shared_ptr<ExtNode>> rgs, const RenderGraphCompileOptions& compile_options);
-
 		// reflection functions
 
 		/// @brief retrieve usages of resources in the RenderGraph
@@ -662,6 +658,7 @@ public:
 
 		void* get_value(Ref parm);
 
+		Result<void> execute(Allocator& allocator);
 	private:
 		struct RGCImpl* impl;
 
@@ -677,29 +674,8 @@ public:
 		template<class Pred>
 		Result<void> rewrite(Pred pred);
 
-		friend struct ExecutableRenderGraph;
-	};
-
-	struct ExecutableRenderGraph {
-		ExecutableRenderGraph(Compiler&);
-		~ExecutableRenderGraph();
-
-		ExecutableRenderGraph(const ExecutableRenderGraph&) = delete;
-		ExecutableRenderGraph& operator=(const ExecutableRenderGraph&) = delete;
-
-		ExecutableRenderGraph(ExecutableRenderGraph&&) noexcept;
-		ExecutableRenderGraph& operator=(ExecutableRenderGraph&&) noexcept;
-
-		Result<void> execute(Allocator& allocator);
-
-	private:
-		struct RGCImpl* impl;
-
 		void fill_render_pass_info(struct RenderPassInfo& rpass, const size_t& i, class CommandBuffer& cobuf);
-
-		friend struct InferenceContext;
 	};
-
 } // namespace vuk
 
 namespace std {

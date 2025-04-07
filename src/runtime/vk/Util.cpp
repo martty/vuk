@@ -27,12 +27,12 @@ namespace vuk {
 			compiler.reset();
 			return { expected_value }; // nothing to do
 		}
-		auto erg = compiler.link(extnodes, options);
+		auto erg = compiler.compile(extnodes, options);
 		if (!erg) {
 			return erg;
 		}
 
-		VUK_DO_OR_RETURN(erg->execute(allocator));
+		VUK_DO_OR_RETURN(compiler.execute(allocator));
 		compiler.reset();
 		return { expected_value };
 	}

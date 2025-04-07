@@ -127,16 +127,6 @@ namespace vuk {
 } // namespace vuk
 
 namespace vuk {
-	ExecutableRenderGraph::ExecutableRenderGraph(Compiler& rg) : impl(rg.impl) {}
-
-	ExecutableRenderGraph::ExecutableRenderGraph(ExecutableRenderGraph&& o) noexcept : impl(std::exchange(o.impl, nullptr)) {}
-	ExecutableRenderGraph& ExecutableRenderGraph::operator=(ExecutableRenderGraph&& o) noexcept {
-		impl = std::exchange(o.impl, nullptr);
-		return *this;
-	}
-
-	ExecutableRenderGraph::~ExecutableRenderGraph() {}
-
 	struct RenderPassInfo {
 		std::vector<VkImageView> framebuffer_ivs;
 		RenderPassCreateInfo rpci;
@@ -155,7 +145,7 @@ namespace vuk {
 		ctx.vkCmdBeginRenderPass(cbuf, &rbi, use_secondary_command_buffers ? VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS : VK_SUBPASS_CONTENTS_INLINE);
 	}
 
-	void ExecutableRenderGraph::fill_render_pass_info(RenderPassInfo& rpass, const size_t& i, CommandBuffer& cobuf) {
+	void Compiler::fill_render_pass_info(RenderPassInfo& rpass, const size_t& i, CommandBuffer& cobuf) {
 		if (rpass.handle == VK_NULL_HANDLE) {
 			cobuf.ongoing_render_pass = {};
 			return;
@@ -1078,7 +1068,7 @@ namespace vuk {
 		delete[] (char*)UNIQUE_NAME(A)->value;                                                                                                                     \
 	}
 
-	Result<void> ExecutableRenderGraph::execute(Allocator& alloc) {
+	Result<void> Compiler::execute(Allocator& alloc) {
 		Runtime& ctx = alloc.get_context();
 
 		Recorder recorder(alloc, &impl->callbacks, impl->pass_reads);

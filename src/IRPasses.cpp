@@ -1611,12 +1611,6 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	Result<ExecutableRenderGraph> Compiler::link(std::span<std::shared_ptr<ExtNode>> nodes, const RenderGraphCompileOptions& compile_options) {
-		VUK_DO_OR_RETURN(compile(nodes, compile_options));
-
-		return { expected_value, *this };
-	}
-
 	std::span<ChainLink*> Compiler::get_use_chains() const {
 		return std::span(impl->chains);
 	}
