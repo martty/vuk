@@ -299,7 +299,25 @@ namespace vuk {
 		static constexpr uint8_t MAX_ARGS = 5;
 
 		enum class BinOp { ADD, SUB, MUL, DIV, MOD };
-		enum Kind { PLACEHOLDER, CONSTANT, CONSTRUCT, SLICE, CONVERGE, IMPORT, CALL, CLEAR, ACQUIRE, RELEASE, ACQUIRE_NEXT_IMAGE, USE, LOGICAL_COPY, CAST, MATH_BINARY, GARBAGE } kind;
+		enum Kind {
+			PLACEHOLDER,
+			CONSTANT,
+			CONSTRUCT,
+			SLICE,
+			CONVERGE,
+			IMPORT,
+			CALL,
+			CLEAR,
+			ACQUIRE,
+			RELEASE,
+			ACQUIRE_NEXT_IMAGE,
+			USE,
+			LOGICAL_COPY,
+			SET,
+			CAST,
+			MATH_BINARY,
+			GARBAGE
+		} kind;
 		uint8_t flag = 0;
 		std::span<std::shared_ptr<Type>> type;
 		NodeDebugInfo* debug_info = nullptr;
@@ -402,6 +420,11 @@ namespace vuk {
 			struct : Fixed<1> {
 				Ref src;
 			} logical_copy;
+			struct : Fixed<1> {
+				Ref dst;
+				Ref value;
+				size_t index;
+			} set;
 			struct {
 				uint8_t arg_count;
 			} generic_node;
@@ -447,6 +470,8 @@ namespace vuk {
 				return "acquire";
 			case USE:
 				return "use";
+			case SET:
+				return "set";
 			case LOGICAL_COPY:
 				return "lcopy";
 			}
@@ -611,121 +636,7 @@ namespace vuk {
 		return result;
 	}
 
-	inline Result<RefOrValue, CannotBeConstantEvaluated> eval2(Ref ref) {
-		switch (ref.node->kind) {
-		case Node::CONSTANT: {
-			return { expected_value, RefOrValue::from_value(ref.node->constant.value) };
-		}
-		case Node::CONSTRUCT:
-		case Node::ACQUIRE_NEXT_IMAGE:
-			return { expected_value, RefOrValue::from_ref(ref) };
-		case Node::ACQUIRE:
-			return { expected_value, RefOrValue::from_value(ref.node->acquire.values[ref.index]) };
-		case Node::CALL: {
-			auto t = ref.type();
-			if (t->kind != Type::ALIASED_TY) {
-				return { expected_error, CannotBeConstantEvaluated{ ref } };
-			}
-			return eval2(ref.node->call.args[t->aliased.ref_idx]);
-		}
-		case Node::MATH_BINARY: {
-			auto& math_binary = ref.node->math_binary;
-
-			auto a_ = eval2(math_binary.a);
-			if (!a_) {
-				return a_;
-			}
-			auto a_rov = *a_;
-			if (a_rov.is_ref) {
-				return { expected_error, CannotBeConstantEvaluated{ ref } };
-			}
-			auto a = a_rov.value;
-
-			auto b_ = eval2(math_binary.b);
-			if (!b_) {
-				return b_;
-			}
-			auto b_rov = *b_;
-			if (b_rov.is_ref) {
-				return { expected_error, CannotBeConstantEvaluated{ ref } };
-			}
-			auto b = b_rov.value;
-			return { expected_value, RefOrValue::adopt_value(eval_binop(math_binary.op, ref.type(), a, b)) };
-
-		} break;
-		case Node::SLICE: {
-			auto composite_ = eval2(ref.node->slice.src);
-			if (!composite_) {
-				return composite_;
-			}
-			auto composite = *composite_;
-			auto index_ = eval2(ref.node->slice.start);
-			if (!index_) {
-				return index_;
-			}
-			auto rov_index = *index_;
-			if (rov_index.is_ref) {
-				return { expected_error, CannotBeConstantEvaluated{ ref } };
-			}
-			auto index = *(uint64_t*)rov_index.value;
-			auto type = ref.node->slice.src.type();
-
-			if (composite.is_ref) {
-				if (composite.ref.node->kind == Node::CONSTRUCT) {
-					return eval2(composite.ref.node->construct.args[index + 1]);
-				} else if (composite.ref.node->kind == Node::ACQUIRE_NEXT_IMAGE) {
-					auto swp_ = get_def(composite.ref.node->acquire_next_image.swapchain);
-					if (!swp_) {
-						return swp_;
-					}
-					auto swp = *swp_;
-					if (swp.is_ref && swp.ref.node->kind == Node::CONSTRUCT) {
-						auto arr = swp.ref.node->construct.args[1]; // array of images
-						if (arr.node->kind == Node::CONSTRUCT) {
-							auto elem = arr.node->construct.args[1]; // first image
-							if (elem.node->kind == Node::CONSTRUCT) {
-								return eval2(elem.node->construct.args[index + 1]);
-							}
-						}
-					} else {
-						return { expected_error, CannotBeConstantEvaluated{ ref } };
-					}
-				} else if (composite.ref.node->kind == Node::SLICE) {
-					auto slice_def_ = get_def(composite.ref.node->slice.src);
-					if (!slice_def_) {
-						return slice_def_;
-					}
-					auto slice_def = *slice_def_;
-					if (!slice_def.is_ref || slice_def.ref.node->kind != Node::CONSTRUCT) {
-						return { expected_error, CannotBeConstantEvaluated{ ref } }; // TODO: this too limited
-					}
-					if (index < 6) {
-						return eval2(slice_def.ref.node->construct.args[index + 1]);
-					} else {
-						assert(false && "NYI");
-					}
-				} else {
-					return { expected_error, CannotBeConstantEvaluated{ ref } };
-				}
-			} else {
-				if (type->kind == Type::COMPOSITE_TY) {
-					auto offset = type->offsets[index];
-					return { expected_value, RefOrValue::from_value((reinterpret_cast<void*>(static_cast<unsigned char*>(composite.value) + offset))) };
-				} else if (type->kind == Type::ARRAY_TY) {
-					auto offset = type->array.stride * index;
-					return { expected_value, RefOrValue::from_value((reinterpret_cast<void*>(static_cast<unsigned char*>(composite.value) + offset))) };
-				} else {
-					return { expected_error, CannotBeConstantEvaluated{ ref } };
-				}
-			}
-
-			return { expected_error, CannotBeConstantEvaluated{ ref } };
-		}
-		default:
-			return { expected_error, CannotBeConstantEvaluated{ ref } };
-		}
-		assert(0);
-	}
+	
 
 	template<class T>
 	  requires(!std::is_pointer_v<T>)
@@ -1105,9 +1016,8 @@ namespace vuk {
 					offsets.push_back(offset);
 					offset += t->size;
 				}
-				auto union_type = emplace_type(std::shared_ptr<Type>(new Type{ .kind = Type::UNION_TY,
-				                                                               .size = offset,
-				                                                               .offsets = offsets, .composite = { .types = types, .tag = union_tag_type_counter++ } }));
+				auto union_type = emplace_type(std::shared_ptr<Type>(
+				    new Type{ .kind = Type::UNION_TY, .size = offset, .offsets = offsets, .composite = { .types = types, .tag = union_tag_type_counter++ } }));
 				union_type->child_types = std::move(types);
 				return union_type;
 			}
@@ -1471,6 +1381,13 @@ namespace vuk {
 
 		// OPS
 
+		Ref make_constant(std::shared_ptr<Type> type, void* value) {
+			std::shared_ptr<Type>* ty = new std::shared_ptr<Type>[1]{ type };
+			auto value_ptr = new char[type->size];
+			memcpy(value_ptr, value, type->size);
+			return first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ ty, 1 }, .constant = { .value = value_ptr, .owned = true } }));
+		}
+
 		template<class T>
 		Ref make_constant(T value) {
 			std::shared_ptr<Type>* ty;
@@ -1496,6 +1413,16 @@ namespace vuk {
 				ty = new std::shared_ptr<Type>[1]{ types.memory(sizeof(T)) };
 			}
 			return first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ ty, 1 }, .constant = { .value = value, .owned = false } }));
+		}
+
+		void set_value(Ref ref, size_t index, Ref value) {
+			emplace_op(Node{ .kind = Node::SET, .set = { .dst = ref, .value = value, .index = index } });
+		}
+
+		template<class T>
+		void set_value(Ref ref, size_t index, T value) {
+			auto co = make_constant(value);
+			emplace_op(Node{ .kind = Node::SET, .set = { .dst = ref, .value = co, .index = index } });
 		}
 
 		Ref make_declare_image(ImageAttachment value) {
@@ -1562,7 +1489,7 @@ namespace vuk {
 			auto args_ptr = new Ref[2];
 			auto mem_ty = new std::shared_ptr<Type>[1]{ types.memory(sizeof(Buffer)) };
 			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = buf_ptr, .owned = true } }));
-			if (value.size != ~(0u)) {
+			if (value.size != ~(0ULL)) {
 				args_ptr[1] = make_constant(&buf_ptr->size);
 			} else {
 				args_ptr[1] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1]{ types.u64() }, 1 } }));
@@ -1639,9 +1566,10 @@ namespace vuk {
 				assert(0);
 			}
 			ty[1] = ty[2] = stripped;
-			return first(emplace_op(Node{ .kind = Node::SLICE,
-			                              .type = std::span{ ty, 3 },
-			                              .slice = { .src = composite, .start = make_constant<uint64_t>(index), .count = make_constant<uint64_t>(1), .axis = axis } }));
+			return first(
+			    emplace_op(Node{ .kind = Node::SLICE,
+			                     .type = std::span{ ty, 3 },
+			                     .slice = { .src = composite, .start = make_constant<uint64_t>(index), .count = make_constant<uint64_t>(1), .axis = axis } }));
 		}
 
 		Ref make_slice(Ref src, uint8_t axis, Ref base, Ref count) {
@@ -1668,7 +1596,7 @@ namespace vuk {
 		}
 
 		Ref make_use(Ref src, Access acc) {
-			auto ty = new std::shared_ptr<Type>[1]{ src.type()  };
+			auto ty = new std::shared_ptr<Type>[1]{ src.type() };
 			return first(emplace_op(Node{ .kind = Node::USE, .type = std::span{ ty, 1 }, .use = { .src = src, .access = acc } }));
 		}
 

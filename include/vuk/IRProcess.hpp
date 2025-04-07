@@ -31,6 +31,7 @@ namespace vuk {
 
 		std::vector<std::shared_ptr<ExtNode>> refs;
 		std::vector<Node*> ref_nodes;
+		std::vector<Node*> set_nodes;
 		std::vector<std::shared_ptr<ExtNode>> depnodes;
 		std::vector<Node*> nodes;
 		std::vector<Node*> garbage_nodes;
@@ -320,6 +321,235 @@ namespace vuk {
 			return same_axis && (a_in_b || b_in_a);
 		}
 	};
+
+	inline Result<RefOrValue, CannotBeConstantEvaluated> eval2(Ref ref);
+
+	inline void set_if_available(void* dst, Ref& ref) {
+		auto res = eval2(ref);
+		if (res.holds_value() && !res->is_ref) {
+			if (ref.type()->size == 8) {
+				uint64_t t;
+				memcpy(&t, res->value, 8);
+				if (t == ~(0ULL)) {
+					return;
+				}
+			} else if (ref.type()->size == 4) {
+				uint32_t t;
+				memcpy(&t, res->value, 4);
+				if (t == ~(0u)) {
+					return;
+				}
+			} else if (ref.type()->size == 2) {
+				uint16_t t;
+				memcpy(&t, res->value, 2);
+				if (t == ~(0u)) {
+					return;
+				}
+			} else if (ref.type()->size == 1) {
+				uint8_t t;
+				memcpy(&t, res->value, 1);
+				if (t == ~(0u)) {
+					return;
+				}
+			} else {
+				assert(0);
+			}
+			memcpy(dst, res->value, ref.type()->size);
+			if (ref.node->kind != Node::CONSTANT) {
+				ref = current_module->make_constant(ref.type(), res->value);
+			}
+		}
+	}
+
+	inline void evaluate_slice(Ref composite, uint8_t axis, uint64_t start, uint64_t count, void* composite_v, void* dst) {
+		auto t = Type::stripped(composite.type());
+		if (axis == Node::NamedAxis::FIELD) {
+			assert(t->kind == Type::COMPOSITE_TY || t->kind == Type::UNION_TY);
+			assert(count == 1);
+			auto sliced = static_cast<std::byte*>(composite_v);
+			auto offset = t->offsets[start];
+			memcpy(dst, sliced + offset, t->composite.types[start]->size);
+			return;
+		}
+		if (t->kind == Type::ARRAY_TY) {
+			assert(axis == 0);
+			assert(count == 1);
+			auto sliced = static_cast<std::byte*>(composite_v);
+			memcpy(dst, sliced + t->array.stride * start, (*t->array.T)->size);
+			return;
+		}
+		memcpy(dst, composite_v, t->size);
+		if (t->hash_value == current_module->types.builtin_image) {
+			if (axis == Node::NamedAxis::MIP) {
+				auto& sliced = *static_cast<ImageAttachment*>(dst);
+				sliced.base_level += start;
+				if (count != Range::REMAINING) {
+					sliced.level_count = count;
+				}
+			} else if (axis == Node::NamedAxis::LAYER) {
+				auto& sliced = *static_cast<ImageAttachment*>(dst);
+				sliced.base_layer += start;
+				if (count != Range::REMAINING) {
+					sliced.layer_count = count;
+				}
+			} else {
+				assert(0);
+			}
+		} else if (t->hash_value == current_module->types.builtin_buffer) {
+			if (axis == 0) {
+				auto& sliced = *static_cast<Buffer*>(dst);
+				sliced.offset += start;
+				if (count != Range::REMAINING) {
+					sliced.size = count;
+				}
+			} else {
+				assert(0);
+			}
+		} else {
+			assert(0);
+		}
+	}
+
+	
+	inline Result<RefOrValue, CannotBeConstantEvaluated> eval2(Ref ref) {
+		// can always operate on defs, values are ~immutable
+		auto link = &ref.link();
+		if (link) {
+			while (link->prev) {
+				link = link->prev;
+			}
+			ref = link->def;
+		}
+
+		switch (ref.node->kind) {
+		case Node::CONSTANT: {
+			return { expected_value, RefOrValue::from_value(ref.node->constant.value) };
+		}
+		case Node::CONSTRUCT: {
+			if (ref.type()->hash_value == current_module->types.builtin_buffer) {
+				auto& bound = constant<Buffer>(ref.node->construct.args[0]);
+				set_if_available(&bound.size, ref.node->construct.args[1]);
+				return { expected_value, RefOrValue::from_value(&bound) };
+			} else if (ref.type()->hash_value == current_module->types.builtin_image) {
+				auto& attachment = constant<ImageAttachment>(ref.node->construct.args[0]);
+				set_if_available(&attachment.extent.width, ref.node->construct.args[1]);
+				set_if_available(&attachment.extent.height, ref.node->construct.args[2]);
+				set_if_available(&attachment.extent.depth, ref.node->construct.args[3]);
+				set_if_available(&attachment.format, ref.node->construct.args[4]);
+				set_if_available(&attachment.sample_count, ref.node->construct.args[5]);
+				set_if_available(&attachment.base_layer, ref.node->construct.args[6]);
+				set_if_available(&attachment.layer_count, ref.node->construct.args[7]);
+				set_if_available(&attachment.base_level, ref.node->construct.args[8]);
+				set_if_available(&attachment.level_count, ref.node->construct.args[9]);
+				return { expected_value, RefOrValue::from_value(&attachment) };
+			} else {
+				return { expected_value, RefOrValue::from_ref(ref) };
+			}
+		}
+		case Node::ACQUIRE_NEXT_IMAGE: {
+			auto swp_ = eval2(ref.node->acquire_next_image.swapchain);
+			if (!swp_) {
+				return swp_;
+			}
+			auto swp = *swp_;
+			assert(swp.is_ref && swp.ref.node->kind == Node::CONSTRUCT);
+			auto arr = swp.ref.node->construct.args[1]; // array of images
+			assert(arr.node->kind == Node::CONSTRUCT);
+			auto elem = arr.node->construct.args[1]; // first image
+			return eval2(elem);
+		}
+		case Node::ACQUIRE:
+			return { expected_value, RefOrValue::from_value(ref.node->acquire.values[ref.index]) };
+		case Node::CALL: {
+			auto t = ref.type();
+			if (t->kind != Type::ALIASED_TY) {
+				return { expected_error, CannotBeConstantEvaluated{ ref } };
+			}
+			return eval2(ref.node->call.args[t->aliased.ref_idx]);
+		}
+		case Node::MATH_BINARY: {
+			auto& math_binary = ref.node->math_binary;
+
+			auto a_ = eval2(math_binary.a);
+			if (!a_) {
+				return a_;
+			}
+			auto a_rov = *a_;
+			if (a_rov.is_ref) {
+				return { expected_error, CannotBeConstantEvaluated{ ref } };
+			}
+			auto a = a_rov.value;
+
+			auto b_ = eval2(math_binary.b);
+			if (!b_) {
+				return b_;
+			}
+			auto b_rov = *b_;
+			if (b_rov.is_ref) {
+				return { expected_error, CannotBeConstantEvaluated{ ref } };
+			}
+			auto b = b_rov.value;
+			return { expected_value, RefOrValue::adopt_value(eval_binop(math_binary.op, ref.type(), a, b)) };
+
+		} break;
+		case Node::SLICE: {
+			if (ref.index == 1) {
+				return eval2(ref.node->slice.src);
+			}
+			auto composite_ = eval2(ref.node->slice.src);
+			if (!composite_) {
+				return composite_;
+			}
+			auto composite = *composite_;
+			auto start_ = eval2(ref.node->slice.start);
+			if (!start_) {
+				return start_;
+			}
+			auto start = *start_;
+			if (start.is_ref) {
+				return { expected_error, CannotBeConstantEvaluated{ ref } };
+			}
+			auto index = *static_cast<uint64_t*>(start.value);
+			auto count_ = eval2(ref.node->slice.count);
+			if (!count_) {
+				return count_;
+			}
+			auto count = *count_;
+			if (count.is_ref) {
+				return { expected_error, CannotBeConstantEvaluated{ ref } };
+			}
+			auto countv = *static_cast<uint64_t*>(count.value);
+
+			auto& slice = ref.node->slice;
+			auto type = Type::stripped(ref.node->slice.src.type());
+
+			if (composite.is_ref) {
+				if (slice.axis == Node::NamedAxis::FIELD) {
+					if (composite.ref.node->kind == Node::CONSTRUCT) {
+						return eval2(composite.ref.node->construct.args[index + 1]);
+					} else {
+						return { expected_error, CannotBeConstantEvaluated{ ref } };
+					}
+				} else {
+					if (composite.ref.node->kind == Node::CONSTRUCT && type->kind == Type::ARRAY_TY) {
+						return eval2(composite.ref.node->construct.args[index + 1]);
+					} else {
+						printf("");
+					}
+				}
+			} else {
+				auto retv = RefOrValue::adopt_value(new char[ref.node->type[0]->size]);
+				evaluate_slice(ref.node->slice.src, slice.axis, index, countv, composite.value, retv.value);
+				return { expected_value, retv };
+			}
+
+			return { expected_error, CannotBeConstantEvaluated{ ref } };
+		}
+		default:
+			return { expected_error, CannotBeConstantEvaluated{ ref } };
+		}
+		assert(0);
+	}
 
 	// errors and printing
 	enum class Level { eError };

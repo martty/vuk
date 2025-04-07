@@ -9,7 +9,7 @@ namespace vuk {
 		void* allocation = nullptr;
 		VkBuffer buffer = VK_NULL_HANDLE;
 		size_t offset = 0;
-		size_t size = ~(0u);
+		size_t size = ~(0ULL);
 		uint64_t device_address = 0;
 		std::byte* mapped_ptr = nullptr;
 		MemoryUsage memory_usage;

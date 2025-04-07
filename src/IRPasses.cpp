@@ -229,6 +229,12 @@ namespace vuk {
 				work_queue.push_back(node);
 			}
 		}
+		for (auto& node : set_nodes) {
+			if (node->flag == 0) {
+				node->flag = 1;
+				work_queue.push_back(node);
+			}
+		}
 
 		while (!work_queue.empty()) {
 			auto node = work_queue.back();
@@ -473,6 +479,8 @@ namespace vuk {
 			fmt::println("entering");
 #endif
 			switch (node->kind) {
+			case Node::SET: // not a real node
+				break;
 			case Node::CONSTANT:
 			case Node::PLACEHOLDER:
 				add_breaking_result(node, 0);
@@ -596,7 +604,7 @@ namespace vuk {
 				add_read(node, node->slice.start, 1);
 				add_read(node, node->slice.count, 2);
 				add_write(node, node->slice.src, 0);
-				if (node->kind == Node::LOGICAL_COPY){ // if we rewrote this to a copy
+				if (node->kind == Node::LOGICAL_COPY) { // if we rewrote this to a copy
 					add_result(node, 0, node->slice.src);
 					break;
 				}
@@ -768,7 +776,7 @@ namespace vuk {
 				} else if (node->type[0]->hash_value == current_module->types.builtin_buffer) {
 					auto ptr = &constant<Buffer>(args_ptr[0]);
 					auto& value = constant<Buffer>(args_ptr[0]);
-					if (value.size != ~(0u)) {
+					if (value.size != ~(0ULL)) {
 						placeholder_to_ptr(args_ptr[1], &ptr->size);
 					}
 				}
@@ -1274,7 +1282,11 @@ namespace vuk {
 		std::pmr::vector<Node*> nodes(allocator);
 
 		for (auto& node : module->op_arena) {
-			nodes.push_back(&node);
+			if (node.kind == Node::SET) {
+				set_nodes.push_back(&node);
+			} else {
+				nodes.push_back(&node);
+			}
 		}
 
 		std::pmr::vector<Ref> pass_reads(allocator);
@@ -1554,8 +1566,56 @@ namespace vuk {
 		GraphDumper::next_cluster("modules", "full");
 		GraphDumper::dump_graph(impl->nodes, false, false);
 
+		// apply SET nodes
+		for (auto& s : impl->set_nodes) {
+			auto link = &s->set.dst.link();
+			if (!link) {
+				continue;
+			}
+			while (link->prev) {
+				link = link->prev;
+			}
+			auto def_node = link->def.node;
+			if (def_node->kind == Node::CONSTRUCT) {
+				def_node->construct.args[s->set.index + 1] = s->set.value;
+			}
+		}
+
 		VUK_DO_OR_RETURN(impl->build_nodes());
-		// post replace
+		VUK_DO_OR_RETURN(impl->build_links(impl->nodes, allocator));
+		impl->set_nodes.clear();
+
+		// constant folding
+		for (auto& node : impl->nodes) {
+			switch (node->kind) {
+			case Node::CONSTRUCT: {
+				if (node->type[0]->kind == Type::ARRAY_TY || node->type[0]->kind == Type::UNION_TY) {
+					continue;
+				}
+				(void)eval2(first(node));
+			} break;
+			default:
+				break;
+			}
+		}
+
+		VUK_DO_OR_RETURN(impl->reify_inference());
+
+		// constant folding - 2
+		for (auto& node : impl->nodes) {
+			switch (node->kind) {
+			case Node::CONSTRUCT: {
+				if (node->type[0]->kind == Type::ARRAY_TY || node->type[0]->kind == Type::UNION_TY) {
+					continue;
+				}
+				(void)eval2(first(node));
+			} break;
+			default:
+				break;
+			}
+		}
+
+		VUK_DO_OR_RETURN(impl->build_nodes());
 		VUK_DO_OR_RETURN(impl->build_links(impl->nodes, allocator));
 
 		VUK_DO_OR_RETURN(validate_read_undefined());
@@ -1606,7 +1666,6 @@ namespace vuk {
 		new_nodes.clear();
 
 		VUK_DO_OR_RETURN(impl->collect_chains());
-		VUK_DO_OR_RETURN(impl->reify_inference());
 
 		for (auto& node : impl->ref_nodes) {
 			ScheduledItem item{ .execable = node, .scheduled_domain = vuk::DomainFlagBits::eAny };

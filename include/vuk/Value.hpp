@@ -86,49 +86,37 @@ namespace vuk {
 		void same_extent_as(const Value<ImageAttachment>& src)
 		  requires std::is_same_v<T, ImageAttachment>
 		{
-			if (get_head().node->kind == Node::ACQUIRE_NEXT_IMAGE) {
-				return;
-			}
 			node->deps.push_back(src.node);
-			replace_arg_with_extract_or_constant(get_head(), src.get_head(), 0);
-			replace_arg_with_extract_or_constant(get_head(), src.get_head(), 1);
-			replace_arg_with_extract_or_constant(get_head(), src.get_head(), 2);
+			set_with_extract(get_head(), src.get_head(), 0);
+			set_with_extract(get_head(), src.get_head(), 1);
+			set_with_extract(get_head(), src.get_head(), 2);
 		}
 
 		/// @brief Inference target has the same width & height as the source
 		void same_2D_extent_as(const Value<ImageAttachment>& src)
 		  requires std::is_same_v<T, ImageAttachment>
 		{
-			if (get_head().node->kind == Node::ACQUIRE_NEXT_IMAGE) {
-				return;
-			}
 			node->deps.push_back(src.node);
-			replace_arg_with_extract_or_constant(get_head(), src.get_head(), 0);
-			replace_arg_with_extract_or_constant(get_head(), src.get_head(), 1);
+			set_with_extract(get_head(), src.get_head(), 0);
+			set_with_extract(get_head(), src.get_head(), 1);
 		}
 
 		/// @brief Inference target has the same format as the source
 		void same_format_as(const Value<ImageAttachment>& src)
 		  requires std::is_same_v<T, ImageAttachment>
 		{
-			if (get_head().node->kind == Node::ACQUIRE_NEXT_IMAGE) {
-				return;
-			}
 			node->deps.push_back(src.node);
-			replace_arg_with_extract_or_constant(get_head(), src.get_head(), 3);
+			set_with_extract(get_head(), src.get_head(), 3);
 		}
 
 		/// @brief Inference target has the same shape(extent, layers, levels) as the source
 		void same_shape_as(const Value<ImageAttachment>& src)
 		  requires std::is_same_v<T, ImageAttachment>
 		{
-			if (get_head().node->kind == Node::ACQUIRE_NEXT_IMAGE) {
-				return;
-			}
 			same_extent_as(src);
 
 			for (auto i = 6; i < 10; i++) { /* 6 - 9 : layers, levels */
-				replace_arg_with_extract_or_constant(get_head(), src.get_head(), i - 1);
+				set_with_extract(get_head(), src.get_head(), i - 1);
 			}
 		}
 
@@ -136,12 +124,9 @@ namespace vuk {
 		void similar_to(const Value<ImageAttachment>& src)
 		  requires std::is_same_v<T, ImageAttachment>
 		{
-			if (get_head().node->kind == Node::ACQUIRE_NEXT_IMAGE) {
-				return;
-			}
 			same_shape_as(src);
 			same_format_as(src);
-			replace_arg_with_extract_or_constant(get_head(), src.get_head(), 4);
+			set_with_extract(get_head(), src.get_head(), 4);
 		}
 
 		// Buffer inferences
@@ -158,7 +143,7 @@ namespace vuk {
 		  requires std::is_same_v<T, Buffer>
 		{
 			node->deps.push_back(src.node);
-			replace_arg_with_extract_or_constant(get_head(), src.get_head(), 0);
+			set_with_extract(get_head(), src.get_head(), 0);
 		}
 
 		Value<uint64_t> get_size()
@@ -172,12 +157,7 @@ namespace vuk {
 		  requires std::is_same_v<T, Buffer>
 		{
 			node->deps.push_back(arg.node);
-			auto def_or_v = get_def(get_head());
-			if (!def_or_v || !def_or_v->is_ref) {
-				return;
-			}
-			auto def = def_or_v->ref;
-			def.node->construct.args[1] = arg.get_head();
+			current_module->set_value(get_head(), 0, arg.get_head());
 		}
 
 		auto operator[](size_t index)
@@ -204,52 +184,8 @@ namespace vuk {
 			return Value(ExtRef(std::make_shared<ExtNode>(item.node, node), item));
 		}
 
-		void replace_arg_with_extract_or_constant(Ref construct, Ref src_composite, uint64_t index) {
-			auto def_or_v = *get_def(construct);
-			if (!def_or_v.is_ref) {
-				return;
-			}
-			auto def = def_or_v.ref;
-
-			auto composite = src_composite;
-			std::shared_ptr<Type> ty;
-			auto stripped = Type::stripped(composite.type());
-			if (stripped->kind == Type::ARRAY_TY) {
-				ty = *stripped->array.T;
-			} else if (stripped->kind == Type::COMPOSITE_TY) {
-				ty = stripped->composite.types[index];
-			}
-
-			auto candidate_node = Node{ .kind = Node::SLICE, .type = std::span{ &ty, 1 } };
-			candidate_node.slice.src = composite; // writing these out for clang workaround
-			candidate_node.slice.axis = Node::NamedAxis::FIELD;
-			candidate_node.slice.start = current_module->make_constant<uint64_t>(index);
-			candidate_node.slice.count = current_module->make_constant<uint64_t>(1);
-			current_module->garbage.push_back(def.node->construct.args[index + 1].node);
-			auto res = [&]() -> Result<void> {
-				if (ty->kind == Type::INTEGER_TY && ty->integer.width == 64) {
-					auto result_ = eval<uint64_t>(first(&candidate_node));
-					if (!result_) {
-						return result_;
-					}
-					auto result = *result_;
-					def.node->construct.args[index + 1] = current_module->template make_constant<uint64_t>(result);
-				} else if (ty->kind == Type::INTEGER_TY && ty->integer.width == 32) {
-					auto result_ = eval<uint32_t>(first(&candidate_node));
-					if (!result_) {
-						return result_;
-					}
-					auto result = *result_;
-					def.node->construct.args[index + 1] = current_module->make_constant<uint32_t>(result);
-				} else {
-					def.node->construct.args[index + 1] = current_module->make_extract(composite, index);
-				}
-				return { expected_value };
-			}();
-			if (!res) {
-				(void)res.error();
-				def.node->construct.args[index + 1] = current_module->make_extract(composite, index);
-			}
+		void set_with_extract(Ref construct, Ref src_composite, uint64_t index) {
+			current_module->set_value(construct, index, current_module->make_extract(src_composite, index));
 		}
 	};
 

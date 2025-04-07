@@ -1304,25 +1304,25 @@ namespace vuk {
 			} break;
 
 			case Node::CONSTRUCT: { // when encountering a CONSTRUCT, allocate the thing if needed
-				if (node->type[0]->hash_value == current_module->types.builtin_buffer) {
-					auto& bound = constant<Buffer>(node->construct.args[0]);
-					auto res = [&]() -> Result<void, CannotBeConstantEvaluated> {
-						EVAL(bound.size, node->construct.args[1]);
-						return { expected_value };
-					}();
-					if (!res) {
-						if (res.error().ref.node->kind == Node::PLACEHOLDER) {
-							return { expected_error,
-								       RenderGraphException(format_message(Level::eError, item, node->construct.args.subspan(1), "': argument(s) not set or inferrable\n")) };
-						} else {
+				for (auto& arg : node->construct.args) {
+					if (arg.node->kind == Node::PLACEHOLDER) {
+						return { expected_error,
+							       RenderGraphException(format_message(Level::eError, item, node->construct.args.subspan(1), "': argument not set or inferrable\n")) };
+					}
+					if (node->type[0]->hash_value == current_module->types.builtin_buffer || node->type[0]->hash_value == current_module->types.builtin_image) {
+						if (arg.node->kind != Node::CONSTANT) {
 							return { expected_error,
 								       RenderGraphException(
 								           format_message(Level::eError, item, node->construct.args.subspan(1), "': argument(s) not constant evaluatable\n")) };
 						}
 					}
+				}
+
+				if (node->type[0]->hash_value == current_module->types.builtin_buffer) {
+					auto& bound = constant<Buffer>(node->construct.args[0]);
 
 					if (bound.buffer == VK_NULL_HANDLE) {
-						assert(bound.size != ~(0u));
+						assert(bound.size != ~(0ULL));
 						assert(bound.memory_usage != (MemoryUsage)0);
 						BufferCreateInfo bci{ .mem_usage = bound.memory_usage, .size = bound.size, .alignment = 1 }; // TODO: alignment?
 						auto allocator = node->construct.allocator ? *node->construct.allocator : alloc;
@@ -1335,52 +1335,29 @@ namespace vuk {
 					recorder.init_sync(node->type[0].get(), { to_use(eNone), host_stream }, &bound);
 					sched.done(node, host_stream, bound);
 				} else if (node->type[0]->hash_value == current_module->types.builtin_image) {
-					auto& attachment = *reinterpret_cast<ImageAttachment*>(node->construct.args[0].node->constant.value);
-					// collapse inferencing
-					auto res = [&]() -> Result<void, CannotBeConstantEvaluated> {
-						EVAL(attachment.extent.width, node->construct.args[1]);
-						EVAL(attachment.extent.height, node->construct.args[2]);
-						EVAL(attachment.extent.depth, node->construct.args[3]);
-						EVAL(attachment.format, node->construct.args[4]);
-						EVAL(attachment.sample_count, node->construct.args[5]);
-						EVAL(attachment.base_layer, node->construct.args[6]);
-						EVAL(attachment.layer_count, node->construct.args[7]);
-						EVAL(attachment.base_level, node->construct.args[8]);
-						EVAL(attachment.level_count, node->construct.args[9]);
-
-						if (attachment.image_view == ImageView{}) {
-							if (attachment.view_type == ImageViewType::eInfer && attachment.layer_count != VK_REMAINING_ARRAY_LAYERS) {
-								if (attachment.image_type == ImageType::e1D) {
-									if (attachment.layer_count == 1) {
-										attachment.view_type = ImageViewType::e1D;
-									} else {
-										attachment.view_type = ImageViewType::e1DArray;
-									}
-								} else if (attachment.image_type == ImageType::e2D) {
-									if (attachment.layer_count == 1) {
-										attachment.view_type = ImageViewType::e2D;
-									} else {
-										attachment.view_type = ImageViewType::e2DArray;
-									}
-								} else if (attachment.image_type == ImageType::e3D) {
-									if (attachment.layer_count == 1) {
-										attachment.view_type = ImageViewType::e3D;
-									} else {
-										attachment.view_type = ImageViewType::e2DArray;
-									}
+					auto& attachment = constant<ImageAttachment>(node->construct.args[0]);
+					// set iv type
+					if (attachment.image_view == ImageView{}) {
+						if (attachment.view_type == ImageViewType::eInfer && attachment.layer_count != VK_REMAINING_ARRAY_LAYERS) {
+							if (attachment.image_type == ImageType::e1D) {
+								if (attachment.layer_count == 1) {
+									attachment.view_type = ImageViewType::e1D;
+								} else {
+									attachment.view_type = ImageViewType::e1DArray;
+								}
+							} else if (attachment.image_type == ImageType::e2D) {
+								if (attachment.layer_count == 1) {
+									attachment.view_type = ImageViewType::e2D;
+								} else {
+									attachment.view_type = ImageViewType::e2DArray;
+								}
+							} else if (attachment.image_type == ImageType::e3D) {
+								if (attachment.layer_count == 1) {
+									attachment.view_type = ImageViewType::e3D;
+								} else {
+									attachment.view_type = ImageViewType::e2DArray;
 								}
 							}
-						}
-						return { expected_value };
-					}();
-					if (!res) {
-						if (res.error().ref.node->kind == Node::PLACEHOLDER) {
-							return { expected_error,
-								       RenderGraphException(format_message(Level::eError, item, node->construct.args.subspan(1), "': argument(s) not set or inferrable\n")) };
-						} else {
-							return { expected_error,
-								       RenderGraphException(
-								           format_message(Level::eError, item, node->construct.args.subspan(1), "': argument(s) not constant evaluatable\n")) };
 						}
 					}
 
@@ -1743,11 +1720,10 @@ namespace vuk {
 				                  sched.get_value(node->slice.src));
 				auto composite = node->slice.src;
 				void* composite_v = sched.get_value(composite);
-				auto t = Type::stripped(composite.type());
 				auto axis = node->slice.axis;
 				auto start = sched.get_value<uint64_t>(node->slice.start);
 				auto count = sched.get_value<uint64_t>(node->slice.count);
-
+				auto t = Type::stripped(composite.type());
 
 				if (!(node->debug_info && node->debug_info->result_names.size() > 0 && !node->debug_info->result_names[0].empty())) {
 					/*std::string name = fmt::format("{}_{}[{}->{}:{}]",
@@ -1759,55 +1735,8 @@ namespace vuk {
 					current_module->name_output(first(node), name);*/
 				}
 				std::vector<void*, short_alloc<void*>> rets(3, *impl->arena_);
-
-				if (node->slice.src.type()->hash_value == current_module->types.builtin_image) {
-					auto sliced = ImageAttachment(*(ImageAttachment*)composite_v);
-					if (axis == Node::NamedAxis::MIP) {
-						sliced.base_level += start;
-						if (count != Range::REMAINING) {
-							sliced.level_count = count;
-						}
-						rets[0] = static_cast<void*>(new (impl->arena_->allocate(sizeof(ImageAttachment))) ImageAttachment{ sliced });
-					} else if (axis == Node::NamedAxis::LAYER) {
-						sliced.base_layer += start;
-						if (count != Range::REMAINING) {
-							sliced.layer_count = count;
-						}
-						rets[0] = static_cast<void*>(new (impl->arena_->allocate(sizeof(ImageAttachment))) ImageAttachment{ sliced });
-					} else if (axis == Node::NamedAxis::FIELD) {
-						assert(t->kind == Type::COMPOSITE_TY);
-						assert(count == 1);
-						auto offset = t->offsets[start];
-						rets[0] = reinterpret_cast<std::byte*>(composite_v) + offset;
-					} else {
-						assert(0);
-					}
-				} else if (node->slice.src.type()->hash_value == current_module->types.builtin_buffer) {
-					if (axis == 0) {
-						auto sliced = Buffer(*(Buffer*)composite_v);
-						sliced.offset += start;
-						if (count != Range::REMAINING) {
-							sliced.size = count;
-						}
-						rets[0] = static_cast<void*>(new (impl->arena_->allocate(sizeof(Buffer))) Buffer{ sliced });
-					} else if (axis == Node::NamedAxis::FIELD) {
-						assert(t->kind == Type::COMPOSITE_TY);
-						assert(count == 1);
-						auto offset = t->offsets[start];
-						rets[0] = reinterpret_cast<std::byte*>(composite_v) + offset;
-					}
-				} else if (node->slice.src.type()->kind == Type::ARRAY_TY) {
-					assert(axis == 0);
-					assert(count == 1);
-					rets[0] = reinterpret_cast<std::byte*>(composite_v) + t->array.stride * start;
-				} else if (node->slice.src.type()->kind == Type::UNION_TY) {
-					assert(axis == Node::NamedAxis::FIELD);
-					assert(count == 1);
-					auto offset = t->offsets[start];
-					rets[0] = reinterpret_cast<std::byte*>(composite_v) + offset;
-				} else {
-					assert(0);
-				}
+				rets[0] = impl->arena_->allocate(node->type[0]->size);
+				evaluate_slice(composite, axis, start, count, composite_v, rets[0]);
 				rets[1] = impl->arena_->allocate(node->slice.src.type()->size);
 				memcpy(rets[1], sched.get_value(node->slice.src), node->slice.src.type()->size);
 				rets[2] = impl->arena_->allocate(node->slice.src.type()->size);
