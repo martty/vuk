@@ -732,14 +732,7 @@ namespace vuk {
 		}
 
 		void init_sync(Type* base_ty, StreamResourceUse src_use, void* value, bool enforce_unique = true) {
-			PartialStreamResourceUse psru{ src_use };
-			if (base_ty->hash_value == current_module->types.builtin_image) {
-				auto& img_att = *reinterpret_cast<ImageAttachment*>(value);
-				psru.subrange.image = { img_att.base_level, img_att.level_count, img_att.base_layer, img_att.layer_count };
-			} else if (base_ty->hash_value == current_module->types.builtin_buffer) {
-				auto buf = reinterpret_cast<Buffer*>(value);
-				psru.subrange.buffer = { buf->offset, buf->size };
-			} else if (base_ty->kind == Type::ARRAY_TY) { // for an array, we init all elements
+			if (base_ty->kind == Type::ARRAY_TY) { // for an array, we init all elements
 				auto elem_ty = base_ty->array.T->get();
 				auto size = base_ty->array.count;
 				auto elems = reinterpret_cast<std::byte*>(value);
@@ -751,12 +744,27 @@ namespace vuk {
 			}
 
 			uint64_t key = value_identity(base_ty, value);
+			auto& psru = *new (this->arena.ensure_space(sizeof(PartialStreamResourceUse))) PartialStreamResourceUse{src_use};
+			if (base_ty->hash_value == current_module->types.builtin_image) {
+				auto& img_att = *reinterpret_cast<ImageAttachment*>(value);
+				psru.subrange.image = { img_att.base_level, img_att.level_count, img_att.base_layer, img_att.layer_count };
+			} else if (base_ty->hash_value == current_module->types.builtin_buffer) { // for buffers, we allows underlying resource to alias
+				auto buf = reinterpret_cast<Buffer*>(value);
+				psru.subrange.buffer = { buf->offset, buf->size };
+
+				auto [v, succ] = last_modify.try_emplace(key, &psru);
+				if (!succ) {
+					v->second->next = &psru;
+					psru.prev = v->second;
+				}
+				return;
+			}
 
 			if (enforce_unique && key != 0) {
 				assert(last_modify.find(key) == last_modify.end());
-				last_modify.emplace(key, new (this->arena.ensure_space(sizeof(PartialStreamResourceUse))) PartialStreamResourceUse(psru));
+				last_modify.emplace(key, &psru);
 			} else {
-				last_modify.try_emplace(key, new (this->arena.ensure_space(sizeof(PartialStreamResourceUse))) PartialStreamResourceUse(psru));
+				last_modify.try_emplace(key, &psru);
 			}
 		}
 

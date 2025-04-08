@@ -147,4 +147,17 @@ TEST_CASE("poll wait") {
 	}
 }
 
+TEST_CASE("buffers in same allocation") {
+	auto data = { 5u, 5u, 5u, 5u };
+	auto buf = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, 4 * sizeof(uint32_t), 1 });
+	auto bufa = buf->subrange(0, 2 * sizeof(uint32_t));
+	auto bufb = buf->subrange(2 * sizeof(uint32_t), 2 * sizeof(uint32_t));
+	auto fut_a = discard_buf("a", bufa);
+	auto fut_b = discard_buf("b", bufb);
+	fill(fut_a, 5u);
+	copy(fut_a, fut_b);
+	auto res = download_buffer(fut_b).get(*test_context.allocator, test_context.compiler);
+	CHECK(std::span((uint32_t*)res->mapped_ptr, 4) == std::span(data));
+}
+
 // TEST TODOS: image2image copy, resolve
