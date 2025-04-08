@@ -416,6 +416,7 @@ namespace vuk {
 		std::array<DescriptorSetLayoutAllocInfo, VUK_MAX_SETS> dslai = {};
 		std::vector<VkDescriptorSetLayout> dsls;
 		bool use_pd = default_descriptor_set_strategy == DescriptorSetStrategyFlagBits::ePushDescriptor;
+		size_t index = 0;
 		for (auto& dsl : plci.dslcis) {
 			dsl.dslci.bindingCount = (uint32_t)dsl.bindings.size();
 			dsl.dslci.pBindings = dsl.bindings.data();
@@ -424,12 +425,17 @@ namespace vuk {
 				dslbfci.bindingCount = (uint32_t)dsl.bindings.size();
 				dslbfci.pBindingFlags = dsl.flags.data();
 				dsl.dslci.pNext = &dslbfci;
-			} else if (use_pd) {
+			} else if (use_pd && (index == plci.dslcis.size() - 1)) {
 				dsl.dslci.flags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;
 			}
 			auto descset_layout_alloc_info = impl->descriptor_set_layouts.acquire(dsl);
 			dslai[dsl.index] = descset_layout_alloc_info;
 			dsls.push_back(dslai[dsl.index].layout);
+			if (dsl.bindings.size() == 0) {
+				dslai[dsl.index].layout = VK_NULL_HANDLE;
+			}
+			dslai[dsl.index].push = dsl.dslci.flags & VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;
+			index++;
 		}
 		plci.plci.pSetLayouts = dsls.data();
 		plci.plci.setLayoutCount = (uint32_t)dsls.size();

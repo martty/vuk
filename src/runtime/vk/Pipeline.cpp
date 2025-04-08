@@ -20,6 +20,11 @@ namespace vuk {
 	                                                                                                           const PipelineBaseCreateInfoBase& bci) {
 		fixed_vector<DescriptorSetLayoutCreateInfo, VUK_MAX_SETS> dslcis(program.sets.size());
 
+		for (size_t index = 0; index < VUK_MAX_SETS; index++) {
+			dslcis[index] = DescriptorSetLayoutCreateInfo();
+			dslcis[index].index = index;
+		}
+
 		for (size_t index = 0; index < program.sets.size(); index++) {
 			const auto& set = program.sets[index];
 			if (!set) {

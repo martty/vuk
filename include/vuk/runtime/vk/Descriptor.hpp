@@ -77,6 +77,7 @@ namespace vuk {
 		unsigned variable_count_binding = (unsigned)-1;
 		DescriptorType variable_count_binding_type;
 		unsigned variable_count_binding_max_size;
+		bool push;
 
 		bool operator==(const DescriptorSetLayoutAllocInfo& o) const noexcept {
 			return layout == o.layout && descriptor_counts == o.descriptor_counts;

@@ -1116,7 +1116,7 @@ namespace vuk {
 						return false;
 					}
 				} else if ((strategy & DescriptorSetStrategyFlagBits::eCommon) || (strategy & DescriptorSetStrategyFlagBits::ePushDescriptor)) {
-					if (strategy & DescriptorSetStrategyFlagBits::eCommon) {
+					if (!ds_layout_alloc_info->push) {
 						if (auto ret = allocator->allocate_descriptor_sets(std::span{ &*ds, 1 }, std::span{ ds_layout_alloc_info, 1 }); !ret) {
 							current_error = std::move(ret);
 							return false;
@@ -1164,7 +1164,7 @@ namespace vuk {
 							assert(0);
 						}
 					}
-					if (strategy & DescriptorSetStrategyFlagBits::eCommon) {
+					if (!ds_layout_alloc_info->push) {
 						ctx.vkUpdateDescriptorSets(allocator->get_context().device, j, writes, 0, nullptr);
 					} else {
 						ctx.vkCmdPushDescriptorSetKHR(command_buffer, bind_point, current_layout, (uint32_t)set_index, j, writes);
@@ -1174,7 +1174,7 @@ namespace vuk {
 					assert(0 && "Unimplemented DS strategy");
 				}
 
-				if (!(strategy & DescriptorSetStrategyFlagBits::ePushDescriptor)) {
+				if (!ds_layout_alloc_info->push) {
 					ctx.vkCmdBindDescriptorSets(command_buffer, bind_point, current_layout, (uint32_t)set_index, 1, &ds->descriptor_set, 0, nullptr);
 				}
 				set_layouts_used[set_index] = ds->layout_info.layout;
