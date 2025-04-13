@@ -7,27 +7,12 @@
 #include "vuk/SourceLocation.hpp"
 
 #include <deque>
-#include <gch/small_vector.hpp>
 #include <memory_resource>
 #include <robin_hood.h>
 
 namespace vuk {
 
 	using DefUseMap = robin_hood::unordered_node_map<Ref, ChainLink>;
-
-	struct ScheduledItem {
-		Node* execable;
-		DomainFlagBits scheduled_domain;
-		Stream* scheduled_stream;
-
-		bool ready = false; // for DYNAMO
-	};
-
-	struct ExecutionInfo {
-		Stream* stream;
-		size_t naming_index;
-		Node::Kind kind;
-	};
 
 	enum class RW { eRead, eWrite };
 
@@ -67,15 +52,19 @@ namespace vuk {
 		std::unordered_map<ChainLink*, LiveRange> live_ranges;
 
 		plf::colony<ScheduledItem> scheduled_execables;
-		std::deque<ScheduledItem> work_queue;
+		std::deque<ScheduledItem*> work_queue;
 		robin_hood::unordered_flat_set<Node*> scheduled;
-		std::vector<ScheduledItem> item_list;
+		std::vector<ScheduledItem*> item_list;
+
+		size_t naming_index_counter = 0;
 		void schedule_new(Node* node) {
 			assert(node);
 			if (node->scheduled_item) { // we have scheduling info for this
-				work_queue.push_front(*node->scheduled_item);
+				work_queue.push_front(node->scheduled_item);
 			} else { // no info, just schedule it as-is
-				work_queue.push_front(ScheduledItem{ .execable = node });
+				auto it = scheduled_execables.emplace(ScheduledItem{ .execable = node });
+				node->scheduled_item = &*it;
+				work_queue.push_front(node->scheduled_item);
 			}
 		}
 
@@ -85,7 +74,7 @@ namespace vuk {
 				return true;
 			} else {
 				item.ready = true;
-				work_queue.push_front(item); // requeue this item
+				work_queue.push_front(&item); // requeue this item
 				return false;
 			}
 		}
@@ -333,8 +322,8 @@ namespace vuk {
 
 	std::string format_source_location(Node* node);
 
-	std::string parm_to_string(Ref parm);
-	std::string print_args_to_string(std::span<Ref> args);
+	void parm_to_string(Ref parm, std::string& msg);
+	void print_args_to_string(std::span<Ref> args, std::string& msg);
 	void print_args(std::span<Ref> args);
 	std::string print_args_to_string_with_arg_names(std::span<const std::string_view> arg_names, std::span<Ref> args);
 	std::string node_to_string(Node* node);

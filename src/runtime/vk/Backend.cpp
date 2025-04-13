@@ -23,6 +23,28 @@
 #define UNIQUE_NAME(base) CONCAT(base, __LINE__)
 
 namespace vuk {
+	std::string_view domain_to_string(DomainFlagBits domain) {
+		domain = (DomainFlagBits)(domain & DomainFlagBits::eDomainMask).m_mask;
+
+		switch (domain) {
+		case DomainFlagBits::eNone:
+			return "None";
+		case DomainFlagBits::eHost:
+			return "Host";
+		case DomainFlagBits::ePE:
+			return "PE";
+		case DomainFlagBits::eGraphicsQueue:
+			return "Graphics";
+		case DomainFlagBits::eComputeQueue:
+			return "Compute";
+		case DomainFlagBits::eTransferQueue:
+			return "Transfer";
+		default:
+			assert(0);
+			return "";
+		}
+	}
+
 	std::string format_source_location(SourceLocationAtFrame& source) {
 		return fmt::format("{}({}): ", source.location.file_name(), source.location.line());
 	}
@@ -43,45 +65,49 @@ namespace vuk {
 		}
 	}
 
-	std::string parm_to_string(Ref parm) {
+	void parm_to_string(Ref parm, std::string& msg) {
 		if (parm.node->debug_info && parm.node->debug_info->result_names.size() > parm.index) {
-			return fmt::format("%{}", parm.node->debug_info->result_names[parm.index]);
+			fmt::format_to(std::back_inserter(msg), "%{}", parm.node->debug_info->result_names[parm.index]);
 		} else if (parm.node->kind == Node::CONSTANT) {
 			Type* ty = parm.node->type[0].get();
 			if (ty->kind == Type::INTEGER_TY) {
 				switch (ty->integer.width) {
 				case 32:
-					return fmt::format("{}", constant<uint32_t>(parm));
+					fmt::format_to(std::back_inserter(msg), "{}", constant<uint32_t>(parm));
+					break;
 				case 64:
-					return fmt::format("{}", constant<uint64_t>(parm));
+					fmt::format_to(std::back_inserter(msg), "{}", constant<uint64_t>(parm));
+					break;
 				}
 			} else if (ty->kind == Type::MEMORY_TY) {
-				return std::string("<mem>");
+				fmt::format_to(std::back_inserter(msg), "<mem>");
 			}
 		} else if (parm.node->kind == Node::PLACEHOLDER) {
-			return std::string("?");
+			 fmt::format_to(std::back_inserter(msg), "?");
+		} else if (parm.node->execution_info) {
+			fmt::format_to(
+			    std::back_inserter(msg), "%{}_{}", Node::kind_to_sv(parm.node->execution_info->kind), parm.node->execution_info->naming_index + parm.index);
 		} else {
-			return fmt::format("%{}_{}", Node::kind_to_sv(parm.node->execution_info->kind), parm.node->execution_info->naming_index + parm.index);
+			fmt::format_to(
+			    std::back_inserter(msg), "%{}_{}", Node::kind_to_sv(parm.node->kind), parm.node->scheduled_item->naming_index + parm.index);
 		}
-		assert(0);
-		return std::string("???");
 	};
 
-	std::string print_args_to_string(std::span<Ref> args) {
-		std::string msg = "";
+	 void print_args_to_string(std::span<Ref> args, std::string& msg) {
 		for (size_t i = 0; i < args.size(); i++) {
 			if (i > 0) {
-				msg += fmt::format(", ");
+				fmt::format_to(std::back_inserter(msg), ", ");
 			}
 			auto& parm = args[i];
 
-			msg += parm_to_string(parm);
+			parm_to_string(parm, msg);
 		}
-		return msg;
 	};
 
 	void print_args(std::span<Ref> args) {
-		fmt::print("{}", print_args_to_string(args));
+		std::string msg;
+		print_args_to_string(args, msg);
+		fmt::print("{}", msg);
 	};
 
 	std::string print_args_to_string_with_arg_names(std::span<const std::string_view> arg_names, std::span<Ref> args) {
@@ -92,7 +118,8 @@ namespace vuk {
 			}
 			auto& parm = args[i];
 
-			msg += fmt::format("{}:", arg_names[i]) + parm_to_string(parm);
+			msg += fmt::format("{}:", arg_names[i]);
+			parm_to_string(parm, msg);
 		}
 		return msg;
 	};
@@ -124,6 +151,149 @@ namespace vuk {
 		msg += err;
 		return msg;
 	};
+
+	void print_results_to_string(ScheduledItem& item, std::string& msg) {
+		auto& node = item.execable;
+		for (size_t i = 0; i < node->type.size(); i++) {
+			if (i > 0) {
+				fmt::format_to(std::back_inserter(msg), ", ");
+			}
+			if (node->debug_info && !node->debug_info->result_names.empty() && node->debug_info->result_names.size() > i) {
+				fmt::format_to(std::back_inserter(msg), "%{}", node->debug_info->result_names[i]);
+			} else {
+				fmt::format_to(std::back_inserter(msg), "%{}_{}", Node::kind_to_sv(node->kind), item.naming_index + i);
+			}
+		}
+	};
+
+	void print_results(ScheduledItem& item) {
+		std::string msg = "";
+		print_results_to_string(item, msg);
+		fmt::print("{}", msg);
+	};
+
+	std::string format_message(Level level, ScheduledItem& item, std::span<Ref> args, std::string err) {
+		Node* node = item.execable;
+		std::string msg = "";
+		msg += format_source_location(node);
+		msg += fmt::format("{}: '", level == Level::eError ? "error" : "other");
+		print_results_to_string(item, msg);
+		msg += fmt::format(" = {}", node_to_string(node));
+		if (node->kind == Node::CONSTRUCT) {
+			auto names = arg_names(node->type[0].get());
+			msg += print_args_to_string_with_arg_names(names, args);
+		} else {
+			print_args_to_string(args, msg);
+		}
+		msg += err;
+		return msg;
+	};
+
+	std::string exec_to_string(ScheduledItem& item) {
+		std::string line;
+		print_results_to_string(item, line);
+		fmt::format_to(std::back_inserter(line), " = ");
+
+		auto node = item.execable;
+		switch (node->kind) {
+		case Node::CONSTRUCT: { // when encountering a CONSTRUCT, allocate the thing if needed
+			if (node->type[0]->hash_value == current_module->types.builtin_buffer) {
+				fmt::format_to(std::back_inserter(line),"construct<buffer> ");
+			} else if (node->type[0]->hash_value == current_module->types.builtin_image) {
+				fmt::format_to(std::back_inserter(line),"construct<image> ");
+			} else if (node->type[0]->hash_value == current_module->types.builtin_swapchain) {
+				fmt::format_to(std::back_inserter(line),"construct<swapchain> ");
+			} else if (node->type[0]->kind == Type::ARRAY_TY) {
+				auto array_size = node->type[0]->array.count;
+				auto elem_ty = *node->type[0]->array.T;
+				fmt::format_to(std::back_inserter(line),"construct<{}[{}]> ", elem_ty->debug_info.name, array_size);
+			} else if (node->type[0]->hash_value == current_module->types.builtin_sampled_image) {
+				fmt::format_to(std::back_inserter(line),"construct<sampled_image> ");
+			} else if (node->type[0]->kind == Type::UNION_TY) {
+				fmt::format_to(std::back_inserter(line),"construct<union> ");
+			} else {
+				assert(0);
+			}
+			print_args_to_string(node->construct.args.subspan(1), line);
+		} break;
+		case Node::CALL: {
+			auto fn_type = node->call.args[0].type();
+			fmt::format_to(std::back_inserter(line),"call ${} ", domain_to_string(item.scheduled_domain));
+			if (!fn_type->debug_info.name.empty()) {
+				fmt::format_to(std::back_inserter(line),"<{}> ", fn_type->debug_info.name);
+			}
+			print_args_to_string(node->call.args.subspan(1), line);
+		} break;
+		case Node::RELEASE: {
+			DomainFlagBits dst_domain = node->release.dst_domain;
+			if (node->release.dst_domain == DomainFlagBits::eDevice) {
+				dst_domain = item.scheduled_domain;
+			}
+			DomainFlagBits sched_domain = item.scheduled_domain;
+
+			fmt::format_to(std::back_inserter(line),"release ${} -> ${} ", domain_to_string(sched_domain), domain_to_string(dst_domain));
+			print_args_to_string(node->release.src, line);
+		} break;
+		case Node::ACQUIRE: {
+			fmt::format_to(std::back_inserter(line),"acquire<");
+			for (size_t i = 0; i < node->acquire.values.size(); i++) {
+				if (node->type[i]->hash_value == current_module->types.builtin_buffer) {
+					fmt::format_to(std::back_inserter(line),"buffer");
+				} else if (node->type[i]->hash_value == current_module->types.builtin_image) {
+					fmt::format_to(std::back_inserter(line),"image");
+				} else if (node->type[0]->kind == Type::ARRAY_TY) {
+					fmt::format_to(std::back_inserter(line),"{}[]", (*node->type[0]->array.T)->hash_value == current_module->types.builtin_buffer ? "buffer" : "image");
+				}
+				if (i + 1 < node->acquire.values.size()) {
+					fmt::format_to(std::back_inserter(line),", ");
+				}
+			}
+			fmt::format_to(std::back_inserter(line),">");
+		} break;
+		case Node::ACQUIRE_NEXT_IMAGE: {
+			fmt::format_to(std::back_inserter(line),"acquire_next_image ");
+			print_args_to_string(std::span{ &node->acquire_next_image.swapchain, 1 }, line);
+		} break;
+		case Node::SLICE: {
+			auto axis = node->slice.axis;
+			// these must have run by now, so we can just eval
+			auto start = *eval<uint64_t>(node->slice.start);
+			auto count = *eval<uint64_t>(node->slice.count);
+
+
+			print_args_to_string(std::span{ &node->slice.src, 1 }, line);
+			if (start > 0 || count != Range::REMAINING) {
+				if (node->slice.axis != 0) {
+					if (count > 1) {
+						fmt::format_to(std::back_inserter(line),"[{}->{}:{}]", node->slice.axis, start, start + count - 1);
+					} else if (axis == Node::NamedAxis::FIELD) {
+						fmt::format_to(std::back_inserter(line),".{}", start);
+					} else {
+						fmt::format_to(std::back_inserter(line),"[{}->{}]", node->slice.axis, start);
+					}
+				} else {
+					if (count > 1) {
+						fmt::format_to(std::back_inserter(line),"[{}:{}]", start, start + count - 1);
+					} else {
+						fmt::format_to(std::back_inserter(line),"[{}]", start);
+					}
+				}
+			}
+		} break;
+		case Node::CONVERGE: {
+			print_args_to_string(node->converge.diverged.subspan(0, 1), line);
+			fmt::format_to(std::back_inserter(line),"{{");
+			print_args_to_string(node->converge.diverged.subspan(1), line);
+			fmt::format_to(std::back_inserter(line),"}}");
+		} break;
+		case Node::USE: {
+			print_args_to_string(std::span(&node->use.src, 1), line);
+			fmt::format_to(std::back_inserter(line),": {}", Type::to_sv(node->use.access));
+		}
+		}
+
+		return line;
+	}
 } // namespace vuk
 
 namespace vuk {
@@ -1033,28 +1203,6 @@ namespace vuk {
 		}
 	};
 
-	std::string_view domain_to_string(DomainFlagBits domain) {
-		domain = (DomainFlagBits)(domain & DomainFlagBits::eDomainMask).m_mask;
-
-		switch (domain) {
-		case DomainFlagBits::eNone:
-			return "None";
-		case DomainFlagBits::eHost:
-			return "Host";
-		case DomainFlagBits::ePE:
-			return "PE";
-		case DomainFlagBits::eGraphicsQueue:
-			return "Graphics";
-		case DomainFlagBits::eComputeQueue:
-			return "Compute";
-		case DomainFlagBits::eTransferQueue:
-			return "Transfer";
-		default:
-			assert(0);
-			return "";
-		}
-	}
-
 #define EVAL(dst, arg)                                                                                                                                         \
 	auto UNIQUE_NAME(A) = eval2(arg);                                                                                                                            \
 	if (!UNIQUE_NAME(A)) {                                                                                                                                       \
@@ -1090,7 +1238,7 @@ namespace vuk {
 		std::unordered_map<uint64_t, Swapchain*> image_to_swapchain;
 
 		for (auto& item : impl->item_list) {
-			item.scheduled_stream = recorder.stream_for_domain(item.scheduled_domain);
+			item->scheduled_stream = recorder.stream_for_domain(item->scheduled_domain);
 		}
 
 		Scheduler sched(alloc, impl, recorder);
@@ -1103,49 +1251,15 @@ namespace vuk {
 		// start/end RPs as needed
 		// inference will still need to run in the beginning, as that is compiletime
 
-		auto print_results_to_string = [&](Node* node) {
-			std::string msg = "";
-			for (size_t i = 0; i < node->type.size(); i++) {
-				if (i > 0) {
-					msg += fmt::format(", ");
-				}
-				if (node->debug_info && !node->debug_info->result_names.empty() && node->debug_info->result_names.size() > i) {
-					msg += fmt::format("%{}", node->debug_info->result_names[i]);
-				} else {
-					msg += fmt::format("%{}_{}", Node::kind_to_sv(node->kind), sched.naming_index_counter + i);
-				}
-			}
-			return msg;
-		};
-
-		[[maybe_unused]] auto print_results = [&](Node* node) {
-			fmt::print("{}", print_results_to_string(node));
-		};
-
-		auto format_message = [&](Level level, Node* node, std::span<Ref> args, std::string err) {
-			std::string msg = "";
-			msg += format_source_location(node);
-			msg += fmt::format("{}: '", level == Level::eError ? "error" : "other");
-			msg += print_results_to_string(node);
-			msg += fmt::format(" = {}", node_to_string(node));
-			if (node->kind == Node::CONSTRUCT) {
-				auto names = arg_names(node->type[0].get());
-				msg += print_args_to_string_with_arg_names(names, args);
-			} else {
-				msg += print_args_to_string(args);
-			}
-			msg += err;
-			return msg;
-		};
-
 		Result<void> submit_result = { expected_value };
 
-		for (auto& item : impl->item_list) {
+		for (auto& pitem : impl->item_list) {
+			auto& item = *pitem;
 			assert(item.ready);
 			auto node = item.execable;
 			sched.instr_counter++;
 #ifdef VUK_DUMP_EXEC
-			fmt::print("[{:#06x}] ", sched.instr_counter);
+			fmt::println("[{:#06x}] {}", sched.instr_counter, exec_to_string(item));
 #endif
 			// we run nodes twice - first time we reenqueue at the front and then put all deps before it
 			// second time we see it, we know that all deps have run, so we can run the node itself
@@ -1198,19 +1312,14 @@ namespace vuk {
 					if (!res) {
 						if (res.error().ref.node->kind == Node::PLACEHOLDER) {
 							return { expected_error,
-								       RenderGraphException(format_message(Level::eError, node, node->construct.args.subspan(1), "': argument(s) not set or inferrable\n")) };
+								       RenderGraphException(format_message(Level::eError, item, node->construct.args.subspan(1), "': argument(s) not set or inferrable\n")) };
 						} else {
 							return { expected_error,
 								       RenderGraphException(
-								           format_message(Level::eError, node, node->construct.args.subspan(1), "': argument(s) not constant evaluatable\n")) };
+								           format_message(Level::eError, item, node->construct.args.subspan(1), "': argument(s) not constant evaluatable\n")) };
 						}
 					}
-#ifdef VUK_DUMP_EXEC
-					print_results(node);
-					fmt::print(" = construct<buffer> ");
-					print_args(node->construct.args.subspan(1));
-					fmt::print("\n");
-#endif
+
 					if (bound.buffer == VK_NULL_HANDLE) {
 						assert(bound.size != ~(0u));
 						assert(bound.memory_usage != (MemoryUsage)0);
@@ -1266,19 +1375,14 @@ namespace vuk {
 					if (!res) {
 						if (res.error().ref.node->kind == Node::PLACEHOLDER) {
 							return { expected_error,
-								       RenderGraphException(format_message(Level::eError, node, node->construct.args.subspan(1), "': argument(s) not set or inferrable\n")) };
+								       RenderGraphException(format_message(Level::eError, item, node->construct.args.subspan(1), "': argument(s) not set or inferrable\n")) };
 						} else {
 							return { expected_error,
 								       RenderGraphException(
-								           format_message(Level::eError, node, node->construct.args.subspan(1), "': argument(s) not constant evaluatable\n")) };
+								           format_message(Level::eError, item, node->construct.args.subspan(1), "': argument(s) not constant evaluatable\n")) };
 						}
 					}
-#ifdef VUK_DUMP_EXEC
-					print_results(node);
-					fmt::print(" = construct<image> ");
-					print_args(node->construct.args.subspan(1));
-					fmt::print("\n");
-#endif
+
 					if (!attachment.image) {
 						auto allocator = node->construct.allocator ? *node->construct.allocator : alloc;
 						attachment.usage |= impl->compute_usage(&first(node).link());
@@ -1295,10 +1399,6 @@ namespace vuk {
 					recorder.init_sync(node->type[0].get(), { to_use(eNone), host_stream }, &attachment);
 					sched.done(node, host_stream, attachment);
 				} else if (node->type[0]->hash_value == current_module->types.builtin_swapchain) {
-#ifdef VUK_DUMP_EXEC
-					print_results(node);
-					fmt::print(" = construct<swapchain>\n");
-#endif
 					/* no-op */
 					sched.done(node, host_stream, sched.get_value(node->construct.args[0]));
 					recorder.init_sync(node->type[0].get(), { to_use(eNone), host_stream }, sched.get_value(first(node)));
@@ -1312,12 +1412,6 @@ namespace vuk {
 
 					auto array_size = node->type[0]->array.count;
 					auto elem_ty = *node->type[0]->array.T;
-#ifdef VUK_DUMP_EXEC
-					print_results(node);
-					fmt::print(" = construct<{}[{}]> ", elem_ty->debug_info.name, array_size);
-					print_args(node->construct.args.subspan(1));
-					fmt::print("\n");
-#endif
 					assert(node->construct.args[0].type()->kind == Type::MEMORY_TY);
 
 					char* arr_mem = static_cast<char*>(sched.arena.ensure_space(elem_ty->size * array_size));
@@ -1341,12 +1435,6 @@ namespace vuk {
 					}
 					auto image = sched.get_value<ImageAttachment>(node->construct.args[1]);
 					auto samp = sched.get_value<SamplerCreateInfo>(node->construct.args[2]);
-#ifdef VUK_DUMP_EXEC
-					print_results(node);
-					fmt::print(" = construct<sampled_image> ");
-					print_args(node->construct.args.subspan(1));
-					fmt::print("\n");
-#endif
 					sched.done(node, host_stream, SampledImage{ image, samp });
 				} else if (node->type[0]->kind == Type::UNION_TY) {
 					for (size_t i = 1; i < node->construct.args.size(); i++) {
@@ -1355,13 +1443,6 @@ namespace vuk {
 
 						recorder.add_sync(sched.base_type(parm).get(), sched.get_dependency_info(parm, arg_ty.get(), RW::eWrite, nullptr), sched.get_value(parm));
 					}
-
-#ifdef VUK_DUMP_EXEC
-					print_results(node);
-					fmt::print(" = construct<union> ");
-					print_args(node->construct.args.subspan(1));
-					fmt::print("\n");
-#endif
 					assert(node->construct.args[0].type()->kind == Type::MEMORY_TY);
 
 					char* arr_mem = static_cast<char*>(sched.arena.ensure_space(node->type[0]->size));
@@ -1549,15 +1630,7 @@ namespace vuk {
 				} else {
 					assert(0);
 				}
-#ifdef VUK_DUMP_EXEC
-				print_results(node);
-				fmt::print(" = call ${} ", domain_to_string(dst_stream->domain));
-				if (!fn_type->debug_info.name.empty()) {
-					fmt::print("<{}> ", fn_type->debug_info.name);
-				}
-				print_args(node->call.args.subspan(1));
-				fmt::print("\n");
-#endif
+
 				sched.done(node, dst_stream, std::span(opaque_rets));
 
 				break;
@@ -1624,12 +1697,6 @@ namespace vuk {
 					sched_stream->submit();
 				}
 				host_stream->submit();
-#ifdef VUK_DUMP_EXEC
-				print_results(node);
-				fmt::print(" = release ${} -> ${} ", domain_to_string(sched_domain), domain_to_string(dst_domain));
-				print_args(node->release.src);
-				fmt::print("\n");
-#endif
 
 				sched.done(node, item.scheduled_stream, std::span(values, node->type.size()));
 				break;
@@ -1639,37 +1706,12 @@ namespace vuk {
 				assert(acqrel && acqrel->status != Signal::Status::eDisarmed);
 
 				auto src_stream = acqrel->source.executor ? recorder.stream_for_executor(acqrel->source.executor) : recorder.stream_for_domain(DomainFlagBits::eHost);
-#ifdef VUK_DUMP_EXEC
-				print_results(node);
-				fmt::print(" = acquire<");
-#endif
 				for (size_t i = 0; i < node->acquire.values.size(); i++) {
 					auto& link = node->links[i];
 
 					StreamResourceUse src_use = { acqrel->last_use[i], src_stream };
 					recorder.init_sync(node->type[i].get(), src_use, node->acquire.values[i], false);
-					if (node->type[i]->hash_value == current_module->types.builtin_buffer) {
-#ifdef VUK_DUMP_EXEC
-						fmt::print("buffer");
-#endif
-					} else if (node->type[i]->hash_value == current_module->types.builtin_image) {
-#ifdef VUK_DUMP_EXEC
-						fmt::print("image");
-#endif
-					} else if (node->type[0]->kind == Type::ARRAY_TY) {
-#ifdef VUK_DUMP_EXEC
-						fmt::print("{}[]", (*node->type[0]->array.T)->hash_value == current_module->types.builtin_buffer ? "buffer" : "image");
-#endif
-					}
-#ifdef VUK_DUMP_EXEC
-					if (i + 1 < node->acquire.values.size()) {
-						fmt::print(", ");
-					}
-#endif
 				}
-#ifdef VUK_DUMP_EXEC
-				fmt::print(">\n");
-#endif
 
 				sched.done(node, src_stream);
 				break;
@@ -1686,12 +1728,6 @@ namespace vuk {
 				}
 
 				auto pe_stream = &pe_streams.emplace_back(alloc, swp);
-#ifdef VUK_DUMP_EXEC
-				print_results(node);
-				fmt::print(" = acquire_next_image ");
-				print_args(std::span{ &node->acquire_next_image.swapchain, 1 });
-				fmt::print("\n");
-#endif
 				sched.done(node, pe_stream, swp.images[swp.image_index]);
 				image_to_swapchain.emplace(value_identity(node->type[0].get(), &swp.images[swp.image_index]), &swp);
 				auto& lu = recorder.last_use(node->type[0].get(), &swp.images[swp.image_index]);
@@ -1710,29 +1746,7 @@ namespace vuk {
 				auto axis = node->slice.axis;
 				auto start = sched.get_value<uint64_t>(node->slice.start);
 				auto count = sched.get_value<uint64_t>(node->slice.count);
-#ifdef VUK_DUMP_EXEC
-				print_results(node);
-				fmt::print(" = ");
-				print_args(std::span{ &node->slice.src, 1 });
-				if (start > 0 || count != Range::REMAINING) {
-					if (node->slice.axis != 0) {
-						if (count > 1) {
-							fmt::print("[{}->{}:{}]", node->slice.axis, start, start + count - 1);
-						} else if (axis == Node::NamedAxis::FIELD) {
-							fmt::print(".{}", start);
-						} else {
-							fmt::print("[{}->{}]", node->slice.axis, start);
-						}
-					} else {
-						if (count > 1) {
-							fmt::print("[{}:{}]", start, start + count - 1);
-						} else {
-							fmt::print("[{}]", start);
-						}
-					}
-				}
-				fmt::print("\n");
-#endif
+
 
 				if (!(node->debug_info && node->debug_info->result_names.size() > 0 && !node->debug_info->result_names[0].empty())) {
 					/*std::string name = fmt::format("{}_{}[{}->{}:{}]",
@@ -1812,16 +1826,6 @@ namespace vuk {
 					                  sched.get_value(div));
 				}
 
-#ifdef VUK_DUMP_EXEC
-				print_results(node);
-				fmt::print(" = ");
-				print_args(node->converge.diverged.subspan(0, 1));
-				fmt::print("{{");
-				print_args(node->converge.diverged.subspan(1));
-				fmt::print("}}");
-				fmt::print("\n");
-#endif
-
 				sched.done(node, base.node->execution_info->stream, sched.get_value(base));
 				break;
 			}
@@ -1830,14 +1834,6 @@ namespace vuk {
 				auto& div = node->use.src;
 				recorder.add_sync(
 				    sched.base_type(div).get(), sched.get_dependency_info(div, div.type().get(), RW::eWrite, div.node->execution_info->stream), sched.get_value(div));
-
-#ifdef VUK_DUMP_EXEC
-				print_results(node);
-				fmt::print(" = ");
-				print_args(std::span(&node->use.src, 1));
-				fmt::print(": {}", Type::to_sv(node->use.access));
-				fmt::print("\n");
-#endif
 
 				sched.done(node, div.node->execution_info->stream, sched.get_value(div));
 

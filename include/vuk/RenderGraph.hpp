@@ -651,6 +651,9 @@ public:
 		/// @brief Dump the pass dependency graph in graphviz format
 		std::string dump_graph();
 
+		/// @brief retrieve nodes in the scheduled order
+		std::span<struct ScheduledItem*> get_scheduled_nodes() const;
+
 		template<class T>
 		T& get_value(Ref parm) {
 			return *reinterpret_cast<T*>(get_value(parm));

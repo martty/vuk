@@ -1368,15 +1368,19 @@ namespace vuk {
 	}
 
 	Result<void> Compiler::linearize() {
+		impl->naming_index_counter = 0;
+		impl->scheduled.clear();
+		impl->item_list.clear();
+
 		// these are the items that were determined to run
 		for (auto& i : impl->scheduled_execables) {
-			impl->work_queue.emplace_back(i);
+			impl->work_queue.emplace_back(&i);
 		}
 
 		while (!impl->work_queue.empty()) {
 			auto item = impl->work_queue.front();
 			impl->work_queue.pop_front();
-			auto& node = item.execable;
+			auto& node = item->execable;
 			if (impl->scheduled.contains(node)) { // only going schedule things once
 				continue;
 			}
@@ -1387,9 +1391,11 @@ namespace vuk {
 
 			// we run nodes twice - first time we reenqueue at the front and then put all deps before it
 			// second time we see it, we know that all deps have run, so we can run the node itself
-			if (impl->process(item)) {
+			if (impl->process(*item)) {
 				impl->scheduled.emplace(node);
+				item->naming_index = impl->naming_index_counter;
 				impl->item_list.push_back(item);
+				impl->naming_index_counter += node->type.size();
 			} else {
 				switch (node->kind) {
 				case Node::MATH_BINARY: {
@@ -1621,6 +1627,10 @@ namespace vuk {
 
 	ImageUsageFlags Compiler::compute_usage(const ChainLink* head) {
 		return impl->compute_usage(head);
+	}
+
+	std::span<struct ScheduledItem*> Compiler::get_scheduled_nodes() const {
+		return std::span(impl->item_list);
 	}
 
 	ImageUsageFlags RGCImpl::compute_usage(const ChainLink* head) {

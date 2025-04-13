@@ -1831,4 +1831,21 @@ namespace vuk {
 		std::shared_ptr<ExtNode> node;
 		size_t index;
 	};
+
+	struct ScheduledItem {
+		Node* execable;
+		DomainFlagBits scheduled_domain;
+		Stream* scheduled_stream;
+
+		bool ready = false;
+		size_t naming_index;
+	};
+
+	struct ExecutionInfo {
+		Stream* stream;
+		size_t naming_index;
+		Node::Kind kind;
+	};
+
+	std::string exec_to_string(ScheduledItem& item);
 } // namespace vuk
