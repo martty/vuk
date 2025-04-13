@@ -139,6 +139,7 @@ namespace vuk {
 
 		[[nodiscard]] T* operator->() {
 			if (!_holds_value) {
+				_extracted = true;
 				_error->throw_this();
 			}
 			return &_value;
@@ -146,6 +147,7 @@ namespace vuk {
 
 		[[nodiscard]] T const* operator->() const {
 			if (!_holds_value) {
+				_extracted = true;
 				_error->throw_this();
 			}
 			return &_value;
@@ -153,6 +155,7 @@ namespace vuk {
 
 		[[nodiscard]] T& operator*() & {
 			if (!_holds_value) {
+				_extracted = true;
 				_error->throw_this();
 			}
 			return _value;
@@ -160,6 +163,7 @@ namespace vuk {
 
 		[[nodiscard]] T const& operator*() const& {
 			if (!_holds_value) {
+				_extracted = true;
 				_error->throw_this();
 			}
 			return _value;
@@ -167,6 +171,7 @@ namespace vuk {
 
 		[[nodiscard]] T&& operator*() && {
 			if (!_holds_value) {
+				_extracted = true;
 				_error->throw_this();
 			}
 			return MOV(_value);
@@ -174,6 +179,7 @@ namespace vuk {
 
 		[[nodiscard]] T const&& operator*() const&& {
 			if (!_holds_value) {
+				_extracted = true;
 				_error->throw_this();
 			}
 			return _value;
@@ -181,6 +187,7 @@ namespace vuk {
 
 		[[nodiscard]] T& value() & {
 			if (!_holds_value) {
+				_extracted = true;
 				_error->throw_this();
 			}
 			return _value;
@@ -188,6 +195,7 @@ namespace vuk {
 
 		[[nodiscard]] T const& value() const& {
 			if (!_holds_value) {
+				_extracted = true;
 				_error->throw_this();
 			}
 			return _value;
@@ -195,6 +203,7 @@ namespace vuk {
 
 		[[nodiscard]] T&& value() && {
 			if (!_holds_value) {
+				_extracted = true;
 				_error->throw_this();
 			}
 			return MOV(_value);
