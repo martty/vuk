@@ -744,7 +744,7 @@ namespace vuk {
 			}
 
 			uint64_t key = value_identity(base_ty, value);
-			auto& psru = *new (this->arena.ensure_space(sizeof(PartialStreamResourceUse))) PartialStreamResourceUse{src_use};
+			auto& psru = *new (this->arena.ensure_space(sizeof(PartialStreamResourceUse))) PartialStreamResourceUse{ src_use };
 			if (base_ty->hash_value == current_module->types.builtin_image) {
 				auto& img_att = *reinterpret_cast<ImageAttachment*>(value);
 				psru.subrange.image = { img_att.base_level, img_att.level_count, img_att.base_layer, img_att.layer_count };
@@ -915,21 +915,13 @@ namespace vuk {
 		}
 	};
 
-	enum class RW { eNop, eRead, eWrite };
-
 	struct Scheduler {
 		Scheduler(Allocator all, RGCImpl* impl, Recorder& recorder) :
 		    allocator(all),
 		    recorder(recorder),
 		    pass_reads(impl->pass_reads),
 		    scheduled_execables(impl->scheduled_execables),
-		    impl(impl) {
-			// these are the items that were determined to run
-			for (auto& i : scheduled_execables) {
-				scheduled.emplace(i.execable);
-				work_queue.emplace_back(i);
-			}
-		}
+		    impl(impl) {}
 
 		Allocator allocator;
 		Recorder& recorder;
@@ -940,53 +932,8 @@ namespace vuk {
 
 		RGCImpl* impl;
 
-		std::deque<ScheduledItem> work_queue;
-
 		size_t naming_index_counter = 0;
 		size_t instr_counter = 0;
-		std::unordered_set<Node*> scheduled;
-
-		void schedule_new(Node* node) {
-			assert(node);
-			if (node->scheduled_item) { // we have scheduling info for this
-				work_queue.push_front(*node->scheduled_item);
-			} else { // no info, just schedule it as-is
-				work_queue.push_front(ScheduledItem{ .execable = node });
-			}
-		}
-
-		// returns true if the item is ready
-		bool process(ScheduledItem& item) {
-			if (item.ready) {
-				return true;
-			} else {
-				item.ready = true;
-				work_queue.push_front(item); // requeue this item
-				return false;
-			}
-		}
-
-		void schedule_dependency(Ref parm, RW access) {
-			if (parm.node->kind == Node::CONSTANT || parm.node->kind == Node::PLACEHOLDER) {
-				return;
-			}
-			auto link = parm.link();
-
-			if (access == RW::eWrite) { // synchronize against writing
-				// we are going to write here, so schedule all reads or the def, if no read
-				if (link.reads.size() > 0) {
-					// all reads
-					for (auto& r : link.reads.to_span(pass_reads)) {
-						schedule_new(r.node);
-					}
-				} else {
-					// just the def
-					schedule_new(link.def.node);
-				}
-			} else { // just reading, so don't synchronize with reads -> just the def
-				schedule_new(link.def.node);
-			}
-		}
 
 		void node_to_acq(Node* node, std::span<void*> values) {
 			assert(node->execution_info);
@@ -1118,6 +1065,19 @@ namespace vuk {
 		}
 	}
 
+#define EVAL(dst, arg)                                                                                                                                         \
+	auto UNIQUE_NAME(A) = eval2(arg);                                                                                                                            \
+	if (!UNIQUE_NAME(A)) {                                                                                                                                       \
+		return UNIQUE_NAME(A);                                                                                                                                     \
+	}                                                                                                                                                            \
+	if (UNIQUE_NAME(A)->is_ref) {                                                                                                                                \
+		return { expected_error, CannotBeConstantEvaluated{ arg } };                                                                                               \
+	}                                                                                                                                                            \
+	dst = *reinterpret_cast<decltype(dst)*>(UNIQUE_NAME(A)->value);                                                                                              \
+	if (UNIQUE_NAME(A)->owned) {                                                                                                                                 \
+		delete[] (char*)UNIQUE_NAME(A)->value;                                                                                                                     \
+	}
+
 	Result<void> ExecutableRenderGraph::execute(Allocator& alloc) {
 		Runtime& ctx = alloc.get_context();
 
@@ -1139,7 +1099,7 @@ namespace vuk {
 		std::deque<VkPEStream> pe_streams;
 		std::unordered_map<uint64_t, Swapchain*> image_to_swapchain;
 
-		for (auto& item : impl->scheduled_execables) {
+		for (auto& item : impl->item_list) {
 			item.scheduled_stream = recorder.stream_for_domain(item.scheduled_domain);
 		}
 
@@ -1190,274 +1150,245 @@ namespace vuk {
 
 		Result<void> submit_result = { expected_value };
 
-		while (!sched.work_queue.empty()) {
-			auto item = sched.work_queue.front();
-			sched.work_queue.pop_front();
-			auto& node = item.execable;
-			if (node->execution_info) { // only going execute things once
-				continue;
-			}
-			if (item.ready) {
-				sched.instr_counter++;
+		for (auto& item : impl->item_list) {
+			assert(item.ready);
+			auto node = item.execable;
+			sched.instr_counter++;
 #ifdef VUK_DUMP_EXEC
-				fmt::print("[{:#06x}] ", sched.instr_counter);
+			fmt::print("[{:#06x}] ", sched.instr_counter);
 #endif
-			}
 			// we run nodes twice - first time we reenqueue at the front and then put all deps before it
 			// second time we see it, we know that all deps have run, so we can run the node itself
 			switch (node->kind) {
 			case Node::MATH_BINARY: {
-				if (sched.process(item)) {
-					auto do_op = [&]<class T>(T, Node* node) -> T {
-						T& a = sched.get_value<T>(node->math_binary.a);
-						T& b = sched.get_value<T>(node->math_binary.b);
-						switch (node->math_binary.op) {
-						case Node::BinOp::ADD:
-							return a + b;
-						case Node::BinOp::SUB:
-							return a - b;
-						case Node::BinOp::MUL:
-							return a * b;
-						case Node::BinOp::DIV:
-							return a / b;
-						case Node::BinOp::MOD:
-							return a % b;
-						}
-						assert(0);
-						return a;
-					};
-					switch (node->type[0]->kind) {
-					case Type::INTEGER_TY: {
-						switch (node->type[0]->integer.width) {
-						case 32:
-							sched.done(node, host_stream, do_op(uint32_t{}, node));
-							break;
-						case 64:
-							sched.done(node, host_stream, do_op(uint64_t{}, node));
-							break;
-						default:
-							assert(0);
-						}
-						break;
+				auto do_op = [&]<class T>(T, Node* node) -> T {
+					T& a = sched.get_value<T>(node->math_binary.a);
+					T& b = sched.get_value<T>(node->math_binary.b);
+					switch (node->math_binary.op) {
+					case Node::BinOp::ADD:
+						return a + b;
+					case Node::BinOp::SUB:
+						return a - b;
+					case Node::BinOp::MUL:
+						return a * b;
+					case Node::BinOp::DIV:
+						return a / b;
+					case Node::BinOp::MOD:
+						return a % b;
 					}
+					assert(0);
+					return a;
+				};
+				switch (node->type[0]->kind) {
+				case Type::INTEGER_TY: {
+					switch (node->type[0]->integer.width) {
+					case 32:
+						sched.done(node, host_stream, do_op(uint32_t{}, node));
+						break;
+					case 64:
+						sched.done(node, host_stream, do_op(uint64_t{}, node));
+						break;
 					default:
 						assert(0);
 					}
-				} else {
-					for (auto i = 0; i < node->fixed_node.arg_count; i++) {
-						sched.schedule_dependency(node->fixed_node.args[i], RW::eRead);
-					}
+					break;
 				}
-				break;
-			}
-#define EVAL(dst, arg)                                                                                                                                         \
-	auto UNIQUE_NAME(A) = eval2(arg);                                                                                                                            \
-	if (!UNIQUE_NAME(A)) {                                                                                                                                       \
-		return UNIQUE_NAME(A);                                                                                                                                     \
-	}                                                                                                                                                            \
-	if (UNIQUE_NAME(A)->is_ref) {                                                                                                                                \
-		return { expected_error, CannotBeConstantEvaluated{ arg } };                                                                                               \
-	}                                                                                                                                                            \
-	dst = *reinterpret_cast<decltype(dst)*>(UNIQUE_NAME(A)->value);                                                                                              \
-	if (UNIQUE_NAME(A)->owned) {                                                                                                                                 \
-		delete[] (char*)UNIQUE_NAME(A)->value;                                                                                                                     \
-	}
-			case Node::CONSTRUCT: { // when encountering a CONSTRUCT, allocate the thing if needed
-				if (sched.process(item)) {
-					if (node->type[0]->hash_value == current_module->types.builtin_buffer) {
-						auto& bound = constant<Buffer>(node->construct.args[0]);
-						auto res = [&]() -> Result<void, CannotBeConstantEvaluated> {
-							EVAL(bound.size, node->construct.args[1]);
-							return { expected_value };
-						}();
-						if (!res) {
-							if (res.error().ref.node->kind == Node::PLACEHOLDER) {
-								return { expected_error,
-									       RenderGraphException(format_message(Level::eError, node, node->construct.args.subspan(1), "': argument(s) not set or inferrable\n")) };
-							} else {
-								return { expected_error,
-									       RenderGraphException(
-									           format_message(Level::eError, node, node->construct.args.subspan(1), "': argument(s) not constant evaluatable\n")) };
-							}
-						}
-#ifdef VUK_DUMP_EXEC
-						print_results(node);
-						fmt::print(" = construct<buffer> ");
-						print_args(node->construct.args.subspan(1));
-						fmt::print("\n");
-#endif
-						if (bound.buffer == VK_NULL_HANDLE) {
-							assert(bound.size != ~(0u));
-							assert(bound.memory_usage != (MemoryUsage)0);
-							BufferCreateInfo bci{ .mem_usage = bound.memory_usage, .size = bound.size, .alignment = 1 }; // TODO: alignment?
-							auto allocator = node->construct.allocator ? *node->construct.allocator : alloc;
-							auto buf = allocate_buffer(allocator, bci);
-							if (!buf) {
-								return buf;
-							}
-							bound = **buf;
-						}
-						recorder.init_sync(node->type[0].get(), { to_use(eNone), host_stream }, &bound);
-						sched.done(node, host_stream, bound);
-					} else if (node->type[0]->hash_value == current_module->types.builtin_image) {
-						auto& attachment = *reinterpret_cast<ImageAttachment*>(node->construct.args[0].node->constant.value);
-						// collapse inferencing
-						auto res = [&]() -> Result<void, CannotBeConstantEvaluated> {
-							EVAL(attachment.extent.width, node->construct.args[1]);
-							EVAL(attachment.extent.height, node->construct.args[2]);
-							EVAL(attachment.extent.depth, node->construct.args[3]);
-							EVAL(attachment.format, node->construct.args[4]);
-							EVAL(attachment.sample_count, node->construct.args[5]);
-							EVAL(attachment.base_layer, node->construct.args[6]);
-							EVAL(attachment.layer_count, node->construct.args[7]);
-							EVAL(attachment.base_level, node->construct.args[8]);
-							EVAL(attachment.level_count, node->construct.args[9]);
+				default:
+					assert(0);
+				}
+			} break;
 
-							if (attachment.image_view == ImageView{}) {
-								if (attachment.view_type == ImageViewType::eInfer && attachment.layer_count != VK_REMAINING_ARRAY_LAYERS) {
-									if (attachment.image_type == ImageType::e1D) {
-										if (attachment.layer_count == 1) {
-											attachment.view_type = ImageViewType::e1D;
-										} else {
-											attachment.view_type = ImageViewType::e1DArray;
-										}
-									} else if (attachment.image_type == ImageType::e2D) {
-										if (attachment.layer_count == 1) {
-											attachment.view_type = ImageViewType::e2D;
-										} else {
-											attachment.view_type = ImageViewType::e2DArray;
-										}
-									} else if (attachment.image_type == ImageType::e3D) {
-										if (attachment.layer_count == 1) {
-											attachment.view_type = ImageViewType::e3D;
-										} else {
-											attachment.view_type = ImageViewType::e2DArray;
-										}
+			case Node::CONSTRUCT: { // when encountering a CONSTRUCT, allocate the thing if needed
+				if (node->type[0]->hash_value == current_module->types.builtin_buffer) {
+					auto& bound = constant<Buffer>(node->construct.args[0]);
+					auto res = [&]() -> Result<void, CannotBeConstantEvaluated> {
+						EVAL(bound.size, node->construct.args[1]);
+						return { expected_value };
+					}();
+					if (!res) {
+						if (res.error().ref.node->kind == Node::PLACEHOLDER) {
+							return { expected_error,
+								       RenderGraphException(format_message(Level::eError, node, node->construct.args.subspan(1), "': argument(s) not set or inferrable\n")) };
+						} else {
+							return { expected_error,
+								       RenderGraphException(
+								           format_message(Level::eError, node, node->construct.args.subspan(1), "': argument(s) not constant evaluatable\n")) };
+						}
+					}
+#ifdef VUK_DUMP_EXEC
+					print_results(node);
+					fmt::print(" = construct<buffer> ");
+					print_args(node->construct.args.subspan(1));
+					fmt::print("\n");
+#endif
+					if (bound.buffer == VK_NULL_HANDLE) {
+						assert(bound.size != ~(0u));
+						assert(bound.memory_usage != (MemoryUsage)0);
+						BufferCreateInfo bci{ .mem_usage = bound.memory_usage, .size = bound.size, .alignment = 1 }; // TODO: alignment?
+						auto allocator = node->construct.allocator ? *node->construct.allocator : alloc;
+						auto buf = allocate_buffer(allocator, bci);
+						if (!buf) {
+							return buf;
+						}
+						bound = **buf;
+					}
+					recorder.init_sync(node->type[0].get(), { to_use(eNone), host_stream }, &bound);
+					sched.done(node, host_stream, bound);
+				} else if (node->type[0]->hash_value == current_module->types.builtin_image) {
+					auto& attachment = *reinterpret_cast<ImageAttachment*>(node->construct.args[0].node->constant.value);
+					// collapse inferencing
+					auto res = [&]() -> Result<void, CannotBeConstantEvaluated> {
+						EVAL(attachment.extent.width, node->construct.args[1]);
+						EVAL(attachment.extent.height, node->construct.args[2]);
+						EVAL(attachment.extent.depth, node->construct.args[3]);
+						EVAL(attachment.format, node->construct.args[4]);
+						EVAL(attachment.sample_count, node->construct.args[5]);
+						EVAL(attachment.base_layer, node->construct.args[6]);
+						EVAL(attachment.layer_count, node->construct.args[7]);
+						EVAL(attachment.base_level, node->construct.args[8]);
+						EVAL(attachment.level_count, node->construct.args[9]);
+
+						if (attachment.image_view == ImageView{}) {
+							if (attachment.view_type == ImageViewType::eInfer && attachment.layer_count != VK_REMAINING_ARRAY_LAYERS) {
+								if (attachment.image_type == ImageType::e1D) {
+									if (attachment.layer_count == 1) {
+										attachment.view_type = ImageViewType::e1D;
+									} else {
+										attachment.view_type = ImageViewType::e1DArray;
+									}
+								} else if (attachment.image_type == ImageType::e2D) {
+									if (attachment.layer_count == 1) {
+										attachment.view_type = ImageViewType::e2D;
+									} else {
+										attachment.view_type = ImageViewType::e2DArray;
+									}
+								} else if (attachment.image_type == ImageType::e3D) {
+									if (attachment.layer_count == 1) {
+										attachment.view_type = ImageViewType::e3D;
+									} else {
+										attachment.view_type = ImageViewType::e2DArray;
 									}
 								}
 							}
-							return { expected_value };
-						}();
-						if (!res) {
-							if (res.error().ref.node->kind == Node::PLACEHOLDER) {
-								return { expected_error,
-									       RenderGraphException(format_message(Level::eError, node, node->construct.args.subspan(1), "': argument(s) not set or inferrable\n")) };
-							} else {
-								return { expected_error,
-									       RenderGraphException(
-									           format_message(Level::eError, node, node->construct.args.subspan(1), "': argument(s) not constant evaluatable\n")) };
-							}
 						}
-#ifdef VUK_DUMP_EXEC
-						print_results(node);
-						fmt::print(" = construct<image> ");
-						print_args(node->construct.args.subspan(1));
-						fmt::print("\n");
-#endif
-						if (!attachment.image) {
-							auto allocator = node->construct.allocator ? *node->construct.allocator : alloc;
-							attachment.usage |= impl->compute_usage(&first(node).link());
-							assert(attachment.usage != ImageUsageFlags{});
-							auto img = allocate_image(allocator, attachment);
-							if (!img) {
-								return img;
-							}
-							attachment.image = **img;
-							if (node->debug_info && node->debug_info->result_names.size() > 0 && !node->debug_info->result_names[0].empty()) {
-								ctx.set_name(attachment.image.image, node->debug_info->result_names[0].c_str());
-							}
+						return { expected_value };
+					}();
+					if (!res) {
+						if (res.error().ref.node->kind == Node::PLACEHOLDER) {
+							return { expected_error,
+								       RenderGraphException(format_message(Level::eError, node, node->construct.args.subspan(1), "': argument(s) not set or inferrable\n")) };
+						} else {
+							return { expected_error,
+								       RenderGraphException(
+								           format_message(Level::eError, node, node->construct.args.subspan(1), "': argument(s) not constant evaluatable\n")) };
 						}
-						recorder.init_sync(node->type[0].get(), { to_use(eNone), host_stream }, &attachment);
-						sched.done(node, host_stream, attachment);
-					} else if (node->type[0]->hash_value == current_module->types.builtin_swapchain) {
-#ifdef VUK_DUMP_EXEC
-						print_results(node);
-						fmt::print(" = construct<swapchain>\n");
-#endif
-						/* no-op */
-						sched.done(node, host_stream, sched.get_value(node->construct.args[0]));
-						recorder.init_sync(node->type[0].get(), { to_use(eNone), host_stream }, sched.get_value(first(node)));
-					} else if (node->type[0]->kind == Type::ARRAY_TY) {
-						for (size_t i = 1; i < node->construct.args.size(); i++) {
-							auto arg_ty = node->construct.args[i].type();
-							auto& parm = node->construct.args[i];
-
-							recorder.add_sync(sched.base_type(parm).get(), sched.get_dependency_info(parm, arg_ty.get(), RW::eWrite, nullptr), sched.get_value(parm));
-						}
-
-						auto array_size = node->type[0]->array.count;
-						auto elem_ty = *node->type[0]->array.T;
-#ifdef VUK_DUMP_EXEC
-						print_results(node);
-						fmt::print(" = construct<{}[{}]> ", elem_ty->debug_info.name, array_size);
-						print_args(node->construct.args.subspan(1));
-						fmt::print("\n");
-#endif
-						assert(node->construct.args[0].type()->kind == Type::MEMORY_TY);
-
-						char* arr_mem = static_cast<char*>(sched.arena.ensure_space(elem_ty->size * array_size));
-						for (auto i = 0; i < array_size; i++) {
-							auto& elem = node->construct.args[i + 1];
-							assert(Type::stripped(elem.type())->hash_value == elem_ty->hash_value);
-
-							memcpy(arr_mem + i * elem_ty->size, sched.get_value(elem), elem_ty->size);
-						}
-						if (array_size == 0) { // zero-len arrays
-							arr_mem = nullptr;
-						}
-						node->construct.args[0].node->constant.value = arr_mem;
-						sched.done(node, host_stream, (void*)arr_mem);
-					} else if (node->type[0]->hash_value == current_module->types.builtin_sampled_image) {
-						for (size_t i = 1; i < node->construct.args.size(); i++) {
-							auto arg_ty = node->construct.args[i].type();
-							auto& parm = node->construct.args[i];
-
-							recorder.add_sync(sched.base_type(parm).get(), sched.get_dependency_info(parm, arg_ty.get(), RW::eWrite, nullptr), sched.get_value(parm));
-						}
-						auto image = sched.get_value<ImageAttachment>(node->construct.args[1]);
-						auto samp = sched.get_value<SamplerCreateInfo>(node->construct.args[2]);
-#ifdef VUK_DUMP_EXEC
-						print_results(node);
-						fmt::print(" = construct<sampled_image> ");
-						print_args(node->construct.args.subspan(1));
-						fmt::print("\n");
-#endif
-						sched.done(node, host_stream, SampledImage{ image, samp });
-					} else if (node->type[0]->kind == Type::UNION_TY) {
-						for (size_t i = 1; i < node->construct.args.size(); i++) {
-							auto arg_ty = node->construct.args[i].type();
-							auto& parm = node->construct.args[i];
-
-							recorder.add_sync(sched.base_type(parm).get(), sched.get_dependency_info(parm, arg_ty.get(), RW::eWrite, nullptr), sched.get_value(parm));
-						}
-
-#ifdef VUK_DUMP_EXEC
-						print_results(node);
-						fmt::print(" = construct<union> ");
-						print_args(node->construct.args.subspan(1));
-						fmt::print("\n");
-#endif
-						assert(node->construct.args[0].type()->kind == Type::MEMORY_TY);
-
-						char* arr_mem = static_cast<char*>(sched.arena.ensure_space(node->type[0]->size));
-						size_t offset = 0;
-						for (auto i = 0; i < node->construct.args.size() - 1; i++) {
-							auto sz = node->type[0]->composite.types[i]->size;
-							auto& elem = node->construct.args[i + 1];
-							memcpy(arr_mem + offset, sched.get_value(elem), sz);
-							offset += sz;
-						}
-
-						node->construct.args[0].node->constant.value = arr_mem;
-						sched.done(node, host_stream, (void*)arr_mem);
-					} else {
-						assert(0);
 					}
+#ifdef VUK_DUMP_EXEC
+					print_results(node);
+					fmt::print(" = construct<image> ");
+					print_args(node->construct.args.subspan(1));
+					fmt::print("\n");
+#endif
+					if (!attachment.image) {
+						auto allocator = node->construct.allocator ? *node->construct.allocator : alloc;
+						attachment.usage |= impl->compute_usage(&first(node).link());
+						assert(attachment.usage != ImageUsageFlags{});
+						auto img = allocate_image(allocator, attachment);
+						if (!img) {
+							return img;
+						}
+						attachment.image = **img;
+						if (node->debug_info && node->debug_info->result_names.size() > 0 && !node->debug_info->result_names[0].empty()) {
+							ctx.set_name(attachment.image.image, node->debug_info->result_names[0].c_str());
+						}
+					}
+					recorder.init_sync(node->type[0].get(), { to_use(eNone), host_stream }, &attachment);
+					sched.done(node, host_stream, attachment);
+				} else if (node->type[0]->hash_value == current_module->types.builtin_swapchain) {
+#ifdef VUK_DUMP_EXEC
+					print_results(node);
+					fmt::print(" = construct<swapchain>\n");
+#endif
+					/* no-op */
+					sched.done(node, host_stream, sched.get_value(node->construct.args[0]));
+					recorder.init_sync(node->type[0].get(), { to_use(eNone), host_stream }, sched.get_value(first(node)));
+				} else if (node->type[0]->kind == Type::ARRAY_TY) {
+					for (size_t i = 1; i < node->construct.args.size(); i++) {
+						auto arg_ty = node->construct.args[i].type();
+						auto& parm = node->construct.args[i];
+
+						recorder.add_sync(sched.base_type(parm).get(), sched.get_dependency_info(parm, arg_ty.get(), RW::eWrite, nullptr), sched.get_value(parm));
+					}
+
+					auto array_size = node->type[0]->array.count;
+					auto elem_ty = *node->type[0]->array.T;
+#ifdef VUK_DUMP_EXEC
+					print_results(node);
+					fmt::print(" = construct<{}[{}]> ", elem_ty->debug_info.name, array_size);
+					print_args(node->construct.args.subspan(1));
+					fmt::print("\n");
+#endif
+					assert(node->construct.args[0].type()->kind == Type::MEMORY_TY);
+
+					char* arr_mem = static_cast<char*>(sched.arena.ensure_space(elem_ty->size * array_size));
+					for (auto i = 0; i < array_size; i++) {
+						auto& elem = node->construct.args[i + 1];
+						assert(Type::stripped(elem.type())->hash_value == elem_ty->hash_value);
+
+						memcpy(arr_mem + i * elem_ty->size, sched.get_value(elem), elem_ty->size);
+					}
+					if (array_size == 0) { // zero-len arrays
+						arr_mem = nullptr;
+					}
+					node->construct.args[0].node->constant.value = arr_mem;
+					sched.done(node, host_stream, (void*)arr_mem);
+				} else if (node->type[0]->hash_value == current_module->types.builtin_sampled_image) {
+					for (size_t i = 1; i < node->construct.args.size(); i++) {
+						auto arg_ty = node->construct.args[i].type();
+						auto& parm = node->construct.args[i];
+
+						recorder.add_sync(sched.base_type(parm).get(), sched.get_dependency_info(parm, arg_ty.get(), RW::eWrite, nullptr), sched.get_value(parm));
+					}
+					auto image = sched.get_value<ImageAttachment>(node->construct.args[1]);
+					auto samp = sched.get_value<SamplerCreateInfo>(node->construct.args[2]);
+#ifdef VUK_DUMP_EXEC
+					print_results(node);
+					fmt::print(" = construct<sampled_image> ");
+					print_args(node->construct.args.subspan(1));
+					fmt::print("\n");
+#endif
+					sched.done(node, host_stream, SampledImage{ image, samp });
+				} else if (node->type[0]->kind == Type::UNION_TY) {
+					for (size_t i = 1; i < node->construct.args.size(); i++) {
+						auto arg_ty = node->construct.args[i].type();
+						auto& parm = node->construct.args[i];
+
+						recorder.add_sync(sched.base_type(parm).get(), sched.get_dependency_info(parm, arg_ty.get(), RW::eWrite, nullptr), sched.get_value(parm));
+					}
+
+#ifdef VUK_DUMP_EXEC
+					print_results(node);
+					fmt::print(" = construct<union> ");
+					print_args(node->construct.args.subspan(1));
+					fmt::print("\n");
+#endif
+					assert(node->construct.args[0].type()->kind == Type::MEMORY_TY);
+
+					char* arr_mem = static_cast<char*>(sched.arena.ensure_space(node->type[0]->size));
+					size_t offset = 0;
+					for (auto i = 0; i < node->construct.args.size() - 1; i++) {
+						auto sz = node->type[0]->composite.types[i]->size;
+						auto& elem = node->construct.args[i + 1];
+						memcpy(arr_mem + offset, sched.get_value(elem), sz);
+						offset += sz;
+					}
+
+					node->construct.args[0].node->constant.value = arr_mem;
+					sched.done(node, host_stream, (void*)arr_mem);
 				} else {
-					for (auto& parm : node->construct.args.subspan(1)) {
-						sched.schedule_dependency(parm, RW::eRead);
-					}
+					assert(0);
 				}
+
 				break;
 			}
 			case Node::CALL: {
@@ -1465,283 +1396,255 @@ namespace vuk {
 				size_t first_parm = fn_type->kind == Type::OPAQUE_FN_TY ? 1 : 4;
 				auto& args = fn_type->kind == Type::OPAQUE_FN_TY ? fn_type->opaque_fn.args : fn_type->shader_fn.args;
 
-				if (sched.process(item)) {                    // we have executed every dep, so execute ourselves too
-					Stream* dst_stream = item.scheduled_stream; // the domain this call will execute on
+				Stream* dst_stream = item.scheduled_stream; // the domain this call will execute on
 
-					auto vk_rec = dynamic_cast<VkQueueStream*>(dst_stream); // TODO: change this into dynamic dispatch on the Stream
-					assert(vk_rec);
-					// run all the barriers here!
+				auto vk_rec = dynamic_cast<VkQueueStream*>(dst_stream); // TODO: change this into dynamic dispatch on the Stream
+				assert(vk_rec);
+				// run all the barriers here!
 
-					for (size_t i = first_parm; i < node->call.args.size(); i++) {
-						auto& arg_ty = args[i - first_parm];
-						auto& parm = node->call.args[i];
-						auto& link = parm.link();
+				for (size_t i = first_parm; i < node->call.args.size(); i++) {
+					auto& arg_ty = args[i - first_parm];
+					auto& parm = node->call.args[i];
+					auto& link = parm.link();
 
-						if (arg_ty->kind == Type::IMBUED_TY) {
-							auto access = arg_ty->imbued.access;
+					if (arg_ty->kind == Type::IMBUED_TY) {
+						auto access = arg_ty->imbued.access;
 
-							// here: figuring out which allocator to use to make image views for the RP and then making them
-							if (is_framebuffer_attachment(access)) {
-								auto urdef = get_def2(parm)->node;
-								auto allocator = urdef->kind == Node::CONSTRUCT && urdef->construct.allocator ? *urdef->construct.allocator : alloc;
-								auto& img_att = sched.get_value<ImageAttachment>(parm);
-								if (img_att.view_type == ImageViewType::eInfer || img_att.view_type == ImageViewType::eCube) { // framebuffers need 2D or 2DArray views
-									if (img_att.layer_count > 1) {
-										img_att.view_type = ImageViewType::e2DArray;
-									} else {
-										img_att.view_type = ImageViewType::e2D;
-									}
-								}
-								if (img_att.image_view.payload == VK_NULL_HANDLE) {
-									auto iv = allocate_image_view(allocator, img_att); // TODO: dropping error
-									img_att.image_view = **iv;
-
-									auto name = std::string("ImageView: RenderTarget ");
-									alloc.get_context().set_name(img_att.image_view.payload, Name(name));
+						// here: figuring out which allocator to use to make image views for the RP and then making them
+						if (is_framebuffer_attachment(access)) {
+							auto urdef = get_def2(parm)->node;
+							auto allocator = urdef->kind == Node::CONSTRUCT && urdef->construct.allocator ? *urdef->construct.allocator : alloc;
+							auto& img_att = sched.get_value<ImageAttachment>(parm);
+							if (img_att.view_type == ImageViewType::eInfer || img_att.view_type == ImageViewType::eCube) { // framebuffers need 2D or 2DArray views
+								if (img_att.layer_count > 1) {
+									img_att.view_type = ImageViewType::e2DArray;
+								} else {
+									img_att.view_type = ImageViewType::e2D;
 								}
 							}
+							if (img_att.image_view.payload == VK_NULL_HANDLE) {
+								auto iv = allocate_image_view(allocator, img_att); // TODO: dropping error
+								img_att.image_view = **iv;
 
-							// Write and ReadWrite
-							RW sync_access = (is_write_access(access)) ? RW::eWrite : RW::eRead;
-							recorder.add_sync(sched.base_type(parm).get(), sched.get_dependency_info(parm, arg_ty.get(), sync_access, dst_stream), sched.get_value(parm));
-
-							if (is_framebuffer_attachment(access)) {
-								auto& img_att = sched.get_value<ImageAttachment>(parm);
-								vk_rec->prepare_render_pass_attachment(alloc, img_att);
+								auto name = std::string("ImageView: RenderTarget ");
+								alloc.get_context().set_name(img_att.image_view.payload, Name(name));
 							}
-						} else {
-							assert(0);
-						}
-					}
-
-					// make the renderpass if needed!
-					recorder.synchronize_stream(dst_stream);
-					// run the user cb!
-					std::vector<void*, short_alloc<void*>> opaque_rets(*impl->arena_);
-					if (fn_type->kind == Type::OPAQUE_FN_TY) {
-						CommandBuffer cobuf(*dst_stream, ctx, alloc, vk_rec->cbuf);
-						if (!fn_type->debug_info.name.empty()) {
-							auto name_hash = static_cast<uint32_t>(std::hash<std::string>{}(fn_type->debug_info.name));
-							auto name_color = std::array<float, 4>{
-								static_cast<float>(name_hash & 255) / 255.0f,
-								static_cast<float>((name_hash >> 8) & 255) / 255.0f,
-								static_cast<float>((name_hash >> 16) & 255) / 255.0f,
-								1.0,
-							};
-							ctx.begin_region(vk_rec->cbuf, fn_type->debug_info.name.c_str(), name_color);
 						}
 
-						void* rpass_profile_data = nullptr;
-						if (vk_rec->callbacks->on_begin_pass)
-							rpass_profile_data = vk_rec->callbacks->on_begin_pass(vk_rec->callbacks->user_data, fn_type->debug_info.name.c_str(), cobuf, vk_rec->domain);
+						// Write and ReadWrite
+						RW sync_access = (is_write_access(access)) ? RW::eWrite : RW::eRead;
+						recorder.add_sync(sched.base_type(parm).get(), sched.get_dependency_info(parm, arg_ty.get(), sync_access, dst_stream), sched.get_value(parm));
 
-						if (vk_rec->rp.rpci.attachments.size() > 0) {
-							vk_rec->prepare_render_pass();
-							fill_render_pass_info(vk_rec->rp, 0, cobuf);
+						if (is_framebuffer_attachment(access)) {
+							auto& img_att = sched.get_value<ImageAttachment>(parm);
+							vk_rec->prepare_render_pass_attachment(alloc, img_att);
 						}
-
-						std::vector<void*, short_alloc<void*>> opaque_args(*impl->arena_);
-						std::vector<void*, short_alloc<void*>> opaque_meta(*impl->arena_);
-						for (size_t i = first_parm; i < node->call.args.size(); i++) {
-							auto& parm = node->call.args[i];
-							opaque_args.push_back(sched.get_value(parm));
-							opaque_meta.push_back(&parm);
-						}
-						opaque_rets.resize(fn_type->opaque_fn.return_types.size());
-						(*fn_type->callback)(cobuf, opaque_args, opaque_meta, opaque_rets);
-						if (vk_rec->rp.handle) {
-							vk_rec->end_render_pass();
-						}
-						if (!fn_type->debug_info.name.empty()) {
-							ctx.end_region(vk_rec->cbuf);
-						}
-						if (vk_rec->callbacks->on_end_pass)
-							vk_rec->callbacks->on_end_pass(vk_rec->callbacks->user_data, rpass_profile_data, cobuf);
-					} else if (fn_type->kind == Type::SHADER_FN_TY) {
-						CommandBuffer cobuf(*dst_stream, ctx, alloc, vk_rec->cbuf);
-						if (!fn_type->debug_info.name.empty()) {
-							auto name_hash = static_cast<uint32_t>(std::hash<std::string>{}(fn_type->debug_info.name));
-							auto name_color = std::array<float, 4>{
-								static_cast<float>(name_hash & 255) / 255.0f,
-								static_cast<float>((name_hash >> 8) & 255) / 255.0f,
-								static_cast<float>((name_hash >> 16) & 255) / 255.0f,
-								1.0,
-							};
-							ctx.begin_region(vk_rec->cbuf, fn_type->debug_info.name.c_str(), name_color);
-						}
-
-						void* rpass_profile_data = nullptr;
-						if (vk_rec->callbacks->on_begin_pass)
-							rpass_profile_data = vk_rec->callbacks->on_begin_pass(vk_rec->callbacks->user_data, fn_type->debug_info.name.c_str(), cobuf, vk_rec->domain);
-
-						if (vk_rec->rp.rpci.attachments.size() > 0) {
-							vk_rec->prepare_render_pass();
-							fill_render_pass_info(vk_rec->rp, 0, cobuf);
-						}
-
-						// call the cbuf directly: bind everything, then dispatch shader
-						opaque_rets.resize(fn_type->shader_fn.return_types.size());
-						auto pbi = reinterpret_cast<PipelineBaseInfo*>(fn_type->shader_fn.shader);
-
-						cobuf.bind_compute_pipeline(pbi);
-
-						auto& flat_bindings = pbi->reflection_info.flat_bindings;
-						for (size_t i = first_parm; i < node->call.args.size(); i++) {
-							auto& parm = node->call.args[i];
-
-							auto binding_idx = i - first_parm;
-							auto& [set, binding] = flat_bindings[binding_idx];
-							auto val = sched.get_value(parm);
-							switch (binding->type) {
-							case DescriptorType::eSampledImage:
-							case DescriptorType::eStorageImage:
-								cobuf.bind_image(set, binding->binding, *reinterpret_cast<ImageAttachment*>(val));
-								break;
-							case DescriptorType::eUniformBuffer:
-							case DescriptorType::eStorageBuffer:
-								cobuf.bind_buffer(set, binding->binding, *reinterpret_cast<Buffer*>(val));
-								break;
-							case DescriptorType::eSampler:
-								cobuf.bind_sampler(set, binding->binding, *reinterpret_cast<SamplerCreateInfo*>(val));
-								break;
-							case DescriptorType::eCombinedImageSampler: {
-								auto& si = *reinterpret_cast<SampledImage*>(val);
-								cobuf.bind_image(set, binding->binding, si.ia);
-								cobuf.bind_sampler(set, binding->binding, si.sci);
-								break;
-							}
-							default:
-								assert(0);
-							}
-
-							opaque_rets[binding_idx] = val;
-						}
-						cobuf.dispatch(constant<uint32_t>(node->call.args[1]), constant<uint32_t>(node->call.args[2]), constant<uint32_t>(node->call.args[3]));
-
-						if (vk_rec->rp.handle) {
-							vk_rec->end_render_pass();
-						}
-						if (!fn_type->debug_info.name.empty()) {
-							ctx.end_region(vk_rec->cbuf);
-						}
-						if (vk_rec->callbacks->on_end_pass)
-							vk_rec->callbacks->on_end_pass(vk_rec->callbacks->user_data, rpass_profile_data, cobuf);
 					} else {
 						assert(0);
 					}
-#ifdef VUK_DUMP_EXEC
-					print_results(node);
-					fmt::print(" = call ${} ", domain_to_string(dst_stream->domain));
+				}
+
+				// make the renderpass if needed!
+				recorder.synchronize_stream(dst_stream);
+				// run the user cb!
+				std::vector<void*, short_alloc<void*>> opaque_rets(*impl->arena_);
+				if (fn_type->kind == Type::OPAQUE_FN_TY) {
+					CommandBuffer cobuf(*dst_stream, ctx, alloc, vk_rec->cbuf);
 					if (!fn_type->debug_info.name.empty()) {
-						fmt::print("<{}> ", fn_type->debug_info.name);
+						auto name_hash = static_cast<uint32_t>(std::hash<std::string>{}(fn_type->debug_info.name));
+						auto name_color = std::array<float, 4>{
+							static_cast<float>(name_hash & 255) / 255.0f,
+							static_cast<float>((name_hash >> 8) & 255) / 255.0f,
+							static_cast<float>((name_hash >> 16) & 255) / 255.0f,
+							1.0,
+						};
+						ctx.begin_region(vk_rec->cbuf, fn_type->debug_info.name.c_str(), name_color);
 					}
-					print_args(node->call.args.subspan(1));
-					fmt::print("\n");
-#endif
-					sched.done(node, dst_stream, std::span(opaque_rets));
-				} else { // execute deps
+
+					void* rpass_profile_data = nullptr;
+					if (vk_rec->callbacks->on_begin_pass)
+						rpass_profile_data = vk_rec->callbacks->on_begin_pass(vk_rec->callbacks->user_data, fn_type->debug_info.name.c_str(), cobuf, vk_rec->domain);
+
+					if (vk_rec->rp.rpci.attachments.size() > 0) {
+						vk_rec->prepare_render_pass();
+						fill_render_pass_info(vk_rec->rp, 0, cobuf);
+					}
+
+					std::vector<void*, short_alloc<void*>> opaque_args(*impl->arena_);
+					std::vector<void*, short_alloc<void*>> opaque_meta(*impl->arena_);
 					for (size_t i = first_parm; i < node->call.args.size(); i++) {
-						auto& arg_ty = args[i - first_parm];
+						auto& parm = node->call.args[i];
+						opaque_args.push_back(sched.get_value(parm));
+						opaque_meta.push_back(&parm);
+					}
+					opaque_rets.resize(fn_type->opaque_fn.return_types.size());
+					(*fn_type->callback)(cobuf, opaque_args, opaque_meta, opaque_rets);
+					if (vk_rec->rp.handle) {
+						vk_rec->end_render_pass();
+					}
+					if (!fn_type->debug_info.name.empty()) {
+						ctx.end_region(vk_rec->cbuf);
+					}
+					if (vk_rec->callbacks->on_end_pass)
+						vk_rec->callbacks->on_end_pass(vk_rec->callbacks->user_data, rpass_profile_data, cobuf);
+				} else if (fn_type->kind == Type::SHADER_FN_TY) {
+					CommandBuffer cobuf(*dst_stream, ctx, alloc, vk_rec->cbuf);
+					if (!fn_type->debug_info.name.empty()) {
+						auto name_hash = static_cast<uint32_t>(std::hash<std::string>{}(fn_type->debug_info.name));
+						auto name_color = std::array<float, 4>{
+							static_cast<float>(name_hash & 255) / 255.0f,
+							static_cast<float>((name_hash >> 8) & 255) / 255.0f,
+							static_cast<float>((name_hash >> 16) & 255) / 255.0f,
+							1.0,
+						};
+						ctx.begin_region(vk_rec->cbuf, fn_type->debug_info.name.c_str(), name_color);
+					}
+
+					void* rpass_profile_data = nullptr;
+					if (vk_rec->callbacks->on_begin_pass)
+						rpass_profile_data = vk_rec->callbacks->on_begin_pass(vk_rec->callbacks->user_data, fn_type->debug_info.name.c_str(), cobuf, vk_rec->domain);
+
+					if (vk_rec->rp.rpci.attachments.size() > 0) {
+						vk_rec->prepare_render_pass();
+						fill_render_pass_info(vk_rec->rp, 0, cobuf);
+					}
+
+					// call the cbuf directly: bind everything, then dispatch shader
+					opaque_rets.resize(fn_type->shader_fn.return_types.size());
+					auto pbi = reinterpret_cast<PipelineBaseInfo*>(fn_type->shader_fn.shader);
+
+					cobuf.bind_compute_pipeline(pbi);
+
+					auto& flat_bindings = pbi->reflection_info.flat_bindings;
+					for (size_t i = first_parm; i < node->call.args.size(); i++) {
 						auto& parm = node->call.args[i];
 
-						if (arg_ty->kind == Type::IMBUED_TY) {
-							auto access = arg_ty->imbued.access;
-							// Write and ReadWrite
-							RW sync_access = (is_write_access(access)) ? RW::eWrite : RW::eRead;
-							sched.schedule_dependency(parm, sync_access);
-						} else {
+						auto binding_idx = i - first_parm;
+						auto& [set, binding] = flat_bindings[binding_idx];
+						auto val = sched.get_value(parm);
+						switch (binding->type) {
+						case DescriptorType::eSampledImage:
+						case DescriptorType::eStorageImage:
+							cobuf.bind_image(set, binding->binding, *reinterpret_cast<ImageAttachment*>(val));
+							break;
+						case DescriptorType::eUniformBuffer:
+						case DescriptorType::eStorageBuffer:
+							cobuf.bind_buffer(set, binding->binding, *reinterpret_cast<Buffer*>(val));
+							break;
+						case DescriptorType::eSampler:
+							cobuf.bind_sampler(set, binding->binding, *reinterpret_cast<SamplerCreateInfo*>(val));
+							break;
+						case DescriptorType::eCombinedImageSampler: {
+							auto& si = *reinterpret_cast<SampledImage*>(val);
+							cobuf.bind_image(set, binding->binding, si.ia);
+							cobuf.bind_sampler(set, binding->binding, si.sci);
+							break;
+						}
+						default:
 							assert(0);
 						}
+
+						opaque_rets[binding_idx] = val;
 					}
+					cobuf.dispatch(constant<uint32_t>(node->call.args[1]), constant<uint32_t>(node->call.args[2]), constant<uint32_t>(node->call.args[3]));
+
+					if (vk_rec->rp.handle) {
+						vk_rec->end_render_pass();
+					}
+					if (!fn_type->debug_info.name.empty()) {
+						ctx.end_region(vk_rec->cbuf);
+					}
+					if (vk_rec->callbacks->on_end_pass)
+						vk_rec->callbacks->on_end_pass(vk_rec->callbacks->user_data, rpass_profile_data, cobuf);
+				} else {
+					assert(0);
 				}
+#ifdef VUK_DUMP_EXEC
+				print_results(node);
+				fmt::print(" = call ${} ", domain_to_string(dst_stream->domain));
+				if (!fn_type->debug_info.name.empty()) {
+					fmt::print("<{}> ", fn_type->debug_info.name);
+				}
+				print_args(node->call.args.subspan(1));
+				fmt::print("\n");
+#endif
+				sched.done(node, dst_stream, std::span(opaque_rets));
+
 				break;
 			}
 			case Node::RELEASE: {
-				if (sched.process(item)) {
-					auto acqrel = node->rel_acq;
+				auto acqrel = node->rel_acq;
 
-					assert(acqrel && acqrel->status == Signal::Status::eDisarmed);
+				assert(acqrel && acqrel->status == Signal::Status::eDisarmed);
 
-					Stream* dst_stream;
-					Swapchain* swp = nullptr;
-					if (node->release.dst_domain == DomainFlagBits::ePE) {
-						swp = reinterpret_cast<Swapchain*>(image_to_swapchain.at(value_identity(node->release.src[0].type().get(), sched.get_value(node->release.src[0]))));
-						auto it = std::find_if(pe_streams.begin(), pe_streams.end(), [=](auto& pe_stream) { return pe_stream.swp == swp; });
-						assert(it != pe_streams.end());
-						dst_stream = &*it;
-					} else if (node->release.dst_domain == DomainFlagBits::eDevice) {
-						dst_stream = item.scheduled_stream;
-					} else {
-						dst_stream = recorder.stream_for_domain(node->release.dst_domain);
-					}
-					assert(dst_stream);
-
-					auto sched_stream = item.scheduled_stream;
-					DomainFlagBits sched_domain = sched_stream->domain;
-					DomainFlagBits dst_domain = dst_stream->domain;
-
-					node->rel_acq->last_use.resize(node->type.size());
-					auto values = new (sched.arena.ensure_space(sizeof(void*) * node->type.size())) void*[node->type.size()];
-
-					for (size_t i = 0; i < node->release.src.size(); i++) {
-						auto parm = node->release.src[i];
-						auto arg_ty = node->type[i];
-						auto di = sched.get_dependency_info(parm, arg_ty.get(), RW::eWrite, dst_stream);
-						auto value = sched.get_value(parm);
-						values[i] = value;
-						recorder.add_sync(sched.base_type(parm).get(), di, value);
-
-						auto last_use = recorder.last_use(sched.base_type(parm).get(), value);
-						// SANITY: if we change streams, then we must've had sync
-						// TODO: remove host exception here
-						assert(di || last_use.stream->domain == DomainFlagBits::eHost || (last_use.stream == item.scheduled_stream));
-						acqrel->last_use.push_back(last_use);
-						if (i == 0) {
-							sched_stream->add_dependent_signal(acqrel);
-						}
-					}
-
-					if (acqrel && sched_domain == DomainFlagBits::eHost) {
-						acqrel->status = Signal::Status::eHostAvailable;
-					}
-
-					if (dst_domain == DomainFlagBits::ePE) {
-						assert(sched_stream->domain & DomainFlagBits::eDevice);
-						assert(swp);
-						auto present_result = dynamic_cast<VkQueueStream*>(sched_stream)->present(*swp);
-						if (!present_result) {
-							submit_result = std::move(present_result);
-						}
-						if (acqrel) {
-							acqrel->status = Signal::Status::eHostAvailable; // TODO: ???
-						}
-					} else {
-						sched_stream->submit();
-					}
-					host_stream->submit();
-#ifdef VUK_DUMP_EXEC
-					print_results(node);
-					fmt::print(" = release ${} -> ${} ", domain_to_string(sched_domain), domain_to_string(dst_domain));
-					print_args(node->release.src);
-					fmt::print("\n");
-#endif
-
-					sched.done(node, item.scheduled_stream, std::span(values, node->type.size()));
-
+				Stream* dst_stream;
+				Swapchain* swp = nullptr;
+				if (node->release.dst_domain == DomainFlagBits::ePE) {
+					swp = reinterpret_cast<Swapchain*>(image_to_swapchain.at(value_identity(node->release.src[0].type().get(), sched.get_value(node->release.src[0]))));
+					auto it = std::find_if(pe_streams.begin(), pe_streams.end(), [=](auto& pe_stream) { return pe_stream.swp == swp; });
+					assert(it != pe_streams.end());
+					dst_stream = &*it;
+				} else if (node->release.dst_domain == DomainFlagBits::eDevice) {
+					dst_stream = item.scheduled_stream;
 				} else {
-					auto acqrel = node->rel_acq;
-					if (!acqrel || acqrel->status == Signal::Status::eDisarmed) {
-						for (size_t i = 0; i < node->release.src.size(); i++) {
-							sched.schedule_dependency(node->release.src[i], RW::eWrite);
-						}
+					dst_stream = recorder.stream_for_domain(node->release.dst_domain);
+				}
+				assert(dst_stream);
+
+				auto sched_stream = item.scheduled_stream;
+				DomainFlagBits sched_domain = sched_stream->domain;
+				DomainFlagBits dst_domain = dst_stream->domain;
+
+				node->rel_acq->last_use.resize(node->type.size());
+				auto values = new (sched.arena.ensure_space(sizeof(void*) * node->type.size())) void*[node->type.size()];
+
+				for (size_t i = 0; i < node->release.src.size(); i++) {
+					auto parm = node->release.src[i];
+					auto arg_ty = node->type[i];
+					auto di = sched.get_dependency_info(parm, arg_ty.get(), RW::eWrite, dst_stream);
+					auto value = sched.get_value(parm);
+					values[i] = value;
+					recorder.add_sync(sched.base_type(parm).get(), di, value);
+
+					auto last_use = recorder.last_use(sched.base_type(parm).get(), value);
+					// SANITY: if we change streams, then we must've had sync
+					// TODO: remove host exception here
+					assert(di || last_use.stream->domain == DomainFlagBits::eHost || (last_use.stream == item.scheduled_stream));
+					acqrel->last_use.push_back(last_use);
+					if (i == 0) {
+						sched_stream->add_dependent_signal(acqrel);
 					}
 				}
+
+				if (acqrel && sched_domain == DomainFlagBits::eHost) {
+					acqrel->status = Signal::Status::eHostAvailable;
+				}
+
+				if (dst_domain == DomainFlagBits::ePE) {
+					assert(sched_stream->domain & DomainFlagBits::eDevice);
+					assert(swp);
+					auto present_result = dynamic_cast<VkQueueStream*>(sched_stream)->present(*swp);
+					if (!present_result) {
+						submit_result = std::move(present_result);
+					}
+					if (acqrel) {
+						acqrel->status = Signal::Status::eHostAvailable; // TODO: ???
+					}
+				} else {
+					sched_stream->submit();
+				}
+				host_stream->submit();
+#ifdef VUK_DUMP_EXEC
+				print_results(node);
+				fmt::print(" = release ${} -> ${} ", domain_to_string(sched_domain), domain_to_string(dst_domain));
+				print_args(node->release.src);
+				fmt::print("\n");
+#endif
+
+				sched.done(node, item.scheduled_stream, std::span(values, node->type.size()));
 				break;
 			}
 			case Node::ACQUIRE: {
-				if (!sched.process(item)) { // ACQUIRE does not have any deps
-					break;
-				}
 				auto acqrel = node->rel_acq;
 				assert(acqrel && acqrel->status != Signal::Status::eDisarmed);
 
@@ -1783,195 +1686,171 @@ namespace vuk {
 			}
 
 			case Node::ACQUIRE_NEXT_IMAGE: {
-				if (sched.process(item)) {
-					auto& swp = *sched.get_value<Swapchain*>(node->acquire_next_image.swapchain);
-					swp.linear_index = (swp.linear_index + 1) % swp.images.size();
-					swp.acquire_result =
-					    ctx.vkAcquireNextImageKHR(ctx.device, swp.swapchain, UINT64_MAX, swp.semaphores[2 * swp.linear_index], VK_NULL_HANDLE, &swp.image_index);
-					// VK_SUBOPTIMAL_KHR shouldn't stop presentation; it is handled at the end
-					if (swp.acquire_result != VK_SUCCESS && swp.acquire_result != VK_SUBOPTIMAL_KHR) {
-						return { expected_error, VkException{ swp.acquire_result } };
-					}
-
-					auto pe_stream = &pe_streams.emplace_back(alloc, swp);
-#ifdef VUK_DUMP_EXEC
-					print_results(node);
-					fmt::print(" = acquire_next_image ");
-					print_args(std::span{ &node->acquire_next_image.swapchain, 1 });
-					fmt::print("\n");
-#endif
-					sched.done(node, pe_stream, swp.images[swp.image_index]);
-					image_to_swapchain.emplace(value_identity(node->type[0].get(), &swp.images[swp.image_index]), &swp);
-					auto& lu = recorder.last_use(node->type[0].get(), &swp.images[swp.image_index]);
-					lu = StreamResourceUse{ { PipelineStageFlagBits::eAllCommands, AccessFlagBits::eNone, ImageLayout::eUndefined }, pe_stream };
-				} else {
-					sched.schedule_dependency(node->acquire_next_image.swapchain, RW::eWrite);
+				auto& swp = *sched.get_value<Swapchain*>(node->acquire_next_image.swapchain);
+				swp.linear_index = (swp.linear_index + 1) % swp.images.size();
+				swp.acquire_result =
+				    ctx.vkAcquireNextImageKHR(ctx.device, swp.swapchain, UINT64_MAX, swp.semaphores[2 * swp.linear_index], VK_NULL_HANDLE, &swp.image_index);
+				// VK_SUBOPTIMAL_KHR shouldn't stop presentation; it is handled at the end
+				if (swp.acquire_result != VK_SUCCESS && swp.acquire_result != VK_SUBOPTIMAL_KHR) {
+					return { expected_error, VkException{ swp.acquire_result } };
 				}
+
+				auto pe_stream = &pe_streams.emplace_back(alloc, swp);
+#ifdef VUK_DUMP_EXEC
+				print_results(node);
+				fmt::print(" = acquire_next_image ");
+				print_args(std::span{ &node->acquire_next_image.swapchain, 1 });
+				fmt::print("\n");
+#endif
+				sched.done(node, pe_stream, swp.images[swp.image_index]);
+				image_to_swapchain.emplace(value_identity(node->type[0].get(), &swp.images[swp.image_index]), &swp);
+				auto& lu = recorder.last_use(node->type[0].get(), &swp.images[swp.image_index]);
+				lu = StreamResourceUse{ { PipelineStageFlagBits::eAllCommands, AccessFlagBits::eNone, ImageLayout::eUndefined }, pe_stream };
+
 				break;
 			}
 			case Node::SLICE: {
-				if (sched.process(item)) {
-					// half sync
-					recorder.add_sync(sched.base_type(node->slice.src).get(),
-					                  sched.get_dependency_info(node->slice.src, node->slice.src.type().get(), RW::eRead, item.scheduled_stream),
-					                  sched.get_value(node->slice.src));
-					auto composite = node->slice.src;
-					void* composite_v = sched.get_value(composite);
-					auto t = Type::stripped(composite.type());
-					auto axis = node->slice.axis;
-					auto start = sched.get_value<uint64_t>(node->slice.start);
-					auto count = sched.get_value<uint64_t>(node->slice.count);
+				// half sync
+				recorder.add_sync(sched.base_type(node->slice.src).get(),
+				                  sched.get_dependency_info(node->slice.src, node->slice.src.type().get(), RW::eRead, item.scheduled_stream),
+				                  sched.get_value(node->slice.src));
+				auto composite = node->slice.src;
+				void* composite_v = sched.get_value(composite);
+				auto t = Type::stripped(composite.type());
+				auto axis = node->slice.axis;
+				auto start = sched.get_value<uint64_t>(node->slice.start);
+				auto count = sched.get_value<uint64_t>(node->slice.count);
 #ifdef VUK_DUMP_EXEC
-					print_results(node);
-					fmt::print(" = ");
-					print_args(std::span{ &node->slice.src, 1 });
-					if (start > 0 || count != Range::REMAINING) {
-						if (node->slice.axis != 0) {
-							if (count > 1) {
-								fmt::print("[{}->{}:{}]", node->slice.axis, start, start + count - 1);
-							} else if (axis == Node::NamedAxis::FIELD) {
-								fmt::print(".{}", start);
-							}
-							else {
-								fmt::print("[{}->{}]", node->slice.axis, start);
-							}
+				print_results(node);
+				fmt::print(" = ");
+				print_args(std::span{ &node->slice.src, 1 });
+				if (start > 0 || count != Range::REMAINING) {
+					if (node->slice.axis != 0) {
+						if (count > 1) {
+							fmt::print("[{}->{}:{}]", node->slice.axis, start, start + count - 1);
+						} else if (axis == Node::NamedAxis::FIELD) {
+							fmt::print(".{}", start);
 						} else {
-							if (count > 1) {
-								fmt::print("[{}:{}]", start, start + count - 1);
-							} else {
-								fmt::print("[{}]", start);
-							}
+							fmt::print("[{}->{}]", node->slice.axis, start);
+						}
+					} else {
+						if (count > 1) {
+							fmt::print("[{}:{}]", start, start + count - 1);
+						} else {
+							fmt::print("[{}]", start);
 						}
 					}
-					fmt::print("\n");
+				}
+				fmt::print("\n");
 #endif
 
-					if (!(node->debug_info && node->debug_info->result_names.size() > 0 && !node->debug_info->result_names[0].empty())) {
-						/*std::string name = fmt::format("{}_{}[{}->{}:{}]",
-						                               Node::kind_to_sv(node->slice.src.node->execution_info->kind),
-						                               node->slice.src.node->execution_info->naming_index,
-						                               node->slice.axis,
-						                               start,
-						                               start + count - 1);
-						current_module->name_output(first(node), name);*/
-					}
-					std::vector<void*, short_alloc<void*>> rets(3, *impl->arena_);
+				if (!(node->debug_info && node->debug_info->result_names.size() > 0 && !node->debug_info->result_names[0].empty())) {
+					/*std::string name = fmt::format("{}_{}[{}->{}:{}]",
+					                               Node::kind_to_sv(node->slice.src.node->execution_info->kind),
+					                               node->slice.src.node->execution_info->naming_index,
+					                               node->slice.axis,
+					                               start,
+					                               start + count - 1);
+					current_module->name_output(first(node), name);*/
+				}
+				std::vector<void*, short_alloc<void*>> rets(3, *impl->arena_);
 
-					if (node->slice.src.type()->hash_value == current_module->types.builtin_image) {
-						auto sliced = ImageAttachment(*(ImageAttachment*)composite_v);
-						if (axis == Node::NamedAxis::MIP) {
-							sliced.base_level += start;
-							if (count != Range::REMAINING) {
-								sliced.level_count = count;
-							}
-							rets[0] = static_cast<void*>(new (impl->arena_->allocate(sizeof(ImageAttachment))) ImageAttachment{ sliced });
-						} else if (axis == Node::NamedAxis::LAYER) {
-							sliced.base_layer += start;
-							if (count != Range::REMAINING) {
-								sliced.layer_count = count;
-							}
-							rets[0] = static_cast<void*>(new (impl->arena_->allocate(sizeof(ImageAttachment))) ImageAttachment{ sliced });
-						} else if (axis == Node::NamedAxis::FIELD) {
-							assert(t->kind == Type::COMPOSITE_TY);
-							assert(count == 1);
-							auto offset = t->offsets[start];
-							rets[0] = reinterpret_cast<std::byte*>(composite_v) + offset;
-						} else {
-							assert(0);
+				if (node->slice.src.type()->hash_value == current_module->types.builtin_image) {
+					auto sliced = ImageAttachment(*(ImageAttachment*)composite_v);
+					if (axis == Node::NamedAxis::MIP) {
+						sliced.base_level += start;
+						if (count != Range::REMAINING) {
+							sliced.level_count = count;
 						}
-					} else if (node->slice.src.type()->hash_value == current_module->types.builtin_buffer) {
-						if (axis == 0) {
-							auto sliced = Buffer(*(Buffer*)composite_v);
-							sliced.offset += start;
-							if (count != Range::REMAINING) {
-								sliced.size = count;
-							}
-							rets[0] = static_cast<void*>(new (impl->arena_->allocate(sizeof(Buffer))) Buffer{ sliced });
-						} else if (axis == Node::NamedAxis::FIELD) {
-							assert(t->kind == Type::COMPOSITE_TY);
-							assert(count == 1);
-							auto offset = t->offsets[start];
-							rets[0] = reinterpret_cast<std::byte*>(composite_v) + offset;
+						rets[0] = static_cast<void*>(new (impl->arena_->allocate(sizeof(ImageAttachment))) ImageAttachment{ sliced });
+					} else if (axis == Node::NamedAxis::LAYER) {
+						sliced.base_layer += start;
+						if (count != Range::REMAINING) {
+							sliced.layer_count = count;
 						}
-					} else if (node->slice.src.type()->kind == Type::ARRAY_TY) {
-						assert(axis == 0);
-						assert(count == 1);
-						rets[0] = reinterpret_cast<std::byte*>(composite_v) + t->array.stride * start;
-					} else if (node->slice.src.type()->kind == Type::UNION_TY) {
-						assert(axis == Node::NamedAxis::FIELD);
+						rets[0] = static_cast<void*>(new (impl->arena_->allocate(sizeof(ImageAttachment))) ImageAttachment{ sliced });
+					} else if (axis == Node::NamedAxis::FIELD) {
+						assert(t->kind == Type::COMPOSITE_TY);
 						assert(count == 1);
 						auto offset = t->offsets[start];
 						rets[0] = reinterpret_cast<std::byte*>(composite_v) + offset;
 					} else {
 						assert(0);
 					}
-					rets[1] = impl->arena_->allocate(node->slice.src.type()->size);
-					memcpy(rets[1], sched.get_value(node->slice.src), node->slice.src.type()->size);
-					rets[2] = impl->arena_->allocate(node->slice.src.type()->size);
-					memcpy(rets[2], sched.get_value(node->slice.src), node->slice.src.type()->size);
-					sched.done(node, node->slice.src.node->execution_info->stream, std::span(rets));
+				} else if (node->slice.src.type()->hash_value == current_module->types.builtin_buffer) {
+					if (axis == 0) {
+						auto sliced = Buffer(*(Buffer*)composite_v);
+						sliced.offset += start;
+						if (count != Range::REMAINING) {
+							sliced.size = count;
+						}
+						rets[0] = static_cast<void*>(new (impl->arena_->allocate(sizeof(Buffer))) Buffer{ sliced });
+					} else if (axis == Node::NamedAxis::FIELD) {
+						assert(t->kind == Type::COMPOSITE_TY);
+						assert(count == 1);
+						auto offset = t->offsets[start];
+						rets[0] = reinterpret_cast<std::byte*>(composite_v) + offset;
+					}
+				} else if (node->slice.src.type()->kind == Type::ARRAY_TY) {
+					assert(axis == 0);
+					assert(count == 1);
+					rets[0] = reinterpret_cast<std::byte*>(composite_v) + t->array.stride * start;
+				} else if (node->slice.src.type()->kind == Type::UNION_TY) {
+					assert(axis == Node::NamedAxis::FIELD);
+					assert(count == 1);
+					auto offset = t->offsets[start];
+					rets[0] = reinterpret_cast<std::byte*>(composite_v) + offset;
 				} else {
-					sched.schedule_dependency(node->slice.src, RW::eWrite);
-					sched.schedule_dependency(node->slice.start, RW::eRead);
-					sched.schedule_dependency(node->slice.count, RW::eRead);
+					assert(0);
 				}
+				rets[1] = impl->arena_->allocate(node->slice.src.type()->size);
+				memcpy(rets[1], sched.get_value(node->slice.src), node->slice.src.type()->size);
+				rets[2] = impl->arena_->allocate(node->slice.src.type()->size);
+				memcpy(rets[2], sched.get_value(node->slice.src), node->slice.src.type()->size);
+				sched.done(node, node->slice.src.node->execution_info->stream, std::span(rets));
+
 				break;
 			}
 			case Node::CONVERGE: {
-				if (sched.process(item)) {
-					auto base = node->converge.diverged[0];
-					/*auto def = get_def2slice(base);
-					if (def && def->node->kind == Node::SLICE) {
-					  base = def->node->slice.src;
-					} else {
-					  assert(0);
-					}*/
+				auto base = node->converge.diverged[0];
 
-					// half sync
-					for (size_t i = 0; i < node->converge.diverged.size(); i++) {
-						auto& div = node->converge.diverged[i];
-						recorder.add_sync(sched.base_type(div).get(),
-						                  sched.get_dependency_info(div, div.type().get(), RW::eWrite, base.node->execution_info->stream),
-						                  sched.get_value(div));
-					}
+				// half sync
+				for (size_t i = 0; i < node->converge.diverged.size(); i++) {
+					auto& div = node->converge.diverged[i];
+					recorder.add_sync(sched.base_type(div).get(),
+					                  sched.get_dependency_info(div, div.type().get(), RW::eWrite, base.node->execution_info->stream),
+					                  sched.get_value(div));
+				}
 
 #ifdef VUK_DUMP_EXEC
-					print_results(node);
-					fmt::print(" = ");
-					print_args(node->converge.diverged.subspan(0, 1));
-					fmt::print("{{");
-					print_args(node->converge.diverged.subspan(1));
-					fmt::print("}}");
-					fmt::print("\n");
+				print_results(node);
+				fmt::print(" = ");
+				print_args(node->converge.diverged.subspan(0, 1));
+				fmt::print("{{");
+				print_args(node->converge.diverged.subspan(1));
+				fmt::print("}}");
+				fmt::print("\n");
 #endif
 
-					sched.done(node, base.node->execution_info->stream, sched.get_value(base));
-				} else {
-					for (size_t i = 0; i < node->converge.diverged.size(); i++) {
-						sched.schedule_dependency(node->converge.diverged[i], RW::eWrite);
-					}
-				}
+				sched.done(node, base.node->execution_info->stream, sched.get_value(base));
 				break;
 			}
 			case Node::USE: {
-				if (sched.process(item)) {
-					// half sync
-					auto& div = node->use.src;
-					recorder.add_sync(
-					    sched.base_type(div).get(), sched.get_dependency_info(div, div.type().get(), RW::eWrite, div.node->execution_info->stream), sched.get_value(div));
+				// half sync
+				auto& div = node->use.src;
+				recorder.add_sync(
+				    sched.base_type(div).get(), sched.get_dependency_info(div, div.type().get(), RW::eWrite, div.node->execution_info->stream), sched.get_value(div));
 
 #ifdef VUK_DUMP_EXEC
-					print_results(node);
-					fmt::print(" = ");
-					print_args(std::span(&node->use.src, 1));
-					fmt::print(": {}", Type::to_sv(node->use.access));
-					fmt::print("\n");
+				print_results(node);
+				fmt::print(" = ");
+				print_args(std::span(&node->use.src, 1));
+				fmt::print(": {}", Type::to_sv(node->use.access));
+				fmt::print("\n");
 #endif
 
-					sched.done(node, div.node->execution_info->stream, sched.get_value(div));
-				} else {
-					sched.schedule_dependency(node->use.src, RW::eWrite);
-				}
+				sched.done(node, div.node->execution_info->stream, sched.get_value(div));
+
 				break;
 			}
 			default:

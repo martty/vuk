@@ -670,6 +670,7 @@ public:
 		void pass_partitioning();
 		void resource_linking();
 		void render_pass_assignment();
+		Result<void> linearize();
 		Result<void> validate_read_undefined();
 		Result<void> validate_duplicated_resource_ref();
 

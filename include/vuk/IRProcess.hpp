@@ -29,6 +29,8 @@ namespace vuk {
 		Node::Kind kind;
 	};
 
+	enum class RW { eRead, eWrite };
+
 #define INIT(x) x(decltype(x)::allocator_type(*arena_))
 
 	struct RGCImpl {
@@ -38,7 +40,6 @@ namespace vuk {
 		std::unique_ptr<std::pmr::unsynchronized_pool_resource> pool;
 		std::pmr::monotonic_buffer_resource mbr;
 
-		plf::colony<ScheduledItem> scheduled_execables;
 		std::vector<ScheduledItem*> partitioned_execables;
 
 		std::pmr::vector<Ref> pass_reads;
@@ -64,6 +65,52 @@ namespace vuk {
 		};
 
 		std::unordered_map<ChainLink*, LiveRange> live_ranges;
+
+		plf::colony<ScheduledItem> scheduled_execables;
+		std::deque<ScheduledItem> work_queue;
+		robin_hood::unordered_flat_set<Node*> scheduled;
+		std::vector<ScheduledItem> item_list;
+		void schedule_new(Node* node) {
+			assert(node);
+			if (node->scheduled_item) { // we have scheduling info for this
+				work_queue.push_front(*node->scheduled_item);
+			} else { // no info, just schedule it as-is
+				work_queue.push_front(ScheduledItem{ .execable = node });
+			}
+		}
+
+		// returns true if the item is ready
+		bool process(ScheduledItem& item) {
+			if (item.ready) {
+				return true;
+			} else {
+				item.ready = true;
+				work_queue.push_front(item); // requeue this item
+				return false;
+			}
+		}
+
+		void schedule_dependency(Ref parm, RW access) {
+			if (parm.node->kind == Node::CONSTANT || parm.node->kind == Node::PLACEHOLDER) {
+				return;
+			}
+			auto link = parm.link();
+
+			if (access == RW::eWrite) { // synchronize against writing
+				// we are going to write here, so schedule all reads or the def, if no read
+				if (link.reads.size() > 0) {
+					// all reads
+					for (auto& r : link.reads.to_span(pass_reads)) {
+						schedule_new(r.node);
+					}
+				} else {
+					// just the def
+					schedule_new(link.def.node);
+				}
+			} else { // just reading, so don't synchronize with reads -> just the def
+				schedule_new(link.def.node);
+			}
+		}
 
 		template<class T>
 		T& get_value(Ref parm) {

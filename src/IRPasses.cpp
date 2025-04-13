@@ -270,7 +270,7 @@ namespace vuk {
 		}
 	}
 
-//#define VUK_DUMP_SSA
+	// #define VUK_DUMP_SSA
 
 	struct NodeContext {
 		IRModule* module;
@@ -1367,6 +1367,95 @@ namespace vuk {
 		return { expected_value };
 	}
 
+	Result<void> Compiler::linearize() {
+		// these are the items that were determined to run
+		for (auto& i : impl->scheduled_execables) {
+			impl->work_queue.emplace_back(i);
+		}
+
+		while (!impl->work_queue.empty()) {
+			auto item = impl->work_queue.front();
+			impl->work_queue.pop_front();
+			auto& node = item.execable;
+			if (impl->scheduled.contains(node)) { // only going schedule things once
+				continue;
+			}
+
+			if (impl->work_queue.size() > (10 * impl->nodes.size())) {
+				return { expected_error, RenderGraphException{ "Too many iterations in linearization, something is wrong" } };
+			}
+
+			// we run nodes twice - first time we reenqueue at the front and then put all deps before it
+			// second time we see it, we know that all deps have run, so we can run the node itself
+			if (impl->process(item)) {
+				impl->scheduled.emplace(node);
+				impl->item_list.push_back(item);
+			} else {
+				switch (node->kind) {
+				case Node::MATH_BINARY: {
+					for (auto i = 0; i < node->fixed_node.arg_count; i++) {
+						impl->schedule_dependency(node->fixed_node.args[i], RW::eRead);
+					}
+				} break;
+				case Node::CONSTRUCT: {
+					for (auto& parm : node->construct.args.subspan(1)) {
+						impl->schedule_dependency(parm, RW::eRead);
+					}
+
+				} break;
+				case Node::CALL: {
+					auto fn_type = node->call.args[0].type();
+					size_t first_parm = fn_type->kind == Type::OPAQUE_FN_TY ? 1 : 4;
+					auto& args = fn_type->kind == Type::OPAQUE_FN_TY ? fn_type->opaque_fn.args : fn_type->shader_fn.args;
+
+					for (size_t i = first_parm; i < node->call.args.size(); i++) {
+						auto& arg_ty = args[i - first_parm];
+						auto& parm = node->call.args[i];
+
+						if (arg_ty->kind == Type::IMBUED_TY) {
+							auto access = arg_ty->imbued.access;
+							// Write and ReadWrite
+							RW sync_access = (is_write_access(access)) ? RW::eWrite : RW::eRead;
+							impl->schedule_dependency(parm, sync_access);
+						} else {
+							assert(0);
+						}
+					}
+				} break;
+				case Node::RELEASE: {
+					auto acqrel = node->rel_acq;
+					if (!acqrel || acqrel->status == Signal::Status::eDisarmed) {
+						for (size_t i = 0; i < node->release.src.size(); i++) {
+							impl->schedule_dependency(node->release.src[i], RW::eWrite);
+						}
+					}
+				} break;
+				case Node::ACQUIRE: {
+					// ACQUIRE does not have any deps
+				} break;
+				case Node::ACQUIRE_NEXT_IMAGE: {
+					impl->schedule_dependency(node->acquire_next_image.swapchain, RW::eWrite);
+				} break;
+				case Node::SLICE: {
+					impl->schedule_dependency(node->slice.src, RW::eWrite);
+					impl->schedule_dependency(node->slice.start, RW::eRead);
+					impl->schedule_dependency(node->slice.count, RW::eRead);
+				} break;
+				case Node::CONVERGE: {
+					for (size_t i = 0; i < node->converge.diverged.size(); i++) {
+						impl->schedule_dependency(node->converge.diverged[i], RW::eWrite);
+					}
+				} break;
+				case Node::USE: {
+					impl->schedule_dependency(node->use.src, RW::eWrite);
+				} break;
+				}
+			}
+		}
+
+		return { expected_value };
+	}
+
 	Result<void> Compiler::compile(std::span<std::shared_ptr<ExtNode>> nodes, const RenderGraphCompileOptions& compile_options) {
 		reset();
 		impl->callbacks = compile_options.callbacks;
@@ -1516,6 +1605,8 @@ namespace vuk {
 		GraphDumper::dump_graph(impl->nodes, false, false);
 		GraphDumper::end_cluster();
 		GraphDumper::end_graph();
+
+		VUK_DO_OR_RETURN(linearize());
 
 		return { expected_value };
 	}
