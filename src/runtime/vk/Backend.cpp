@@ -1839,6 +1839,16 @@ namespace vuk {
 
 				break;
 			}
+			case Node::LOGICAL_COPY: {
+				// half sync
+				auto& div = node->logical_copy.src;
+				recorder.add_sync(
+				    sched.base_type(div).get(), sched.get_dependency_info(div, div.type().get(), RW::eWrite, div.node->execution_info->stream), sched.get_value(div));
+
+				sched.done(node, div.node->execution_info->stream, sched.get_value(div));
+
+				break;
+			}
 			default:
 				assert(0);
 			}

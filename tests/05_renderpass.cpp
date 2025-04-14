@@ -106,7 +106,6 @@ TEST_CASE("buffer size with inference with math") {
 	CHECK(std::span((uint32_t*)res->mapped_ptr, 3) == std::span(data));
 }
 
-
 TEST_CASE("extract-convergence use") {
 	auto data = { 1u, 2u, 3u };
 	auto [b0, buf0] = create_buffer(*test_context.allocator, MemoryUsage::eGPUonly, DomainFlagBits::eAny, std::span(data));
@@ -126,6 +125,27 @@ TEST_CASE("extract-convergence use") {
 	auto [b4, buf4] = create_buffer(*test_context.allocator, MemoryUsage::eGPUonly, DomainFlagBits::eAny, std::span(data2));
 
 	auto res = download_buffer(copy(std::move(buf4), std::move(buf3))).get(*test_context.allocator, test_context.compiler);
+	CHECK(std::span((uint32_t*)res->mapped_ptr, 3) == std::span(data));
+}
+
+auto use_all = make_pass("use 3", [](CommandBuffer& cbuf, VUK_BA(Access::eTransferWrite), VUK_BA(Access::eTransferWrite), VUK_BA(Access::eTransferWrite)) {});
+
+TEST_CASE("extract-extract") {
+	auto data = { 1u, 2u, 3u };
+	auto [b0, buf0] = create_buffer(*test_context.allocator, MemoryUsage::eGPUonly, DomainFlagBits::eAny, std::span(data));
+	auto buf1 = declare_buf("b1");
+	buf1->memory_usage = MemoryUsage::eGPUonly;
+	auto sz = buf0.get_size();
+	buf1.set_size(sz);
+	auto buf2 = declare_buf("b2");
+	buf2->memory_usage = MemoryUsage::eGPUonly;
+	buf2.set_size(buf0.get_size());
+
+	auto data2 = { 1u, 2u, 3u };
+	auto [b4, buf4] = create_buffer(*test_context.allocator, MemoryUsage::eGPUonly, DomainFlagBits::eAny, std::span(data2));
+
+	use_all(buf0, buf1, buf2);
+	auto res = download_buffer(copy(std::move(buf4), std::move(buf2))).get(*test_context.allocator, test_context.compiler);
 	CHECK(std::span((uint32_t*)res->mapped_ptr, 3) == std::span(data));
 }
 

@@ -299,7 +299,7 @@ namespace vuk {
 		static constexpr uint8_t MAX_ARGS = 5;
 
 		enum class BinOp { ADD, SUB, MUL, DIV, MOD };
-		enum Kind { PLACEHOLDER, CONSTANT, CONSTRUCT, SLICE, CONVERGE, IMPORT, CALL, CLEAR, ACQUIRE, RELEASE, ACQUIRE_NEXT_IMAGE, USE, CAST, MATH_BINARY, GARBAGE } kind;
+		enum Kind { PLACEHOLDER, CONSTANT, CONSTRUCT, SLICE, CONVERGE, IMPORT, CALL, CLEAR, ACQUIRE, RELEASE, ACQUIRE_NEXT_IMAGE, USE, LOGICAL_COPY, CAST, MATH_BINARY, GARBAGE } kind;
 		uint8_t flag = 0;
 		std::span<std::shared_ptr<Type>> type;
 		NodeDebugInfo* debug_info = nullptr;
@@ -399,6 +399,9 @@ namespace vuk {
 				Ref src;
 				Access access;
 			} use;
+			struct : Fixed<1> {
+				Ref src;
+			} logical_copy;
 			struct {
 				uint8_t arg_count;
 			} generic_node;
@@ -444,6 +447,8 @@ namespace vuk {
 				return "acquire";
 			case USE:
 				return "use";
+			case LOGICAL_COPY:
+				return "lcopy";
 			}
 			assert(0);
 			return "";

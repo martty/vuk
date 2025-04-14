@@ -313,8 +313,8 @@ namespace vuk {
 				// 3. the cut introduced by slice S' is contained by S^ \ S (shrinking the remainder)
 				if (link->undef.node->kind == Node::SLICE) {
 					auto& slice_node = link->undef.node;
-					auto kind = nth(slice_node, 2).type()->kind;
-					bool forbid_elision = kind == Type::UNION_TY;
+					auto type_kind = nth(slice_node, 2).type()->kind;
+					bool forbid_elision = type_kind == Type::UNION_TY;
 					if (node->kind == Node::SLICE && !forbid_elision) {
 						auto scope_S = Cut{ slice_node->slice.axis, *eval<uint64_t>(slice_node->slice.start), *eval<uint64_t>(slice_node->slice.count) };
 						auto scope_Sp = Cut{ node->slice.axis, *eval<uint64_t>(node->slice.start), *eval<uint64_t>(node->slice.count) };
@@ -323,9 +323,19 @@ namespace vuk {
 #ifdef VUK_DUMP_SSA
 							fmt::println("shrinking or identity - eliding convergence");
 #endif
-							node->slice.start = current_module->make_constant<uint64_t>(scope_Sp.range.offset - scope_S.range.offset);
-							node->slice.count = current_module->make_constant<uint64_t>(scope_Sp.range.count);
-							return walk_writes(node, nth(slice_node, 0));
+							auto new_start = scope_Sp.range.offset - scope_S.range.offset;
+							if (new_start == 0 && scope_Sp.range.count == 1 && node->slice.axis == Node::NamedAxis::FIELD) {
+								auto src = node->slice.src;
+								node->kind = Node::LOGICAL_COPY;
+								node->logical_copy = {};
+								node->logical_copy.src = src;
+								node->type = std::span(node->type.data(), 1);
+								return walk_writes(node, nth(slice_node, 0));
+							} else {
+								node->slice.start = current_module->make_constant<uint64_t>(new_start);
+								node->slice.count = current_module->make_constant<uint64_t>(scope_Sp.range.count);
+								return walk_writes(node, nth(slice_node, 0));
+							}
 						} else if (!scope_Sp.intersects(scope_S)) { // case 3, we can elide the convergence
 #ifdef VUK_DUMP_SSA
 							fmt::println("remainder - eliding convergence");
@@ -583,7 +593,13 @@ namespace vuk {
 				break;
 
 			case Node::SLICE: {
+				add_read(node, node->slice.start, 1);
+				add_read(node, node->slice.count, 2);
 				add_write(node, node->slice.src, 0);
+				if (node->kind == Node::LOGICAL_COPY){ // if we rewrote this to a copy
+					add_result(node, 0, node->slice.src);
+					break;
+				}
 				nth(node, 0).link().def = nth(node, 0); // we introduce the slice image def
 				nth(node, 1).link().def = nth(node, 1); // we introduce the rest image def
 				add_breaking_result(node, 2);
@@ -616,6 +632,11 @@ namespace vuk {
 			case Node::USE:
 				add_result(node, 0, node->use.src);
 				add_write(node, node->use.src, 0);
+				break;
+
+			case Node::LOGICAL_COPY:
+				add_result(node, 0, node->logical_copy.src);
+				add_read(node, node->logical_copy.src, 0);
 				break;
 
 			default:
@@ -1455,6 +1476,12 @@ namespace vuk {
 				case Node::USE: {
 					impl->schedule_dependency(node->use.src, RW::eWrite);
 				} break;
+				case Node::LOGICAL_COPY: {
+					impl->schedule_dependency(node->logical_copy.src, RW::eRead);
+				} break;
+				default:
+					VUK_ICE(false);
+					break;
 				}
 			}
 		}
