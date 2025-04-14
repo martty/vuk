@@ -1395,13 +1395,13 @@ namespace vuk {
 
 		// these are the items that were determined to run
 		for (auto& i : impl->scheduled_execables) {
-			impl->work_queue.emplace_back(&i);
+			impl->work_queue.emplace_back(i.execable, false);
 		}
 
 		while (!impl->work_queue.empty()) {
 			auto item = impl->work_queue.front();
 			impl->work_queue.pop_front();
-			auto& node = item->execable;
+			auto& node = item.node;
 			if (impl->scheduled.contains(node)) { // only going schedule things once
 				continue;
 			}
@@ -1412,10 +1412,10 @@ namespace vuk {
 
 			// we run nodes twice - first time we reenqueue at the front and then put all deps before it
 			// second time we see it, we know that all deps have run, so we can run the node itself
-			if (impl->process(*item)) {
+			if (impl->process(item)) {
 				impl->scheduled.emplace(node);
-				item->naming_index = impl->naming_index_counter;
-				impl->item_list.push_back(item);
+				node->scheduled_item->naming_index = impl->naming_index_counter;
+				impl->item_list.push_back(node->scheduled_item);
 				impl->naming_index_counter += node->type.size();
 			} else {
 				switch (node->kind) {

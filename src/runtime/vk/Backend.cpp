@@ -1255,7 +1255,6 @@ namespace vuk {
 
 		for (auto& pitem : impl->item_list) {
 			auto& item = *pitem;
-			assert(item.ready);
 			auto node = item.execable;
 			sched.instr_counter++;
 #ifdef VUK_DUMP_EXEC

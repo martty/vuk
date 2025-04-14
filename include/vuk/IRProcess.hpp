@@ -52,7 +52,11 @@ namespace vuk {
 		std::unordered_map<ChainLink*, LiveRange> live_ranges;
 
 		plf::colony<ScheduledItem> scheduled_execables;
-		std::deque<ScheduledItem*> work_queue;
+		struct Sched {
+			Node* node;
+			bool ready;
+		};
+		std::deque<Sched> work_queue;
 		robin_hood::unordered_flat_set<Node*> scheduled;
 		std::vector<ScheduledItem*> item_list;
 
@@ -60,21 +64,21 @@ namespace vuk {
 		void schedule_new(Node* node) {
 			assert(node);
 			if (node->scheduled_item) { // we have scheduling info for this
-				work_queue.push_front(node->scheduled_item);
+				work_queue.emplace_front(node, false);
 			} else { // no info, just schedule it as-is
 				auto it = scheduled_execables.emplace(ScheduledItem{ .execable = node });
 				node->scheduled_item = &*it;
-				work_queue.push_front(node->scheduled_item);
+				work_queue.emplace_front(node, false);
 			}
 		}
 
 		// returns true if the item is ready
-		bool process(ScheduledItem& item) {
+		bool process(Sched& item) {
 			if (item.ready) {
 				return true;
 			} else {
 				item.ready = true;
-				work_queue.push_front(&item); // requeue this item
+				work_queue.push_front(item); // requeue this item
 				return false;
 			}
 		}

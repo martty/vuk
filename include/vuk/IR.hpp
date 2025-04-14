@@ -1841,8 +1841,6 @@ namespace vuk {
 		Node* execable;
 		DomainFlagBits scheduled_domain;
 		Stream* scheduled_stream;
-
-		bool ready = false;
 		size_t naming_index;
 	};
 
