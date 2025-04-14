@@ -914,8 +914,12 @@ namespace vuk {
 
 				auto [v, succ] = last_modify.try_emplace(key, &psru);
 				if (!succ) {
-					v->second->next = &psru;
-					psru.prev = v->second;
+					auto head = v->second;
+					while (head->next) {
+						head = head->next;
+					}
+					head->next = &psru;
+					psru.prev = head;
 				}
 				return;
 			}
