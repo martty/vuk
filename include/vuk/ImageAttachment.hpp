@@ -227,7 +227,7 @@ namespace vuk {
 			} else if (o.count == REMAINING) {
 				return offset >= o.offset;
 			}
-			return (offset >= o.offset && offset <= (o.offset + o.count)) || (o.offset >= offset && o.offset <= (offset + count));
+			return (offset >= o.offset && offset < (o.offset + o.count)) || (o.offset >= offset && o.offset < (offset + count));
 		}
 	};
 
