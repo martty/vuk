@@ -1395,7 +1395,7 @@ namespace vuk {
 
 		// these are the items that were determined to run
 		for (auto& i : impl->scheduled_execables) {
-			impl->work_queue.emplace_back(i.execable, false);
+			impl->work_queue.emplace_back(RGCImpl::Sched{ i.execable, false });
 		}
 
 		while (!impl->work_queue.empty()) {

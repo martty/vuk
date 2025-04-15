@@ -64,11 +64,11 @@ namespace vuk {
 		void schedule_new(Node* node) {
 			assert(node);
 			if (node->scheduled_item) { // we have scheduling info for this
-				work_queue.emplace_front(node, false);
+				work_queue.emplace_front(Sched{ node, false });
 			} else { // no info, just schedule it as-is
 				auto it = scheduled_execables.emplace(ScheduledItem{ .execable = node });
 				node->scheduled_item = &*it;
-				work_queue.emplace_front(node, false);
+				work_queue.emplace_front(Sched{ node, false });
 			}
 		}
 
