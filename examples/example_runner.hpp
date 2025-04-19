@@ -92,6 +92,8 @@ namespace vuk {
 			// Setup Dear ImGui runtime
 			IMGUI_CHECKVERSION();
 			ImGui::CreateContext();
+			auto &imgui_io = ImGui::GetIO();
+			imgui_io.ConfigFlags |= ImGuiConfigFlags_IsSRGB;
 			// Setup Dear ImGui style
 			ImGui::StyleColorsDark();
 

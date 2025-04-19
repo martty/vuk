@@ -7,6 +7,7 @@ layout(location = 2) in vec4 aColor;
 layout(push_constant) uniform uPushConstant {
     vec2 uScale;
     vec2 uTranslate;
+    int uIsSrgb;
 } pc;
 
 out gl_PerVertex {
