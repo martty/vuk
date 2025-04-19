@@ -18,9 +18,12 @@ namespace vuk {
 				// nothing to do
 			} else {
 				if (node->get_node()->kind != Node::RELEASE) {
-					value.release();
+					auto rel_node = std::make_shared<ExtNode>(
+					    Ref{ node->get_node(), value.get_head().index }, node, Access::eNone, DomainFlagBits::eDevice);
+					extnodes.push_back(rel_node);
+				} else {
+					extnodes.push_back(node);
 				}
-				extnodes.push_back(node);
 			}
 		}
 		if (extnodes.size() == 0) {
