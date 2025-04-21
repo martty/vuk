@@ -498,12 +498,6 @@ namespace vuk {
 		return node->links[index];
 	}
 
-	template<class T>
-	T& constant(Ref ref) {
-		assert(ref.type()->kind == Type::INTEGER_TY || ref.type()->kind == Type::MEMORY_TY);
-		return *reinterpret_cast<T*>(ref.node->constant.value);
-	}
-
 	struct CannotBeConstantEvaluated : Exception {
 		CannotBeConstantEvaluated(Ref ref) : ref(ref) {}
 
@@ -514,9 +508,6 @@ namespace vuk {
 		}
 	};
 
-	template<class T>
-	T eval(Ref ref);
-
 	struct RefOrValue {
 		Ref ref;
 		void* value;
@@ -526,322 +517,34 @@ namespace vuk {
 		static RefOrValue from_ref(Ref r) {
 			return { r, nullptr, true };
 		}
-		static RefOrValue from_value(void* v) {
-			return { {}, v, false };
+		static RefOrValue from_value(void* v, Ref r = {}) {
+			return { r, v, false };
 		}
-		static RefOrValue adopt_value(void* v) {
-			return { {}, v, false, true };
+		static RefOrValue adopt_value(void* v, Ref r = {}) {
+			return { r, v, false, true };
 		}
 	};
 
-	inline Result<RefOrValue, CannotBeConstantEvaluated> get_def(Ref ref) {
-		switch (ref.node->kind) {
-		case Node::CONSTRUCT:
-		case Node::CONSTANT:
-		case Node::ACQUIRE_NEXT_IMAGE:
-			return { expected_value, RefOrValue::from_ref(ref) };
-		case Node::ACQUIRE:
-			return { expected_value, RefOrValue::from_value(ref.node->acquire.values[ref.index]) };
-		case Node::CALL: {
-			auto t = ref.type();
-			if (t->kind != Type::ALIASED_TY) {
-				return { expected_error, CannotBeConstantEvaluated{ ref } };
-			}
-			return get_def(ref.node->call.args[t->aliased.ref_idx]);
-		}
-		case Node::SLICE: {
-			auto composite = get_def(ref.node->slice.src);
-			return composite;
-		}
-		default:
-			return { expected_error, CannotBeConstantEvaluated{ ref } };
-		}
-	}
-
-	template<class F, class... Args>
-	auto eval_with_type(const std::shared_ptr<Type>& t, F&& f, Args... args) {
-		switch (t->kind) {
-		case Type::INTEGER_TY: {
-			switch (t->integer.width) {
-			case 32:
-				return f(*reinterpret_cast<uint32_t*>(args)...);
-				break;
-			case 64:
-				return f(*reinterpret_cast<uint64_t*>(args)...);
-				break;
-			default:
-				assert(0);
-			}
-			break;
-		}
-		default:
-			break;
-		}
-	}
-
-	inline void* eval_binop(Node::BinOp op, const std::shared_ptr<Type>& t, void* a, void* b) {
-		auto result = (void*)new char[t->size];
-		switch (op) {
-		case Node::BinOp::ADD: {
-			eval_with_type(
-			    t,
-			    [&](auto a, auto b) {
-				    auto c = a + b;
-				    memcpy(result, &c, sizeof(c));
-			    },
-			    a,
-			    b);
-		} break;
-		case Node::BinOp::SUB: {
-			eval_with_type(
-			    t,
-			    [&](auto a, auto b) {
-				    auto c = a - b;
-				    memcpy(result, &c, sizeof(c));
-			    },
-			    a,
-			    b);
-		} break;
-		case Node::BinOp::MUL: {
-			eval_with_type(
-			    t,
-			    [&](auto a, auto b) {
-				    auto c = a * b;
-				    memcpy(result, &c, sizeof(c));
-			    },
-			    a,
-			    b);
-		} break;
-		case Node::BinOp::DIV: {
-			eval_with_type(
-			    t,
-			    [&](auto a, auto b) {
-				    auto c = a / b;
-				    memcpy(result, &c, sizeof(c));
-			    },
-			    a,
-			    b);
-		} break;
-		case Node::BinOp::MOD: {
-			eval_with_type(
-			    t,
-			    [&](auto a, auto b) {
-				    auto c = a % b;
-				    memcpy(result, &c, sizeof(c));
-			    },
-			    a,
-			    b);
-		} break;
-		}
-		return result;
-	}
-
-	
+	Result<RefOrValue, CannotBeConstantEvaluated> eval(Ref ref);
 
 	template<class T>
 	  requires(!std::is_pointer_v<T>)
 	Result<T, CannotBeConstantEvaluated> eval(Ref ref) {
-		switch (ref.node->kind) {
-		case Node::CONSTANT: {
-			return { expected_value, constant<T>(ref) };
+		auto res = eval(ref);
+		if (!res) {
+			return res;
 		}
-		case Node::MATH_BINARY: {
-			if constexpr (std::is_arithmetic_v<T>) {
-				auto& math_binary = ref.node->math_binary;
-				switch (math_binary.op) {
-#define UNWRAP_A(val)                                                                                                                                          \
-	auto a_ = eval<T>(val);                                                                                                                                      \
-	if (!a_) {                                                                                                                                                   \
-		return a_;                                                                                                                                                 \
-	}                                                                                                                                                            \
-	auto a = *a_;
-#define UNWRAP_B(val)                                                                                                                                          \
-	auto b_ = eval<T>(val);                                                                                                                                      \
-	if (!b_) {                                                                                                                                                   \
-		return b_;                                                                                                                                                 \
-	}                                                                                                                                                            \
-	auto b = *b_;
-				case Node::BinOp::ADD: {
-					UNWRAP_A(math_binary.a)
-					UNWRAP_B(math_binary.b)
-					return { expected_value, a + b };
-				}
-				case Node::BinOp::SUB: {
-					UNWRAP_A(math_binary.a)
-					UNWRAP_B(math_binary.b)
-					return { expected_value, a - b };
-				}
-				case Node::BinOp::MUL: {
-					UNWRAP_A(math_binary.a)
-					UNWRAP_B(math_binary.b)
-					return { expected_value, a * b };
-				}
-				case Node::BinOp::DIV: {
-					UNWRAP_A(math_binary.a)
-					UNWRAP_B(math_binary.b)
-					return { expected_value, a / b };
-				}
-				case Node::BinOp::MOD: {
-					UNWRAP_A(math_binary.a)
-					UNWRAP_B(math_binary.b)
-					return { expected_value, a % b };
-				}
-				}
-			}
-			assert(0);
-		}
-
-		case Node::SLICE: {
-			auto composite_ = get_def(ref);
-			if (!composite_) {
-				return composite_;
-			}
-			auto composite = *composite_;
-			auto index_ = eval<uint64_t>(ref.node->slice.start);
-			if (!index_) {
-				return index_;
-			}
-			auto index = *index_;
-			auto type = ref.node->slice.src.type();
-			if (composite.is_ref) {
-				if (composite.ref.node->kind == Node::CONSTRUCT) {
-					return eval<T>(composite.ref.node->construct.args[index + 1]);
-				} else if (composite.ref.node->kind == Node::ACQUIRE_NEXT_IMAGE) {
-					auto swp_ = get_def(composite.ref.node->acquire_next_image.swapchain);
-					if (!swp_) {
-						return swp_;
-					}
-					auto swp = *swp_;
-					if (swp.is_ref && swp.ref.node->kind == Node::CONSTRUCT) {
-						auto arr = swp.ref.node->construct.args[1]; // array of images
-						if (arr.node->kind == Node::CONSTRUCT) {
-							auto elem = arr.node->construct.args[1]; // first image
-							if (elem.node->kind == Node::CONSTRUCT) {
-								return eval<T>(elem.node->construct.args[index + 1]);
-							}
-						}
-					} else {
-						return { expected_error, CannotBeConstantEvaluated{ ref } };
-					}
-				} else if (composite.ref.node->kind == Node::SLICE) {
-					auto slice_def_ = get_def(composite.ref.node->slice.src);
-					if (!slice_def_) {
-						return slice_def_;
-					}
-					auto slice_def = *slice_def_;
-					if (!slice_def.is_ref || slice_def.ref.node->kind != Node::CONSTRUCT) {
-						return { expected_error, CannotBeConstantEvaluated{ ref } }; // TODO: this too limited
-					}
-					if (index < 6) {
-						return eval<T>(slice_def.ref.node->construct.args[index + 1]);
-					} else {
-						assert(false && "NYI");
-					}
-				} else {
-					return { expected_error, CannotBeConstantEvaluated{ ref } };
-				}
-			} else {
-				if (type->kind == Type::COMPOSITE_TY) {
-					auto offset = type->offsets[index];
-					return { expected_value, *static_cast<T*>(reinterpret_cast<void*>(static_cast<unsigned char*>(composite.value) + offset)) };
-				} else if (type->kind == Type::ARRAY_TY) {
-					auto offset = type->array.stride * index;
-					return { expected_value, *static_cast<T*>(reinterpret_cast<void*>(static_cast<unsigned char*>(composite.value) + offset)) };
-				} else {
-					return { expected_error, CannotBeConstantEvaluated{ ref } };
-				}
-			}
-		}
-		default:
+		if (res.holds_value() && !res->is_ref) {
+			return { expected_value, *static_cast<T*>(res->value) };
+		} else {
 			return { expected_error, CannotBeConstantEvaluated{ ref } };
 		}
 	}
 
 	template<class T>
-	  requires(std::is_pointer_v<T>)
-	Result<T, CannotBeConstantEvaluated> eval(Ref ref) {
-		switch (ref.node->kind) {
-		case Node::CONSTANT: {
-			return { expected_value, static_cast<T>(ref.node->constant.value) };
-		}
-		case Node::ACQUIRE:
-			return { expected_value, static_cast<T>(ref.node->acquire.values[ref.index]) };
-		case Node::CONSTRUCT: {
-			return eval<T>(ref.node->construct.args[0]);
-		}
-		case Node::ACQUIRE_NEXT_IMAGE: {
-			Swapchain* swp = **eval<Swapchain**>(ref.node->acquire_next_image.swapchain);
-			return { expected_value, reinterpret_cast<T>(&swp->images[0]) };
-		}
-		default:
-			return { expected_error, CannotBeConstantEvaluated{ ref } };
-		}
-	}
-
-	inline std::optional<Ref> get_def2(Ref ref) {
-		if (!ref.node->links) {
-			return {};
-		}
-		auto link = &ref.link();
-		while (link->prev) {
-			link = link->prev;
-		}
-		auto def = link->def;
-		if (!def) {
-			return {};
-		}
-		switch (def.node->kind) {
-		case Node::CONSTANT:
-		case Node::CONSTRUCT:
-		case Node::ACQUIRE:
-		case Node::ACQUIRE_NEXT_IMAGE:
-			return def;
-		case Node::SLICE: {
-			auto compdef_ = get_def2(def.node->slice.src);
-			if (!compdef_) {
-				return {};
-			}
-			auto compdef = *compdef_;
-			auto index = *eval<uint64_t>(def.node->slice.start);
-
-			switch (compdef.node->kind) {
-			case Node::CONSTRUCT:
-				return get_def2(compdef.node->construct.args[index + 1]);
-			case Node::ACQUIRE:
-			case Node::CONSTANT:
-				return compdef;
-			default:
-				VUK_UNREACHABLE("invalid node kind");
-			}
-		}
-		case Node::CALL:
-			if (def.type()->kind == Type::ALIASED_TY) {
-				return get_def2(def.node->call.args[def.type()->aliased.ref_idx]);
-			} else {
-				VUK_UNREACHABLE("invalid node kind");
-			}
-		default:
-			VUK_UNREACHABLE("invalid node kind");
-		}
-	}
-
-	inline std::optional<Ref> get_def2slice(Ref ref) {
-		if (!ref.node->links) {
-			return {};
-		}
-		auto link = &ref.link();
-		while (link->prev) {
-			link = link->prev;
-		}
-		auto def = link->def;
-		switch (def.node->kind) {
-		case Node::CONSTRUCT:
-		case Node::ACQUIRE_NEXT_IMAGE:
-		case Node::SLICE:
-			return def;
-		default:
-			VUK_UNREACHABLE("invalid node kind");
-		}
+	T& constant(Ref ref) {
+		assert(ref.type()->kind == Type::INTEGER_TY || ref.type()->kind == Type::MEMORY_TY);
+		return *reinterpret_cast<T*>(ref.node->constant.value);
 	}
 
 	template<class T, size_t size>

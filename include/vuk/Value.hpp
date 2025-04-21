@@ -57,12 +57,9 @@ namespace vuk {
 		}
 
 		T* operator->() noexcept {
-			auto def_or_v = *get_def(get_head());
-			if (!def_or_v.is_ref) {
-				return static_cast<T*>(def_or_v.value);
-			}
-			auto def = def_or_v.ref;
-			return *eval<T*>(def);
+			auto v = eval(get_head());
+			assert(v.holds_value());
+			return (T*)v->value;
 		}
 
 		/// @brief Wait and retrieve the result of the Value on the host

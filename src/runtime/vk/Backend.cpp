@@ -1205,19 +1205,6 @@ namespace vuk {
 		}
 	};
 
-#define EVAL(dst, arg)                                                                                                                                         \
-	auto UNIQUE_NAME(A) = eval2(arg);                                                                                                                            \
-	if (!UNIQUE_NAME(A)) {                                                                                                                                       \
-		return UNIQUE_NAME(A);                                                                                                                                     \
-	}                                                                                                                                                            \
-	if (UNIQUE_NAME(A)->is_ref) {                                                                                                                                \
-		return { expected_error, CannotBeConstantEvaluated{ arg } };                                                                                               \
-	}                                                                                                                                                            \
-	dst = *reinterpret_cast<decltype(dst)*>(UNIQUE_NAME(A)->value);                                                                                              \
-	if (UNIQUE_NAME(A)->owned) {                                                                                                                                 \
-		delete[] (char*)UNIQUE_NAME(A)->value;                                                                                                                     \
-	}
-
 	Result<void> Compiler::execute(Allocator& alloc) {
 		Runtime& ctx = alloc.get_context();
 
@@ -1461,8 +1448,10 @@ namespace vuk {
 
 						// here: figuring out which allocator to use to make image views for the RP and then making them
 						if (is_framebuffer_attachment(access)) {
-							auto urdef = get_def2(parm)->node;
-							auto allocator = urdef->kind == Node::CONSTRUCT && urdef->construct.allocator ? *urdef->construct.allocator : alloc;
+							auto def = eval(parm);
+							auto allocator = def.holds_value() && def->ref && def->ref.node->kind == Node::CONSTRUCT && def->ref.node->construct.allocator
+							                     ? *def->ref.node->construct.allocator
+							                     : alloc;
 							auto& img_att = sched.get_value<ImageAttachment>(parm);
 							if (img_att.view_type == ImageViewType::eInfer || img_att.view_type == ImageViewType::eCube) { // framebuffers need 2D or 2DArray views
 								if (img_att.layer_count > 1) {

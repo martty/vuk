@@ -112,15 +112,11 @@ namespace vuk {
 		};
 
 		void* get_value(Ref parm) {
-			if (parm.node->kind == Node::ACQUIRE_NEXT_IMAGE) {
-				Swapchain* swp = *reinterpret_cast<Swapchain**>(get_value(parm.node->acquire_next_image.swapchain));
-				return &swp->images[swp->image_index];
-			} else {
-				if (parm.node->kind == Node::ACQUIRE) {
-					return parm.node->acquire.values[parm.index];
-				} else {
-					return *eval<void*>(parm);
-				}
+			switch (parm.node->kind) {
+			case Node::CONSTANT:
+				return parm.node->constant.value;
+			case Node::ACQUIRE:
+				return parm.node->acquire.values[parm.index];
 			}
 			assert(0);
 			return nullptr;
@@ -130,14 +126,6 @@ namespace vuk {
 			assert(node->kind == Node::ACQUIRE);
 			return node->acquire.values;
 		}
-
-		void process_node_links(IRModule* module,
-		                        Node* node,
-		                        std::pmr::vector<Ref>& pass_reads,
-		                        std::pmr::vector<ChainLink*>& child_chains,
-		                        std::pmr::vector<Node*>& new_nodes,
-		                        std::pmr::polymorphic_allocator<std::byte> allocator,
-		                        bool do_ssa);
 
 		Result<void> build_nodes();
 		Result<void> build_links(std::vector<Node*>& working_set, std::pmr::polymorphic_allocator<std::byte> allocator);
@@ -322,10 +310,10 @@ namespace vuk {
 		}
 	};
 
-	inline Result<RefOrValue, CannotBeConstantEvaluated> eval2(Ref ref);
+	inline Result<RefOrValue, CannotBeConstantEvaluated> eval(Ref ref);
 
 	inline void set_if_available(void* dst, Ref& ref) {
-		auto res = eval2(ref);
+		auto res = eval(ref);
 		if (res.holds_value() && !res->is_ref) {
 			if (ref.type()->size == 8) {
 				uint64_t t;
@@ -410,12 +398,89 @@ namespace vuk {
 		}
 	}
 
-	
-	inline Result<RefOrValue, CannotBeConstantEvaluated> eval2(Ref ref) {
+	template<class F, class... Args>
+	auto eval_with_type(const std::shared_ptr<Type>& t, F&& f, Args... args) {
+		switch (t->kind) {
+		case Type::INTEGER_TY: {
+			switch (t->integer.width) {
+			case 32:
+				return f(*reinterpret_cast<uint32_t*>(args)...);
+				break;
+			case 64:
+				return f(*reinterpret_cast<uint64_t*>(args)...);
+				break;
+			default:
+				assert(0);
+			}
+			break;
+		}
+		default:
+			break;
+		}
+	}
+
+	inline void* eval_binop(Node::BinOp op, const std::shared_ptr<Type>& t, void* a, void* b) {
+		auto result = (void*)new char[t->size];
+		switch (op) {
+		case Node::BinOp::ADD: {
+			eval_with_type(
+			    t,
+			    [&](auto a, auto b) {
+				    auto c = a + b;
+				    memcpy(result, &c, sizeof(c));
+			    },
+			    a,
+			    b);
+		} break;
+		case Node::BinOp::SUB: {
+			eval_with_type(
+			    t,
+			    [&](auto a, auto b) {
+				    auto c = a - b;
+				    memcpy(result, &c, sizeof(c));
+			    },
+			    a,
+			    b);
+		} break;
+		case Node::BinOp::MUL: {
+			eval_with_type(
+			    t,
+			    [&](auto a, auto b) {
+				    auto c = a * b;
+				    memcpy(result, &c, sizeof(c));
+			    },
+			    a,
+			    b);
+		} break;
+		case Node::BinOp::DIV: {
+			eval_with_type(
+			    t,
+			    [&](auto a, auto b) {
+				    auto c = a / b;
+				    memcpy(result, &c, sizeof(c));
+			    },
+			    a,
+			    b);
+		} break;
+		case Node::BinOp::MOD: {
+			eval_with_type(
+			    t,
+			    [&](auto a, auto b) {
+				    auto c = a % b;
+				    memcpy(result, &c, sizeof(c));
+			    },
+			    a,
+			    b);
+		} break;
+		}
+		return result;
+	}
+
+	inline Result<RefOrValue, CannotBeConstantEvaluated> eval(Ref ref) {
 		// can always operate on defs, values are ~immutable
 		auto link = &ref.link();
-		if (link) {
-			while (link->prev) {
+		if (link && link->def) {
+			while (link->prev && link->prev->def) {
 				link = link->prev;
 			}
 			ref = link->def;
@@ -429,7 +494,7 @@ namespace vuk {
 			if (ref.type()->hash_value == current_module->types.builtin_buffer) {
 				auto& bound = constant<Buffer>(ref.node->construct.args[0]);
 				set_if_available(&bound.size, ref.node->construct.args[1]);
-				return { expected_value, RefOrValue::from_value(&bound) };
+				return { expected_value, RefOrValue::from_value(&bound, ref) };
 			} else if (ref.type()->hash_value == current_module->types.builtin_image) {
 				auto& attachment = constant<ImageAttachment>(ref.node->construct.args[0]);
 				set_if_available(&attachment.extent.width, ref.node->construct.args[1]);
@@ -441,13 +506,13 @@ namespace vuk {
 				set_if_available(&attachment.layer_count, ref.node->construct.args[7]);
 				set_if_available(&attachment.base_level, ref.node->construct.args[8]);
 				set_if_available(&attachment.level_count, ref.node->construct.args[9]);
-				return { expected_value, RefOrValue::from_value(&attachment) };
+				return { expected_value, RefOrValue::from_value(&attachment, ref) };
 			} else {
 				return { expected_value, RefOrValue::from_ref(ref) };
 			}
 		}
 		case Node::ACQUIRE_NEXT_IMAGE: {
-			auto swp_ = eval2(ref.node->acquire_next_image.swapchain);
+			auto swp_ = eval(ref.node->acquire_next_image.swapchain);
 			if (!swp_) {
 				return swp_;
 			}
@@ -456,7 +521,7 @@ namespace vuk {
 			auto arr = swp.ref.node->construct.args[1]; // array of images
 			assert(arr.node->kind == Node::CONSTRUCT);
 			auto elem = arr.node->construct.args[1]; // first image
-			return eval2(elem);
+			return eval(elem);
 		}
 		case Node::ACQUIRE:
 			return { expected_value, RefOrValue::from_value(ref.node->acquire.values[ref.index]) };
@@ -465,12 +530,12 @@ namespace vuk {
 			if (t->kind != Type::ALIASED_TY) {
 				return { expected_error, CannotBeConstantEvaluated{ ref } };
 			}
-			return eval2(ref.node->call.args[t->aliased.ref_idx]);
+			return eval(ref.node->call.args[t->aliased.ref_idx]);
 		}
 		case Node::MATH_BINARY: {
 			auto& math_binary = ref.node->math_binary;
 
-			auto a_ = eval2(math_binary.a);
+			auto a_ = eval(math_binary.a);
 			if (!a_) {
 				return a_;
 			}
@@ -480,7 +545,7 @@ namespace vuk {
 			}
 			auto a = a_rov.value;
 
-			auto b_ = eval2(math_binary.b);
+			auto b_ = eval(math_binary.b);
 			if (!b_) {
 				return b_;
 			}
@@ -494,14 +559,14 @@ namespace vuk {
 		} break;
 		case Node::SLICE: {
 			if (ref.index == 1) {
-				return eval2(ref.node->slice.src);
+				return eval(ref.node->slice.src);
 			}
-			auto composite_ = eval2(ref.node->slice.src);
+			auto composite_ = eval(ref.node->slice.src);
 			if (!composite_) {
 				return composite_;
 			}
 			auto composite = *composite_;
-			auto start_ = eval2(ref.node->slice.start);
+			auto start_ = eval(ref.node->slice.start);
 			if (!start_) {
 				return start_;
 			}
@@ -510,7 +575,7 @@ namespace vuk {
 				return { expected_error, CannotBeConstantEvaluated{ ref } };
 			}
 			auto index = *static_cast<uint64_t*>(start.value);
-			auto count_ = eval2(ref.node->slice.count);
+			auto count_ = eval(ref.node->slice.count);
 			if (!count_) {
 				return count_;
 			}
@@ -526,19 +591,17 @@ namespace vuk {
 			if (composite.is_ref) {
 				if (slice.axis == Node::NamedAxis::FIELD) {
 					if (composite.ref.node->kind == Node::CONSTRUCT) {
-						return eval2(composite.ref.node->construct.args[index + 1]);
+						return eval(composite.ref.node->construct.args[index + 1]);
 					} else {
 						return { expected_error, CannotBeConstantEvaluated{ ref } };
 					}
 				} else {
 					if (composite.ref.node->kind == Node::CONSTRUCT && type->kind == Type::ARRAY_TY) {
-						return eval2(composite.ref.node->construct.args[index + 1]);
-					} else {
-						printf("");
+						return eval(composite.ref.node->construct.args[index + 1]);
 					}
 				}
 			} else {
-				auto retv = RefOrValue::adopt_value(new char[ref.node->type[0]->size]);
+				auto retv = RefOrValue::adopt_value(new char[ref.node->type[0]->size], composite.ref);
 				evaluate_slice(ref.node->slice.src, slice.axis, index, countv, composite.value, retv.value);
 				return { expected_value, retv };
 			}

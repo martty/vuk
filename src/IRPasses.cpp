@@ -530,22 +530,25 @@ namespace vuk {
 						}
 						auto& base = *arg_ty->imbued.T;
 						if (do_ssa && base->hash_value == current_module->types.builtin_image) {
-							auto def = get_def2(parm);
-							if (def && def->node->kind == Node::CONSTRUCT) {
-								auto& ia = *reinterpret_cast<ImageAttachment*>(def->node->construct.args[0].node->constant.value);
-								if (!ia.image) {
-									access_to_usage(ia.usage, access);
+							auto def = eval(parm);
+							if (def.holds_value() && def->is_ref)
+								if (def->ref.node->kind == Node::CONSTRUCT) {
+									auto& ia = constant<ImageAttachment>(def->ref.node->construct.args[0]);
+									if (!ia.image) {
+										access_to_usage(ia.usage, access);
+									}
+								} else if ((def->ref.node->kind == Node::ACQUIRE_NEXT_IMAGE || def->ref.node->kind == Node::ACQUIRE ||
+								            def->ref.node->kind == Node::CONSTANT)) { // nop
+
+								} else {
+									assert(0); // def was not a construct or any other thing?
 								}
-							} else if (def && (def->node->kind == Node::ACQUIRE_NEXT_IMAGE || def->node->kind == Node::ACQUIRE || def->node->kind == Node::CONSTANT)) { // nop
-							} else if (!def) {
-							} else {
-								assert(0);
-							}
 						}
 					} else {
-						assert(0);
+						assert(0); // not handling non-imbued yet
 					}
 				}
+
 				size_t index = 0;
 				for (auto& ret_t : node->type) {
 					assert(ret_t->kind == Type::ALIASED_TY);
@@ -806,10 +809,12 @@ namespace vuk {
 						if (arg_ty->kind == Type::IMBUED_TY) {
 							auto access = arg_ty->imbued.access;
 							if (is_framebuffer_attachment(access)) {
-								auto& link = parm.link();
-								auto def = get_def2(parm);
-								if (def && def->node->kind == Node::CONSTRUCT) {
-									auto& args = def->node->construct.args;
+								auto def = eval(parm);
+								if (!def.holds_value() || !def->ref) {
+									continue;
+								}
+								if (def->ref.node->kind == Node::CONSTRUCT) {
+									auto& args = def->ref.node->construct.args;
 									if (is_placeholder(args[9])) {
 										placeholder_to_constant(args[9], 1U); // can only render to a single mip level
 									}
@@ -838,14 +843,6 @@ namespace vuk {
 										}
 									} else if (layer_count && is_placeholder(args[7])) {
 										placeholder_to_constant(args[7], *layer_count);
-									}
-								} else if (def && def->node->kind == Node::ACQUIRE_NEXT_IMAGE) {
-									auto e = eval<Swapchain**>(def->node->acquire_next_image.swapchain);
-									if (e.holds_value()) {
-										Swapchain& swp = ***e;
-										extent = Extent2D{ swp.images[0].extent.width, swp.images[0].extent.height };
-										layer_count = swp.images[0].layer_count;
-										samples = Samples::e1;
 									}
 								}
 							}
@@ -1592,7 +1589,7 @@ namespace vuk {
 				if (node->type[0]->kind == Type::ARRAY_TY || node->type[0]->kind == Type::UNION_TY) {
 					continue;
 				}
-				(void)eval2(first(node));
+				(void)eval(first(node));
 			} break;
 			default:
 				break;
@@ -1608,7 +1605,7 @@ namespace vuk {
 				if (node->type[0]->kind == Type::ARRAY_TY || node->type[0]->kind == Type::UNION_TY) {
 					continue;
 				}
-				(void)eval2(first(node));
+				(void)eval(first(node));
 			} break;
 			default:
 				break;
