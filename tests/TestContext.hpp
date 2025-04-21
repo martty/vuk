@@ -124,6 +124,7 @@ namespace vuk {
 			executors.push_back(std::make_unique<ThisThreadExecutor>());
 
 			runtime.emplace(RuntimeCreateParameters{ instance, device, physical_device, std::move(executors), fps });
+			runtime->shader_compiler_target_version = VK_API_VERSION_1_2;
 			needs_bringup = false;
 			needs_teardown = true;
 #ifdef WIN32

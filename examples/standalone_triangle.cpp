@@ -45,6 +45,7 @@ int main(int argc, char** argv) {
 
 	std::unique_ptr<Runtime> runtime = std::make_unique<Runtime>(
 	    RuntimeCreateParameters{ vkbinstance.instance, vkbdevice.device, vkbphysical_device.physical_device, std::move(executors), fps });
+	runtime->shader_compiler_target_version = VK_API_VERSION_1_2;
 	std::unique_ptr<DeviceSuperFrameResource> superframe_resource = std::make_unique<DeviceSuperFrameResource>(*runtime, 3);
 	Allocator superframe_allocator(*superframe_resource);
 

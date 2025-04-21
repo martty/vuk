@@ -83,17 +83,16 @@ namespace vuk {
 				fmt::format_to(std::back_inserter(msg), "<mem>");
 			}
 		} else if (parm.node->kind == Node::PLACEHOLDER) {
-			 fmt::format_to(std::back_inserter(msg), "?");
+			fmt::format_to(std::back_inserter(msg), "?");
 		} else if (parm.node->execution_info) {
 			fmt::format_to(
 			    std::back_inserter(msg), "%{}_{}", Node::kind_to_sv(parm.node->execution_info->kind), parm.node->execution_info->naming_index + parm.index);
 		} else {
-			fmt::format_to(
-			    std::back_inserter(msg), "%{}_{}", Node::kind_to_sv(parm.node->kind), parm.node->scheduled_item->naming_index + parm.index);
+			fmt::format_to(std::back_inserter(msg), "%{}_{}", Node::kind_to_sv(parm.node->kind), parm.node->scheduled_item->naming_index + parm.index);
 		}
 	};
 
-	 void print_args_to_string(std::span<Ref> args, std::string& msg) {
+	void print_args_to_string(std::span<Ref> args, std::string& msg) {
 		for (size_t i = 0; i < args.size(); i++) {
 			if (i > 0) {
 				fmt::format_to(std::back_inserter(msg), ", ");
@@ -198,19 +197,19 @@ namespace vuk {
 		switch (node->kind) {
 		case Node::CONSTRUCT: { // when encountering a CONSTRUCT, allocate the thing if needed
 			if (node->type[0]->hash_value == current_module->types.builtin_buffer) {
-				fmt::format_to(std::back_inserter(line),"construct<buffer> ");
+				fmt::format_to(std::back_inserter(line), "construct<buffer> ");
 			} else if (node->type[0]->hash_value == current_module->types.builtin_image) {
-				fmt::format_to(std::back_inserter(line),"construct<image> ");
+				fmt::format_to(std::back_inserter(line), "construct<image> ");
 			} else if (node->type[0]->hash_value == current_module->types.builtin_swapchain) {
-				fmt::format_to(std::back_inserter(line),"construct<swapchain> ");
+				fmt::format_to(std::back_inserter(line), "construct<swapchain> ");
 			} else if (node->type[0]->kind == Type::ARRAY_TY) {
 				auto array_size = node->type[0]->array.count;
 				auto elem_ty = *node->type[0]->array.T;
-				fmt::format_to(std::back_inserter(line),"construct<{}[{}]> ", elem_ty->debug_info.name, array_size);
+				fmt::format_to(std::back_inserter(line), "construct<{}[{}]> ", elem_ty->debug_info.name, array_size);
 			} else if (node->type[0]->hash_value == current_module->types.builtin_sampled_image) {
-				fmt::format_to(std::back_inserter(line),"construct<sampled_image> ");
+				fmt::format_to(std::back_inserter(line), "construct<sampled_image> ");
 			} else if (node->type[0]->kind == Type::UNION_TY) {
-				fmt::format_to(std::back_inserter(line),"construct<union> ");
+				fmt::format_to(std::back_inserter(line), "construct<union> ");
 			} else {
 				assert(0);
 			}
@@ -218,9 +217,9 @@ namespace vuk {
 		} break;
 		case Node::CALL: {
 			auto fn_type = node->call.args[0].type();
-			fmt::format_to(std::back_inserter(line),"call ${} ", domain_to_string(item.scheduled_domain));
+			fmt::format_to(std::back_inserter(line), "call ${} ", domain_to_string(item.scheduled_domain));
 			if (!fn_type->debug_info.name.empty()) {
-				fmt::format_to(std::back_inserter(line),"<{}> ", fn_type->debug_info.name);
+				fmt::format_to(std::back_inserter(line), "<{}> ", fn_type->debug_info.name);
 			}
 			print_args_to_string(node->call.args.subspan(1), line);
 		} break;
@@ -231,27 +230,27 @@ namespace vuk {
 			}
 			DomainFlagBits sched_domain = item.scheduled_domain;
 
-			fmt::format_to(std::back_inserter(line),"release ${} -> ${} ", domain_to_string(sched_domain), domain_to_string(dst_domain));
+			fmt::format_to(std::back_inserter(line), "release ${} -> ${} ", domain_to_string(sched_domain), domain_to_string(dst_domain));
 			print_args_to_string(node->release.src, line);
 		} break;
 		case Node::ACQUIRE: {
-			fmt::format_to(std::back_inserter(line),"acquire<");
+			fmt::format_to(std::back_inserter(line), "acquire<");
 			for (size_t i = 0; i < node->acquire.values.size(); i++) {
 				if (node->type[i]->hash_value == current_module->types.builtin_buffer) {
-					fmt::format_to(std::back_inserter(line),"buffer");
+					fmt::format_to(std::back_inserter(line), "buffer");
 				} else if (node->type[i]->hash_value == current_module->types.builtin_image) {
-					fmt::format_to(std::back_inserter(line),"image");
+					fmt::format_to(std::back_inserter(line), "image");
 				} else if (node->type[0]->kind == Type::ARRAY_TY) {
-					fmt::format_to(std::back_inserter(line),"{}[]", (*node->type[0]->array.T)->hash_value == current_module->types.builtin_buffer ? "buffer" : "image");
+					fmt::format_to(std::back_inserter(line), "{}[]", (*node->type[0]->array.T)->hash_value == current_module->types.builtin_buffer ? "buffer" : "image");
 				}
 				if (i + 1 < node->acquire.values.size()) {
-					fmt::format_to(std::back_inserter(line),", ");
+					fmt::format_to(std::back_inserter(line), ", ");
 				}
 			}
-			fmt::format_to(std::back_inserter(line),">");
+			fmt::format_to(std::back_inserter(line), ">");
 		} break;
 		case Node::ACQUIRE_NEXT_IMAGE: {
-			fmt::format_to(std::back_inserter(line),"acquire_next_image ");
+			fmt::format_to(std::back_inserter(line), "acquire_next_image ");
 			print_args_to_string(std::span{ &node->acquire_next_image.swapchain, 1 }, line);
 		} break;
 		case Node::SLICE: {
@@ -260,35 +259,34 @@ namespace vuk {
 			auto start = *eval<uint64_t>(node->slice.start);
 			auto count = *eval<uint64_t>(node->slice.count);
 
-
 			print_args_to_string(std::span{ &node->slice.src, 1 }, line);
 			if (start > 0 || count != Range::REMAINING) {
 				if (node->slice.axis != 0) {
 					if (count > 1) {
-						fmt::format_to(std::back_inserter(line),"[{}->{}:{}]", node->slice.axis, start, start + count - 1);
+						fmt::format_to(std::back_inserter(line), "[{}->{}:{}]", node->slice.axis, start, start + count - 1);
 					} else if (axis == Node::NamedAxis::FIELD) {
-						fmt::format_to(std::back_inserter(line),".{}", start);
+						fmt::format_to(std::back_inserter(line), ".{}", start);
 					} else {
-						fmt::format_to(std::back_inserter(line),"[{}->{}]", node->slice.axis, start);
+						fmt::format_to(std::back_inserter(line), "[{}->{}]", node->slice.axis, start);
 					}
 				} else {
 					if (count > 1) {
-						fmt::format_to(std::back_inserter(line),"[{}:{}]", start, start + count - 1);
+						fmt::format_to(std::back_inserter(line), "[{}:{}]", start, start + count - 1);
 					} else {
-						fmt::format_to(std::back_inserter(line),"[{}]", start);
+						fmt::format_to(std::back_inserter(line), "[{}]", start);
 					}
 				}
 			}
 		} break;
 		case Node::CONVERGE: {
 			print_args_to_string(node->converge.diverged.subspan(0, 1), line);
-			fmt::format_to(std::back_inserter(line),"{{");
+			fmt::format_to(std::back_inserter(line), "{{");
 			print_args_to_string(node->converge.diverged.subspan(1), line);
-			fmt::format_to(std::back_inserter(line),"}}");
+			fmt::format_to(std::back_inserter(line), "}}");
 		} break;
 		case Node::USE: {
 			print_args_to_string(std::span(&node->use.src, 1), line);
-			fmt::format_to(std::back_inserter(line),": {}", Type::to_sv(node->use.access));
+			fmt::format_to(std::back_inserter(line), ": {}", Type::to_sv(node->use.access));
 		}
 		}
 
