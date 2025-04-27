@@ -497,6 +497,18 @@ public:
 		return ExtRef(std::make_shared<ExtNode>(ref.node, std::move(deps)), ref);
 	}
 
+	[[nodiscard]] inline Value<PipelineBaseInfo*> compile_pipeline(Value<PipelineBaseCreateInfo> pbci, VUK_CALLSTACK) {
+		Ref ref = current_module->make_compile_pipeline(pbci.get_head());
+		current_module->set_source_location(ref.node, VUK_CALL);
+		return { make_ext_ref(ref) };
+	}
+
+	[[nodiscard]] inline Value<PipelineBaseInfo*> compile_pipeline(PipelineBaseCreateInfo pbci, VUK_CALLSTACK) {
+		Ref ref = current_module->make_compile_pipeline(current_module->make_constant(pbci));
+		current_module->set_source_location(ref.node, VUK_CALL);
+		return { make_ext_ref(ref) };
+	}
+
 	[[nodiscard]] inline Value<ImageAttachment> declare_ia(Name name, ImageAttachment ia = {}, VUK_CALLSTACK) {
 		Ref ref = current_module->make_declare_image(ia);
 		current_module->name_output(ref, name.c_str());

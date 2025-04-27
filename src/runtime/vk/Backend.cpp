@@ -1768,6 +1768,14 @@ namespace vuk {
 
 				break;
 			}
+			case Node::COMPILE_PIPELINE: {
+				auto& src = node->compile_pipeline.src;
+				auto& pbci = sched.get_value<PipelineBaseCreateInfo>(src);
+				auto pipeline = alloc.get_context().get_pipeline(pbci);
+
+				sched.done(node, host_stream, pipeline);
+				break;
+			}
 			default:
 				assert(0);
 			}

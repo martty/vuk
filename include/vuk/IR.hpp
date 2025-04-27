@@ -320,6 +320,7 @@ namespace vuk {
 			SET,
 			CAST,
 			MATH_BINARY,
+			COMPILE_PIPELINE,
 			GARBAGE
 		} kind;
 		uint8_t flag = 0;
@@ -429,6 +430,9 @@ namespace vuk {
 				Ref value;
 				size_t index;
 			} set;
+			struct : Fixed<1> {
+				Ref src;
+			} compile_pipeline;
 			struct {
 				uint8_t arg_count;
 			} generic_node;
@@ -1381,8 +1385,9 @@ namespace vuk {
 			return first(emplace_op(std::move(node)));
 		}
 
-		Node* copy_node(Node* node) {
-			return emplace_op(*node);
+		Ref make_compile_pipeline(Ref src) {
+			auto tys = new std::shared_ptr<Type>[1]{ types.memory(sizeof(PipelineBaseInfo*)) };
+			return first(emplace_op(Node{ .kind = Node::COMPILE_PIPELINE, .type = std::span{ tys, 1 }, .compile_pipeline = { .src = src } }));
 		}
 
 		// MATH

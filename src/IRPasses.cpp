@@ -650,6 +650,11 @@ namespace vuk {
 				add_read(node, node->logical_copy.src, 0);
 				break;
 
+			case Node::COMPILE_PIPELINE:
+				add_breaking_result(node, 0);
+				add_read(node, node->compile_pipeline.src, 0);
+				break;
+
 			default:
 				assert(0);
 			}
@@ -1534,6 +1539,9 @@ namespace vuk {
 				} break;
 				case Node::LOGICAL_COPY: {
 					impl->schedule_dependency(node->logical_copy.src, RW::eRead);
+				} break;
+				case Node::COMPILE_PIPELINE: {
+					impl->schedule_dependency(node->compile_pipeline.src, RW::eRead);
 				} break;
 				default:
 					VUK_ICE(false);
