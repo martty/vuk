@@ -30,7 +30,7 @@ namespace vuk {
 			compiler.reset();
 			return { expected_value }; // nothing to do
 		}
-		auto erg = compiler.compile(extnodes, options);
+		auto erg = compiler.compile(allocator, extnodes, options);
 		if (!erg) {
 			return erg;
 		}

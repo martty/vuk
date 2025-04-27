@@ -327,7 +327,7 @@ public:
 
 			// when this function is called, we weave in this call into the IR
 			return [untyped_cb = std::move(callback), name, scheduling_info, opaque_fn_ty, inner_scope = VUK_CALL](Value<typename T::type>... args,
-			                                                                                                                    VUK_CALLSTACK) mutable {
+			                                                                                                       VUK_CALLSTACK) mutable {
 				auto& first = First(args...);
 
 				bool reuse_node = first.node.use_count() == 1 && first.node->acqrel->status == Signal::Status::eDisarmed;
@@ -423,6 +423,19 @@ public:
 		static_assert(std::is_same_v<std::tuple_element_t<0, typename traits::types>, CommandBuffer&>, "First argument to pass MUST be CommandBuffer&");
 		return TupleMap<drop_t<1, typename traits::types>>::template make_lam<typename traits::result_type, F>(
 		    name, std::forward<F>(body), scheduling_info, VUK_CALL);
+	}
+
+	inline auto lift_compute(PipelineBaseCreateInfo pbci, VUK_CALLSTACK) {
+		return [pbci, inner_scope = VUK_CALL]<class... T>(size_t size_x, size_t size_y, size_t size_z, Value<T>... args) mutable { // no callstack for these :/
+			Node* node = current_module->make_call(current_module->make_constant(pbci),
+			                                       current_module->make_constant(size_x),
+			                                       current_module->make_constant(size_y),
+			                                       current_module->make_constant(size_z),
+			                                       args.get_head()...);
+			current_module->set_source_location(node, inner_scope);
+			auto extnode = std::make_shared<ExtNode>(node);
+			(args.node->deps.push_back(extnode), ...);
+		};
 	}
 
 	inline auto lift_compute(PipelineBaseInfo* compute_pipeline, VUK_CALLSTACK) {
@@ -625,6 +638,14 @@ public:
 		return std::move(in).transmute<ImageAttachment>(ref);
 	}
 
+	template<class T>
+	[[nodiscard]] inline Value<T> make_constant(Name name, T in, VUK_CALLSTACK) {
+		Ref ref = current_module->make_constant(in);
+		current_module->name_output(ref, name.c_str());
+		current_module->set_source_location(ref.node, VUK_CALL);
+		return { make_ext_ref(ref) };
+	}
+
 	[[nodiscard]] inline Value<void> enqueue_presentation(Value<ImageAttachment> in) {
 		return std::move(in).as_released<void>(Access::ePresent, DomainFlagBits::ePE);
 	}
@@ -638,7 +659,7 @@ public:
 		/// @brief Build the graph, assign framebuffers, render passes and subpasses
 		///	link automatically calls this, only needed if you want to use the reflection functions
 		/// @param compile_options CompileOptions controlling compilation behaviour
-		Result<void> compile(std::span<std::shared_ptr<ExtNode>> rgs, const RenderGraphCompileOptions& compile_options);
+		Result<void> compile(Allocator& allocator, std::span<std::shared_ptr<ExtNode>> rgs, const RenderGraphCompileOptions& compile_options);
 
 		// reflection functions
 
@@ -662,6 +683,7 @@ public:
 		void* get_value(Ref parm);
 
 		Result<void> execute(Allocator& allocator);
+
 	private:
 		struct RGCImpl* impl;
 

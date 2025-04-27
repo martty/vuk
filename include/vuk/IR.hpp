@@ -30,7 +30,7 @@ namespace vuk {
 	using UserCallbackType = fu2::unique_function<void(CommandBuffer&, std::span<void*>, std::span<void*>, std::span<void*>)>;
 
 	struct Type {
-		enum TypeKind { MEMORY_TY = 1, INTEGER_TY, COMPOSITE_TY, ARRAY_TY, UNION_TY, IMBUED_TY, ALIASED_TY, OPAQUE_FN_TY, SHADER_FN_TY } kind;
+		enum TypeKind { VOID_TY = 0, MEMORY_TY = 1, INTEGER_TY, COMPOSITE_TY, ARRAY_TY, UNION_TY, IMBUED_TY, ALIASED_TY, OPAQUE_FN_TY, SHADER_FN_TY } kind;
 		size_t size = ~0ULL;
 
 		TypeDebugInfo debug_info;
@@ -105,6 +105,8 @@ namespace vuk {
 		static Hash hash(Type const* t) {
 			Hash v = (Hash)t->kind;
 			switch (t->kind) {
+			case VOID_TY:
+				return v;
 			case IMBUED_TY:
 				hash_combine_direct(v, Type::hash(t->imbued.T->get()));
 				hash_combine_direct(v, (uint32_t)t->imbued.access);
@@ -229,6 +231,8 @@ namespace vuk {
 
 		static std::string to_string(Type* t) {
 			switch (t->kind) {
+			case VOID_TY:
+				return "void";
 			case IMBUED_TY:
 				return to_string(t->imbued.T->get()) + std::string(":") + std::string(to_sv(t->imbued.access));
 			case ALIASED_TY:
@@ -694,6 +698,11 @@ namespace vuk {
 			size_t union_tag_type_counter = 0;
 
 			// TYPES
+			std::shared_ptr<Type> make_void_ty() {
+				auto t = new Type{ .kind = Type::VOID_TY };
+				return emplace_type(std::shared_ptr<Type>(t));
+			}
+
 			std::shared_ptr<Type> make_imbued_ty(std::shared_ptr<Type> ty, Access access) {
 				auto t = new Type{ .kind = Type::IMBUED_TY, .size = ty->size, .imbued = { .access = access } };
 				t->imbued.T = &t->child_types.emplace_back(ty);
@@ -1337,6 +1346,9 @@ namespace vuk {
 			} else if (fn.type()->kind == Type::SHADER_FN_TY) {
 				n.type = { new std::shared_ptr<Type>[fn.type()->shader_fn.return_types.size()], fn.type()->shader_fn.return_types.size() };
 				std::copy(fn.type()->shader_fn.return_types.begin(), fn.type()->shader_fn.return_types.end(), n.type.data());
+			} else if (fn.type()->kind == Type::MEMORY_TY) { // TODO: typing
+				n.type = { new std::shared_ptr<Type>[sizeof...(args)], sizeof...(args) };
+				std::fill(n.type.begin(), n.type.end(), types.make_void_ty());
 			} else {
 				assert(0);
 			}

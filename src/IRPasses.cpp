@@ -1275,12 +1275,59 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	Result<void> RGCImpl::implicit_linking(IRModule* module, std::pmr::polymorphic_allocator<std::byte> allocator) {
+	Result<void> RGCImpl::implicit_linking(Allocator& alloc, IRModule * module, std::pmr::polymorphic_allocator<std::byte> allocator) {
 		std::pmr::vector<Node*> nodes(allocator);
 
 		for (auto& node : module->op_arena) {
 			if (node.kind == Node::SET) {
 				set_nodes.push_back(&node);
+			} else if (node.kind == Node::CALL && node.call.args[0].type()->kind == Type::MEMORY_TY) { // we need to compile this PBCI
+				auto& pbci = constant<PipelineBaseCreateInfo>(node.call.args[0]);
+				auto pipeline = alloc.get_context().get_pipeline(pbci);
+				auto& flat_bindings = pipeline->reflection_info.flat_bindings;
+
+				std::vector<std::shared_ptr<Type>> arg_types;
+				std::vector<std::shared_ptr<Type>> ret_types;
+				std::shared_ptr<Type> base_ty;
+				size_t i = 0;
+				for (auto& [set_index, b] : flat_bindings) {
+					Access acc = Access::eNone;
+					switch (b->type) {
+					case DescriptorType::eSampledImage:
+						acc = Access::eComputeSampled;
+						base_ty = current_module->types.get_builtin_image();
+						break;
+					case DescriptorType::eCombinedImageSampler:
+						acc = Access::eComputeSampled;
+						base_ty = current_module->types.get_builtin_sampled_image();
+						break;
+					case DescriptorType::eStorageImage:
+						acc = b->non_writable ? Access::eComputeRead : (b->non_readable ? Access::eComputeWrite : Access::eComputeRW);
+						base_ty = current_module->types.get_builtin_image();
+						break;
+					case DescriptorType::eUniformBuffer:
+					case DescriptorType::eStorageBuffer:
+						acc = b->non_writable ? Access::eComputeRead : (b->non_readable ? Access::eComputeWrite : Access::eComputeRW);
+						base_ty = current_module->types.get_builtin_buffer();
+						break;
+					case DescriptorType::eSampler:
+						acc = Access::eNone;
+						base_ty = current_module->types.get_builtin_sampler();
+						break;
+					default:
+						assert(0);
+					}
+
+					arg_types.push_back(current_module->types.make_imbued_ty(base_ty, acc));
+					ret_types.emplace_back(current_module->types.make_aliased_ty(base_ty, i + 4));
+					i++;
+				}
+				auto shader_fn_ty = current_module->types.make_shader_fn_ty(arg_types, ret_types, vuk::DomainFlagBits::eAny, pipeline, pipeline->pipeline_name.c_str());
+				node.call.args[0] = current_module->make_declare_fn(shader_fn_ty);
+				delete[] node.type.data();
+				node.type = { new std::shared_ptr<Type>[ret_types.size()], ret_types.size() };
+				std::copy(ret_types.begin(), ret_types.end(), node.type.data());
+				nodes.push_back(&node);
 			} else {
 				nodes.push_back(&node);
 			}
@@ -1498,7 +1545,7 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	Result<void> Compiler::compile(std::span<std::shared_ptr<ExtNode>> nodes, const RenderGraphCompileOptions& compile_options) {
+	Result<void> Compiler::compile(Allocator& alloc, std::span<std::shared_ptr<ExtNode>> nodes, const RenderGraphCompileOptions& compile_options) {
 		reset();
 		impl->callbacks = compile_options.callbacks;
 		GraphDumper::begin_graph(compile_options.dump_graph, compile_options.graph_label);
@@ -1536,7 +1583,7 @@ namespace vuk {
 			GraphDumper::begin_cluster(std::string("fragments_") + std::to_string(m->module_id));
 			GraphDumper::dump_graph_op(m->op_arena, false, false);
 			GraphDumper::end_cluster();
-			VUK_DO_OR_RETURN(impl->implicit_linking(m, allocator));
+			VUK_DO_OR_RETURN(impl->implicit_linking(alloc, m, allocator));
 			for (auto& op : m->op_arena) {
 				op.links = nullptr;
 			}

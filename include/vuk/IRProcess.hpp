@@ -136,7 +136,7 @@ namespace vuk {
 		                         std::pmr::vector<Ref>& pass_reads,
 		                         std::pmr::vector<ChainLink*>& child_chains,
 		                         std::pmr::polymorphic_allocator<std::byte> allocator);
-		Result<void> implicit_linking(IRModule* module, std::pmr::polymorphic_allocator<std::byte> allocator);
+		Result<void> implicit_linking(Allocator& alloc, IRModule* module, std::pmr::polymorphic_allocator<std::byte> allocator);
 		Result<void> build_sync();
 		Result<void> reify_inference();
 		Result<void> collect_chains();
