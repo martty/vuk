@@ -20,15 +20,12 @@ namespace vuk::extra {
 	/// @brief Generate all mips of an image using the Single Pass Downsampler
 	/// @param image input Future of ImageAttachment
 	/// @param type downsampling operator
-	inline Value<ImageAttachment> generate_mips_spd(Runtime& runtime, Value<ImageAttachment> image, ReductionType type = ReductionType::Avg) {
-		static auto pipeline = [&]() {
-			PipelineBaseCreateInfo spd_pci;
-			auto res = spd_cs_hlsl_spv();
-			spd_pci.add_static_spirv((uint32_t*)res.data, res.size / 4, "spd.cs.hlsl");
-			return runtime.get_pipeline(spd_pci);
-		}();
+	inline Value<ImageAttachment> generate_mips_spd(Value<ImageAttachment> image, ReductionType type = ReductionType::Avg) {
+		PipelineBaseCreateInfo spd_pci;
+		auto res = spd_cs_hlsl_spv();
+		spd_pci.add_static_spirv((uint32_t*)res.data, res.size / 4, "spd.cs.hlsl");
 
-		auto pass = vuk::make_pass("SPD", [type](CommandBuffer& command_buffer, VUK_IA(eComputeRW | eComputeSampled) src) {
+		auto pass = vuk::make_pass("SPD", [type](CommandBuffer& command_buffer, VUK_IA(eComputeRW | eComputeSampled) src, VUK_ARG(PipelineBaseInfo*, eNone) pipeline) {
 			// Collect details about the image
 			auto extent = src->extent;
 			auto mips = src->level_count;
@@ -109,6 +106,6 @@ namespace vuk::extra {
 
 			return src;
 		});
-		return pass(std::move(image));
+		return pass(std::move(image), compile_pipeline(std::move(spd_pci)));
 	}
 } // namespace vuk::extra
