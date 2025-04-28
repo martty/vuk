@@ -478,12 +478,14 @@ namespace vuk {
 
 	inline Result<RefOrValue, CannotBeConstantEvaluated> eval(Ref ref) {
 		// can always operate on defs, values are ~immutable
-		auto link = &ref.link();
-		if (link && link->def) {
-			while (link->prev && link->prev->def) {
-				link = link->prev;
+		if (ref.node->links) {
+			auto link = &ref.link();
+			if (link->def) {
+				while (link->prev && link->prev->def) {
+					link = link->prev;
+				}
+				ref = link->def;
 			}
-			ref = link->def;
 		}
 
 		switch (ref.node->kind) {
