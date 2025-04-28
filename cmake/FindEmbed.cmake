@@ -88,7 +88,7 @@ struct Res ${Name}(void) {
 
 		add_custom_command(
 			OUTPUT ${OutputC}
-			COMMAND ${CMAKE_COMMAND} -E touch ${OutputC}
+			COMMAND ${CMAKE_COMMAND} -E touch ${OutputC}.timestamp
 			DEPENDS ${Input}
 		)
 	endif()
