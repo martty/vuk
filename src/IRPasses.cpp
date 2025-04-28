@@ -531,7 +531,7 @@ namespace vuk {
 						auto& base = *arg_ty->imbued.T;
 						if (do_ssa && base->hash_value == current_module->types.builtin_image) {
 							auto def = eval(parm);
-							if (def.holds_value() && def->is_ref)
+							if (def.holds_value() && def->is_ref) {
 								if (def->ref.node->kind == Node::CONSTRUCT) {
 									auto& ia = constant<ImageAttachment>(def->ref.node->construct.args[0]);
 									if (!ia.image) {
@@ -543,6 +543,7 @@ namespace vuk {
 								} else {
 									assert(0); // def was not a construct or any other thing?
 								}
+							}
 						}
 					} else {
 						assert(0); // not handling non-imbued yet

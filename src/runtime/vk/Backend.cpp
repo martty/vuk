@@ -195,6 +195,16 @@ namespace vuk {
 
 		auto node = item.execable;
 		switch (node->kind) {
+		case Node::GARBAGE:
+		case Node::PLACEHOLDER:
+		case Node::CONSTANT:
+		case Node::IMPORT:
+		case Node::CLEAR:
+		case Node::SET:
+		case Node::CAST:
+		case Node::MATH_BINARY: {
+			assert(0);
+		}
 		case Node::CONSTRUCT: { // when encountering a CONSTRUCT, allocate the thing if needed
 			if (node->type[0]->hash_value == current_module->types.builtin_buffer) {
 				fmt::format_to(std::back_inserter(line), "construct<buffer> ");
@@ -287,7 +297,13 @@ namespace vuk {
 		case Node::USE: {
 			print_args_to_string(std::span(&node->use.src, 1), line);
 			fmt::format_to(std::back_inserter(line), ": {}", Type::to_sv(node->use.access));
-		}
+		} break;
+		case Node::LOGICAL_COPY: {
+			print_args_to_string(std::span(&node->logical_copy.src, 1), line);
+		} break;
+		case Node::COMPILE_PIPELINE: {
+			print_args_to_string(std::span(&node->compile_pipeline.src, 1), line);
+		} break;
 		}
 
 		return line;

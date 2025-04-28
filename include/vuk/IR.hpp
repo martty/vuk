@@ -482,6 +482,8 @@ namespace vuk {
 				return "set";
 			case LOGICAL_COPY:
 				return "lcopy";
+			case COMPILE_PIPELINE:
+				return "compile_pipeline";
 			}
 			assert(0);
 			return "";

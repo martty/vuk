@@ -117,9 +117,10 @@ namespace vuk {
 				return parm.node->constant.value;
 			case Node::ACQUIRE:
 				return parm.node->acquire.values[parm.index];
+			default:
+				assert(0);
+				return nullptr;
 			}
-			assert(0);
-			return nullptr;
 		}
 
 		std::span<void*> get_values(Node* node) {
@@ -330,13 +331,13 @@ namespace vuk {
 			} else if (ref.type()->size == 2) {
 				uint16_t t;
 				memcpy(&t, res->value, 2);
-				if (t == ~(0u)) {
+				if (t == USHRT_MAX) {
 					return;
 				}
 			} else if (ref.type()->size == 1) {
 				uint8_t t;
 				memcpy(&t, res->value, 1);
-				if (t == ~(0u)) {
+				if (t == UCHAR_MAX) {
 					return;
 				}
 			} else {
