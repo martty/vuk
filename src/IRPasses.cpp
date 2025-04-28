@@ -398,7 +398,7 @@ namespace vuk {
 				// external node -> init
 				allocate_node_links(parm.node, allocator);
 				for (size_t i = 0; i < parm.node->type.size(); i++) {
-					Ref{ parm.node, 0 }.link().def = { parm.node, i };
+					Ref{ parm.node, i }.link().def = { parm.node, i };
 				}
 			}
 			auto link = &parm.link();
@@ -459,7 +459,7 @@ namespace vuk {
 				// external node -> init
 				allocate_node_links(st_parm.node, allocator);
 				for (size_t i = 0; i < st_parm.node->type.size(); i++) {
-					Ref{ st_parm.node, 0 }.link().def = { st_parm.node, i };
+					Ref{ st_parm.node, i }.link().def = { st_parm.node, i };
 				}
 			}
 			auto link = &st_parm.link();
