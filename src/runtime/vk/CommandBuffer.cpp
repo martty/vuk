@@ -708,19 +708,20 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::dispatch_indirect(std::span<DispatchIndirectCommand> commands) {
+	CommandBuffer& CommandBuffer::dispatch_indirect(std::span<DispatchIndirectCommand> cmds) {
 		VUK_EARLY_RET();
 		if (!_bind_compute_pipeline_state()) {
 			return *this;
 		}
-		auto res = allocate_buffer(*allocator, { MemoryUsage::eCPUtoGPU, commands.size_bytes(), 1 });
+		auto res = allocate_memory(*allocator, { MemoryUsage::eCPUtoGPU, cmds.size_bytes(), 1 });
 		if (!res) {
 			current_error = std::move(res);
 			return *this;
 		}
 		auto& buf = *res;
-		memcpy(buf->mapped_ptr, commands.data(), commands.size_bytes());
-		ctx.vkCmdDispatchIndirect(command_buffer, buf->buffer, buf->offset);
+		memcpy(&*buf, cmds.data(), cmds.size_bytes());
+		auto bo = allocator->get_context().ptr_to_buffer_offset(buf.get());
+		ctx.vkCmdDispatchIndirect(command_buffer, bo.buffer, bo.offset);
 		return *this;
 	}
 

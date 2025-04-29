@@ -224,7 +224,7 @@ namespace vuk {
 	}
 
 	template<class T>
-	inline void fill(Value<Buffer> dst, T value, VUK_CALLSTACK) {
+	inline void fill(Value<Buffer<T>> dst, T value, VUK_CALLSTACK) {
 		uint32_t value_as_uint;
 		static_assert(sizeof(T) == sizeof(uint32_t), "T must be 4 bytes");
 		memcpy(&value_as_uint, &value, sizeof(T));
@@ -234,6 +234,7 @@ namespace vuk {
 		buf2buf(dst, VUK_CALL);
 	}
 
+	template<class T>
 	inline Value<ImageAttachment> copy(Value<Buffer<T>> src, Value<ImageAttachment> dst, VUK_CALLSTACK) {
 		auto buf2img =
 		    make_pass("copy buffer to image", [](CommandBuffer& cbuf, VUK_ARG(Buffer<T>, Access::eCopyRead) src, VUK_IA(Access::eCopyWrite) dst) {
