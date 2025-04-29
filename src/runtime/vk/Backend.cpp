@@ -1354,25 +1354,9 @@ namespace vuk {
 					}
 				}
 				if (node->type[0]->kind == Type::POINTER_TY) {
-						auto& ptr = constant<ptr_base>(node->construct.args[0]);
-						sched.done(node, host_stream, ptr);
-						recorder.init_sync(node->type[0].get(), { to_use(eNone), host_stream }, sched.get_value(first(node)));
-				} else if (node->type[0]->hash_value == current_module->types.builtin_buffer) {
-					auto& bound = constant<Buffer>(node->construct.args[0]);
-
-					if (bound.buffer == VK_NULL_HANDLE) {
-						assert(bound.size != ~(0ULL));
-						assert(bound.memory_usage != (MemoryUsage)0);
-						BufferCreateInfo bci{ .mem_usage = bound.memory_usage, .size = bound.size, .alignment = 1 }; // TODO: alignment?
-						auto allocator = node->construct.allocator ? *node->construct.allocator : alloc;
-						auto buf = allocate_buffer(allocator, bci);
-						if (!buf) {
-							return buf;
-						}
-						bound = **buf;
-					}
-					recorder.init_sync(node->type[0].get(), { to_use(eNone), host_stream }, &bound);
-					sched.done(node, host_stream, bound);
+					auto& ptr = constant<ptr_base>(node->construct.args[0]);
+					sched.done(node, host_stream, ptr);
+					recorder.init_sync(node->type[0].get(), { to_use(eNone), host_stream }, sched.get_value(first(node)));
 				} else if (node->type[0]->hash_value == current_module->types.builtin_image) {
 					auto& attachment = constant<ImageAttachment>(node->construct.args[0]);
 					// set iv type
@@ -1474,7 +1458,7 @@ namespace vuk {
 					node->construct.args[0].node->constant.value = arr_mem;
 					sched.done(node, host_stream, (void*)arr_mem);
 				} else {
-				 else {
+					else {
 						for (size_t i = 1; i < node->construct.args.size(); i++) {
 							auto arg_ty = node->construct.args[i].type();
 							auto& parm = node->construct.args[i];
@@ -1529,15 +1513,19 @@ namespace vuk {
 						fmt::print("\n");
 #endif
 						sched.done(node, host_stream, result);
-						recorder.init_sync(node->type[0].get(), { to_use(eNone), host_stream }, sched.get_value(first(node)), false); // TODO: can we figure out when it is safe known aliasing?
-					} else {
-						for (auto& parm : node->construct.args) {
-						sched.schedule_dependency(parm, RW::eRead);
+						recorder.init_sync(node->type[0].get(),
+						                   { to_use(eNone), host_stream },
+						                   sched.get_value(first(node)),
+						                   false); // TODO: can we figure out when it is safe known aliasing?
 					}
-				}
+					else {
+						for (auto& parm : node->construct.args) {
+							sched.schedule_dependency(parm, RW::eRead);
+						}
+					}
 
-				break;
-			}
+					break;
+				}
 
 			// we can allocate ptrs and generic views
 			// TODO: image ptrs and generic views
@@ -1729,21 +1717,21 @@ namespace vuk {
 					}
 					size_t pc_offset = 0;
 					if (pbi->reflection_info.push_constant_ranges.size() > 0) {
-							auto& pcr = pbi->reflection_info.push_constant_ranges[0];
-							auto base_ty = current_module->types.make_pointer_ty(current_module->types.u32());
-							for (auto j = 0; j < pcr.num_members; j++) {
-								auto& parm = node->call.args[parm_idx];
-								auto val = sched.get_value(parm);
-								auto ptr = *reinterpret_cast<ptr_base*>(val);
-								// TODO: check which args are pointers and dereference on host the once that are not
-								cobuf.push_constants(ShaderStageFlagBits::eCompute, pc_offset, ptr);
-								auto binding_idx = parm_idx - first_parm;
-								opaque_rets[binding_idx] = val;
-								parm_idx++;
-								pc_offset += sizeof(uint64_t);
-							}
+						auto& pcr = pbi->reflection_info.push_constant_ranges[0];
+						auto base_ty = current_module->types.make_pointer_ty(current_module->types.u32());
+						for (auto j = 0; j < pcr.num_members; j++) {
+							auto& parm = node->call.args[parm_idx];
+							auto val = sched.get_value(parm);
+							auto ptr = *reinterpret_cast<ptr_base*>(val);
+							// TODO: check which args are pointers and dereference on host the once that are not
+							cobuf.push_constants(ShaderStageFlagBits::eCompute, pc_offset, ptr);
+							auto binding_idx = parm_idx - first_parm;
+							opaque_rets[binding_idx] = val;
+							parm_idx++;
+							pc_offset += sizeof(uint64_t);
+						}
 					}
-					
+
 					cobuf.dispatch(constant<uint32_t>(node->call.args[1]), constant<uint32_t>(node->call.args[2]), constant<uint32_t>(node->call.args[3]));
 
 					if (vk_rec->rp.handle) {
@@ -1956,91 +1944,91 @@ namespace vuk {
 			default:
 				assert(0);
 			}
-		}
-
-		// post-run: checks and cleanup
-		std::vector<std::shared_ptr<IRModule>> modules;
-		for (auto& depnode : impl->depnodes) {
-			modules.push_back(depnode->source_module);
-		}
-		std::sort(modules.begin(), modules.end());
-		modules.erase(std::unique(modules.begin(), modules.end()), modules.end());
-
-		impl->depnodes.clear();
-
-		// populate values and last_use
-		for (auto& [def_link, lr] : impl->live_ranges) {
-			assert(def_link);
-			assert(lr.undef_link);
-			if (def_link->def.node->kind == Node::CONSTANT) {
-				continue;
 			}
 
-			// get final value
-			Ref final_use = lr.undef_link->def;
-			assert(!final_use.node->rel_acq || final_use.node->rel_acq->status != Signal::Status::eDisarmed);
-			lr.last_value = sched.get_value(final_use);
-			lr.last_use = recorder.last_use(Type::stripped(final_use.type()).get(), lr.last_value);
+			// post-run: checks and cleanup
+			std::vector<std::shared_ptr<IRModule>> modules;
+			for (auto& depnode : impl->depnodes) {
+				modules.push_back(depnode->source_module);
+			}
+			std::sort(modules.begin(), modules.end());
+			modules.erase(std::unique(modules.begin(), modules.end()), modules.end());
 
-			// get final signal
-			AcquireRelease* last_signal = nullptr;
-			for (auto link = lr.undef_link; link; link = link->prev) {
-				if (link->def.node->rel_acq) {
-					last_signal = link->def.node->rel_acq;
-					break;
+			impl->depnodes.clear();
+
+			// populate values and last_use
+			for (auto& [def_link, lr] : impl->live_ranges) {
+				assert(def_link);
+				assert(lr.undef_link);
+				if (def_link->def.node->kind == Node::CONSTANT) {
+					continue;
+				}
+
+				// get final value
+				Ref final_use = lr.undef_link->def;
+				assert(!final_use.node->rel_acq || final_use.node->rel_acq->status != Signal::Status::eDisarmed);
+				lr.last_value = sched.get_value(final_use);
+				lr.last_use = recorder.last_use(Type::stripped(final_use.type()).get(), lr.last_value);
+
+				// get final signal
+				AcquireRelease* last_signal = nullptr;
+				for (auto link = lr.undef_link; link; link = link->prev) {
+					if (link->def.node->rel_acq) {
+						last_signal = link->def.node->rel_acq;
+						break;
+					}
+				}
+
+				// put the values on the nodes
+				for (auto link = def_link; link; link = link->next) {
+					auto& ref = link->def;
+					assert(ref);
+					assert(ref.node->kind == Node::ACQUIRE);
+					memcpy(ref.node->acquire.values[ref.index], lr.last_value, ref.node->type[ref.index]->size);
+					if (ref.node->rel_acq) {
+						ref.node->rel_acq->last_use[ref.index] = lr.last_use;
+					}
+					if (ref.node->rel_acq && last_signal) {
+						ref.node->rel_acq->source = last_signal->source;
+						ref.node->rel_acq->status = last_signal->status;
+					}
 				}
 			}
 
-			// put the values on the nodes
-			for (auto link = def_link; link; link = link->next) {
-				auto& ref = link->def;
-				assert(ref);
-				assert(ref.node->kind == Node::ACQUIRE);
-				memcpy(ref.node->acquire.values[ref.index], lr.last_value, ref.node->type[ref.index]->size);
-				if (ref.node->rel_acq) {
-					ref.node->rel_acq->last_use[ref.index] = lr.last_use;
+			for (auto& node : impl->nodes) {
+				// shrink slice acquires
+				if (node->execution_info && node->execution_info->kind == Node::SLICE && node->rel_acq) {
+					for (size_t i = 1; i < node->acquire.values.size(); i++) {
+						current_module->types.destroy(Type::stripped(node->type[i]).get(), node->acquire.values[i]);
+					}
+					node->acquire.values = { node->acquire.values.data(), 1 };
+					node->type = { node->type.data(), 1 };
 				}
-				if (ref.node->rel_acq && last_signal) {
-					ref.node->rel_acq->source = last_signal->source;
-					ref.node->rel_acq->status = last_signal->status;
-				}
-			}
-		}
 
-		for (auto& node : impl->nodes) {
-			// shrink slice acquires
-			if (node->execution_info && node->execution_info->kind == Node::SLICE && node->rel_acq) {
-				for (size_t i = 1; i < node->acquire.values.size(); i++) {
-					current_module->types.destroy(Type::stripped(node->type[i]).get(), node->acquire.values[i]);
-				}
-				node->acquire.values = { node->acquire.values.data(), 1 };
-				node->type = { node->type.data(), 1 };
+				// reset any nodes we ran
+				node->execution_info = nullptr;
+				node->links = nullptr;
+				node->scheduled_item = nullptr;
 			}
 
-			// reset any nodes we ran
-			node->execution_info = nullptr;
-			node->links = nullptr;
-			node->scheduled_item = nullptr;
-		}
-
-		impl->garbage_nodes.insert(impl->garbage_nodes.end(), current_module->garbage.begin(), current_module->garbage.end());
-		std::sort(impl->garbage_nodes.begin(), impl->garbage_nodes.end());
-		impl->garbage_nodes.erase(std::unique(impl->garbage_nodes.begin(), impl->garbage_nodes.end()), impl->garbage_nodes.end());
-		for (auto& node : impl->garbage_nodes) {
-			current_module->destroy_node(node);
-		}
-
-		current_module->garbage.clear();
-		impl->garbage_nodes.clear();
-
-		for (auto& m : modules) {
-			for (auto& op : m->op_arena) {
-				op.links = nullptr;
+			impl->garbage_nodes.insert(impl->garbage_nodes.end(), current_module->garbage.begin(), current_module->garbage.end());
+			std::sort(impl->garbage_nodes.begin(), impl->garbage_nodes.end());
+			impl->garbage_nodes.erase(std::unique(impl->garbage_nodes.begin(), impl->garbage_nodes.end()), impl->garbage_nodes.end());
+			for (auto& node : impl->garbage_nodes) {
+				current_module->destroy_node(node);
 			}
-		}
 
-		current_module->types.collect();
+			current_module->garbage.clear();
+			impl->garbage_nodes.clear();
 
-		return submit_result;
+			for (auto& m : modules) {
+				for (auto& op : m->op_arena) {
+					op.links = nullptr;
+				}
+			}
+
+			current_module->types.collect();
+
+			return submit_result;
+		} // namespace vuk
 	} // namespace vuk
-} // namespace vuk
