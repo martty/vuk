@@ -838,9 +838,12 @@ namespace vuk {
 		if (base_ty->hash_value == current_module->types.builtin_image) {
 			auto& img_att = *reinterpret_cast<ImageAttachment*>(value);
 			key = reinterpret_cast<uint64_t>(img_att.image.image);
-		} else if (base_ty->hash_value == current_module->types.builtin_buffer) {
-			auto buf = reinterpret_cast<Buffer*>(value);
-			key = reinterpret_cast<uint64_t>(buf->allocation);
+		} else if (base_ty->kind == Type::POINTER_TY) {
+			key = reinterpret_cast<ptr_base*>(value)->device_address;
+		} else if (base_ty->is_bufferlike_view()) {
+			auto& v = *reinterpret_cast<view<BufferLike<void>>*>(value);
+			key = v.ptr.device_address;
+			hash_cobine(key, v.sz_bytes); // TODO: look at what we did for boofs - probably key on VkBuffer
 		} else if (base_ty->kind == Type::ARRAY_TY) {
 			if (base_ty->array.count > 0) { // for an array, we key off the the first element, as the array syncs together
 				auto elem_ty = base_ty->array.T->get();
@@ -917,12 +920,6 @@ namespace vuk {
 					elems += elem_ty->size;
 				}
 				return;
-			} else if (base_ty->kind == Type::POINTER_TY) {
-				key = reinterpret_cast<ptr_base*>(value)->device_address;
-			} else if (base_ty->is_bufferlike_view()) {
-				auto& v = *reinterpret_cast<view<BufferLike<void>>*>(value);
-				key = v.ptr.device_address;
-				hash_combine(key, v.count);
 			} else if (base_ty->kind == Type::COMPOSITE_TY) { // do each member for a composite
 				if (!base_ty->is_bufferlike_view()) {           // if the type is a view, we will sync it, otherwise sync each elem
 					for (size_t i = 0; i < base_ty->composite.types.size(); i++) {
@@ -1325,7 +1322,7 @@ namespace vuk {
 				};
 				switch (node->type[0]->kind) {
 				case Type::INTEGER_TY: {
-					switch (node->type[0]->integer.width) {
+					switch (node->type[0]->scalar.width) {
 					case 32:
 						sched.done(node, host_stream, do_op(uint32_t{}, node));
 						break;

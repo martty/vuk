@@ -390,9 +390,9 @@ namespace vuk {
 			} else {
 				assert(0);
 			}
-		} else if (t->hash_value == current_module->types.builtin_buffer) {
+		} else if (t->is_bufferlike_view()) {
 			if (axis == 0) {
-				auto& sliced = *static_cast<Buffer*>(dst);
+				auto& sliced = *static_cast<Buffer<>*>(dst);
 				sliced.offset += start;
 				if (count != Range::REMAINING) {
 					sliced.size = count;
@@ -409,7 +409,7 @@ namespace vuk {
 	auto eval_with_type(const std::shared_ptr<Type>& t, F&& f, Args... args) {
 		switch (t->kind) {
 		case Type::INTEGER_TY: {
-			switch (t->integer.width) {
+			switch (t->scalar.width) {
 			case 32:
 				return f(*reinterpret_cast<uint32_t*>(args)...);
 				break;
@@ -500,8 +500,8 @@ namespace vuk {
 			return { expected_value, RefOrValue::from_value(ref.node->constant.value) };
 		}
 		case Node::CONSTRUCT: {
-			if (ref.type()->hash_value == current_module->types.builtin_buffer) {
-				auto& bound = constant<Buffer>(ref.node->construct.args[0]);
+			if (ref.type()->is_bufferlike_view()) {
+				auto& bound = constant<Buffer<>>(ref.node->construct.args[0]);
 				set_if_available(&bound.size, ref.node->construct.args[1]);
 				return { expected_value, RefOrValue::from_value(&bound, ref) };
 			} else if (ref.type()->hash_value == current_module->types.builtin_image) {

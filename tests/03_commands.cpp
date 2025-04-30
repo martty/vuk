@@ -33,7 +33,7 @@ TEST_CASE("buffer upload/download") {
 TEST_CASE("buffer fill & update") {
 	{
 		auto data = { 0xfeu, 0xfeu, 0xfeu, 0xfeu };
-		auto buf = allocate_memory<uint32_t>(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
+		auto buf = allocate_buffer<uint32_t>(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
 
 		auto fill = make_pass("fill", [](CommandBuffer& cbuf, VUK_ARG(Buffer<uint32_t>, Access::eTransferWrite) dst) {
 			cbuf.fill_buffer(dst->to_byte_view(), 0xfe);
@@ -45,7 +45,7 @@ TEST_CASE("buffer fill & update") {
 	}
 	{
 		std::array<const uint32_t, 4> data = { 0xfeu, 0xfeu, 0xfeu, 0xfeu };
-		auto buf = allocate_memory<uint32_t>(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
+		auto buf = allocate_buffer<uint32_t>(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
 
 		auto fill = make_pass("update", [data](CommandBuffer& cbuf, VUK_ARG(Buffer<uint32_t>, Access::eTransferWrite) dst) {
 			cbuf.update_buffer(dst->to_byte_view(), &data[0]);
@@ -65,7 +65,7 @@ TEST_CASE("image upload/download") {
 
 		size_t alignment = format_to_texel_block_size(fut->format);
 		size_t size = compute_image_size(fut->format, fut->extent);
-		auto dst = *allocate_memory<uint32_t>(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
+		auto dst = *allocate_buffer<uint32_t>(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
 		auto dst_buf = discard_buf("dst", *dst);
 		auto res = download_buffer(copy(fut, std::move(dst_buf))).get(*test_context.allocator, test_context.compiler);
 		auto updata = res->to_span();
@@ -81,7 +81,7 @@ TEST_CASE("image clear") {
 
 		size_t alignment = format_to_texel_block_size(fut->format);
 		size_t size = compute_image_size(fut->format, fut->extent);
-		auto dst = *allocate_memory<uint32_t>(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
+		auto dst = *allocate_buffer<uint32_t>(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
 		auto fut2 = clear_image(fut, vuk::ClearColor(5u, 5u, 5u, 5u));
 		auto dst_buf = discard_buf("dst", *dst);
 		auto res = download_buffer(copy(fut2, dst_buf)).get(*test_context.allocator, test_context.compiler);
@@ -101,7 +101,7 @@ TEST_CASE("image blit") {
 		auto img2 = allocate_image(*test_context.allocator, ia_dst);
 		size_t alignment = format_to_texel_block_size(fut->format);
 		size_t size = compute_image_size(fut->format, fut->extent);
-		auto dst = *allocate_memory<float>(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
+		auto dst = *allocate_buffer<float>(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
 		auto fut2 = blit_image(fut, declare_ia("dst_i", ia_dst), Filter::eLinear);
 		auto dst_buf = discard_buf("dst", *dst);
 		auto res = download_buffer(copy(fut2, dst_buf)).get(*test_context.allocator, test_context.compiler);
@@ -118,7 +118,7 @@ TEST_CASE("image blit") {
 		auto img2 = allocate_image(*test_context.allocator, ia_dst);
 		size_t alignment = format_to_texel_block_size(fut->format);
 		size_t size = compute_image_size(fut->format, fut->extent);
-		auto dst = *allocate_memory<float>(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
+		auto dst = *allocate_buffer<float>(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
 		auto fut2 = blit_image(fut, declare_ia("dst_i", ia_dst), Filter::eNearest);
 		auto dst_buf = discard_buf("dst", *dst);
 		auto res = download_buffer(copy(fut2, dst_buf)).get(*test_context.allocator, test_context.compiler);
@@ -135,7 +135,7 @@ TEST_CASE("poll wait") {
 
 		size_t alignment = format_to_texel_block_size(fut->format);
 		size_t size = compute_image_size(fut->format, fut->extent);
-		auto dst = *allocate_memory<uint32_t>(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
+		auto dst = *allocate_buffer<uint32_t>(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
 		auto fut2 = clear_image(fut, vuk::ClearColor(5u, 5u, 5u, 5u));
 		auto dst_buf = discard_buf("dst", *dst);
 		download_buffer(copy(fut2, dst_buf)).submit(*test_context.allocator, test_context.compiler);

@@ -600,12 +600,6 @@ namespace vuk {
 		}
 	}
 
-	template<class T>
-	T& constant(Ref ref) {
-		assert(ref.type()->kind == Type::INTEGER_TY || ref.type()->kind == Type::MEMORY_TY);
-		return *reinterpret_cast<T*>(ref.node->constant.value);
-	}
-
 	template<class T, size_t size>
 	struct InlineArena {
 		std::unique_ptr<InlineArena> next;
@@ -726,7 +720,6 @@ namespace vuk {
 	struct IRModule {
 		IRModule() : op_arena(/**/), module_id(module_id_counter++) {
 			// prepopulate builtin type hashes
-			types.get_builtin_buffer();
 			types.get_builtin_image();
 			types.get_builtin_sampler();
 			types.get_builtin_sampled_image();
