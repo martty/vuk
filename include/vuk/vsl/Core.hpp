@@ -80,7 +80,7 @@ namespace vuk {
 	host_data_to_image(Allocator& allocator, DomainFlagBits copy_domain, ImageAttachment image, const void* src_data, VUK_CALLSTACK) {
 		size_t alignment = format_to_texel_block_size(image.format);
 		size_t size = compute_image_size(image.format, image.extent);
-		auto src = *allocate_memory(allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
+		auto src = *allocate_buffer(allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
 		::memcpy(&*src, src_data, size);
 
 		BufferImageCopy bc;

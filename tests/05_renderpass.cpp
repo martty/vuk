@@ -137,7 +137,7 @@ TEST_CASE("extract-extract") {
 	auto [b0, buf0] = create_buffer(*test_context.allocator, MemoryUsage::eGPUonly, DomainFlagBits::eAny, std::span(data));
 	auto buf1 = declare_buf("b1");
 	buf1->memory_usage = MemoryUsage::eGPUonly;
-	auto sz = buf0.get_size();
+	auto sz = buf0->sz_bytes;
 	buf1.set_size(sz);
 	auto buf2 = declare_buf("b2");
 	buf2->memory_usage = MemoryUsage::eGPUonly;

@@ -91,16 +91,10 @@ namespace vuk {
 		auto operator->() noexcept
 		  requires(erased_tuple_adaptor<T>::value)
 		{
-			auto def_or_v = *get_def(get_head());
-			if (!def_or_v.is_ref) {
-				assert(false);
-				// return static_cast<T*>(def_or_v.value);
-			}
-			auto def = def_or_v.ref;
 			return std::apply(
-			    [def](auto... a) {
+			    [head = get_head()](auto... a) {
 				    size_t i = 0;
-				    return typename erased_tuple_adaptor<T>::proxy{ make_ext_ref(current_module->make_extract((a, def), i++))... };
+				    return typename erased_tuple_adaptor<T>::proxy{ make_ext_ref(current_module->make_extract((a, head), i++))... };
 			    },
 			    erased_tuple_adaptor<T>::member_types);
 		}
@@ -114,12 +108,7 @@ namespace vuk {
 		  requires(!std::is_array_v<T>)
 		{
 			if (auto result = wait(allocator, compiler, options)) {
-				auto def_or_v = *get_def(get_head());
-				if (!def_or_v.is_ref) {
-					return { expected_value, *static_cast<T*>(def_or_v.value) };
-				} else {
-					return { expected_value, **eval<T*>(def_or_v.ref) };
-				}
+				return eval<T>(get_head());
 			} else {
 				return result;
 			}
@@ -196,8 +185,8 @@ namespace vuk {
 		/// @param new_offset Offset in bytes from the start of the buffer
 		/// @param new_size Size of the subrange in bytes
 		/// @return Value representing the buffer subrange
-		Value<Buffer> subrange(uint64_t new_offset, uint64_t new_size)
-		  requires std::is_same_v<T, Buffer>
+		Value<T> subrange(uint64_t new_offset, uint64_t new_size)
+		  requires is_bufferlike_view<T>
 		{
 			Ref item =
 			    current_module->make_slice(get_head(), 0, current_module->make_constant<uint64_t>(new_offset), current_module->make_constant<uint64_t>(new_size));

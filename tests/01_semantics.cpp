@@ -176,7 +176,7 @@ TEST_CASE("moving Values doesn't help if it was leaked before") {
 TEST_CASE("scheduling single-queue") {
 	std::string execution;
 
-	auto buf0 = allocate_memory(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
+	auto buf0 = allocate_buffer(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
 
 	auto write = make_pass("write", [&](CommandBuffer& cbuf, VUK_BA(Access::eTransferWrite) dst) {
 		execution += "w";
@@ -220,9 +220,9 @@ TEST_CASE("write-read-write") {
 	std::string execution;
 
 	for (int i = 0; i < 32; i++) {
-		auto buf0 = allocate_memory(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
-		auto buf1 = allocate_memory(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
-		auto buf2 = allocate_memory(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
+		auto buf0 = allocate_buffer(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
+		auto buf1 = allocate_buffer(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
+		auto buf2 = allocate_buffer(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
 
 		auto write = make_pass("write", [&](CommandBuffer& cbuf, VUK_BA(Access::eTransferWrite) dst) {
 			execution += "w";
@@ -256,8 +256,8 @@ TEST_CASE("write-read-write") {
 TEST_CASE("scheduling with submitted") {
 	std::string execution;
 
-	auto buf0 = allocate_memory(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
-	auto buf1 = allocate_memory(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
+	auto buf0 = allocate_buffer(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
+	auto buf1 = allocate_buffer(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
 
 	auto write = make_pass("write", [&](CommandBuffer& cbuf, VUK_BA(Access::eTransferWrite) dst) {
 		execution += "w";
@@ -315,7 +315,7 @@ TEST_CASE("scheduling with submitted") {
 TEST_CASE("multi-queue buffers") {
 	std::string execution;
 
-	auto buf0 = allocate_memory(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
+	auto buf0 = allocate_buffer(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
 
 	auto write = make_pass(
 	    "write_A",
@@ -338,7 +338,7 @@ TEST_CASE("multi-queue buffers") {
 	auto read = make_pass(
 	    "read_B",
 	    [&](CommandBuffer& cbuf, VUK_BA(Access::eTransferRead) dst) {
-		    auto dummy = allocate_memory<uint32_t>(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
+		    auto dummy = allocate_buffer<uint32_t>(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
 		    cbuf.copy_buffer(Buffer<uint32_t>{ **dummy, 4 }.to_byte_view(), dst);
 		    execution += "r";
 		    CHECK((cbuf.get_scheduled_domain() & DomainFlagBits::eGraphicsQueue).m_mask != 0);
@@ -411,7 +411,7 @@ TEST_CASE("multi-queue buffers") {
 TEST_CASE("queue inference") {
 	std::string execution;
 
-	auto buf0 = allocate_memory(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
+	auto buf0 = allocate_buffer(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
 
 	auto transfer = make_pass(
 	    "transfer",
@@ -433,7 +433,7 @@ TEST_CASE("queue inference") {
 	auto gfx = make_pass(
 	    "gfx",
 	    [&](CommandBuffer& cbuf, VUK_BA(Access::eTransferWrite) dst) {
-		    auto dummy = allocate_memory<uint32_t>(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
+		    auto dummy = allocate_buffer<uint32_t>(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
 		    cbuf.copy_buffer(Buffer<uint32_t>{ **dummy, 4 }.to_byte_view(), dst);
 		    execution += "g";
 		    CHECK((cbuf.get_scheduled_domain() & DomainFlagBits::eGraphicsQueue).m_mask != 0);
@@ -450,9 +450,9 @@ TEST_CASE("queue inference") {
 }
 
 TEST_CASE("multi return pass") {
-	auto buf0 = allocate_memory<uint32_t>(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
-	auto buf1 = allocate_memory<uint32_t>(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
-	auto buf2 = allocate_memory<uint32_t>(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
+	auto buf0 = allocate_buffer<uint32_t>(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
+	auto buf1 = allocate_buffer<uint32_t>(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
+	auto buf2 = allocate_buffer<uint32_t>(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
 
 	auto fills = make_pass("fills",
 	                       [](CommandBuffer& cbuf,
@@ -484,7 +484,7 @@ TEST_CASE("multi return pass") {
 }
 
 TEST_CASE("multi fn calls") {
-	auto buf0 = allocate_memory(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
+	auto buf0 = allocate_buffer(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
 
 	std::unique_ptr<int> a = std::make_unique<int>(5);
 	auto p = make_pass("fills", [ab = std::move(a)](CommandBuffer& cbuf, VUK_BA(Access::eTransferWrite) dst0) {
