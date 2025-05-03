@@ -1285,6 +1285,10 @@ namespace vuk {
 		std::pmr::vector<Node*> nodes(allocator);
 
 		for (auto& node : module->op_arena) {
+			if (node.index < (module->module_id << 32 | module->link_frontier)) { // already linked
+				continue;
+			}
+
 			if (node.kind == Node::SET) {
 				set_nodes.push_back(&node);
 			} else if (node.kind == Node::CALL && node.call.args[0].type()->kind == Type::MEMORY_TY) { // we need to compile this PBCI
