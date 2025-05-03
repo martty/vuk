@@ -1285,7 +1285,7 @@ namespace vuk {
 		std::pmr::vector<Node*> nodes(allocator);
 
 		for (auto& node : module->op_arena) {
-			if (node.index < (module->module_id << 32 | module->link_frontier)) { // already linked
+			if (node.index < (module->module_id << 32 | module->link_frontier) && node.kind != Node::ACQUIRE) { // already linked
 				continue;
 			}
 
