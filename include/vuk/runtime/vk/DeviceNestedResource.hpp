@@ -1,7 +1,7 @@
 #pragma once
 
-#include "vuk/runtime/vk/Allocator.hpp"
 #include "vuk/Exception.hpp"
+#include "vuk/runtime/vk/Allocator.hpp"
 #include "vuk/vuk_fwd.hpp"
 
 namespace vuk {
@@ -32,6 +32,8 @@ namespace vuk {
 
 		void deallocate_buffers(std::span<const Buffer> src) override;
 
+		void set_buffer_allocation_name(Buffer& dst, Name name) override final;
+
 		Result<void, AllocateException>
 		allocate_framebuffers(std::span<VkFramebuffer> dst, std::span<const FramebufferCreateInfo> cis, SourceLocationAtFrame loc) override;
 
@@ -40,6 +42,8 @@ namespace vuk {
 		Result<void, AllocateException> allocate_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc) override;
 
 		void deallocate_images(std::span<const Image> src) override;
+
+		void set_image_allocation_name(Image& dst, Name name) override final;
 
 		Result<void, AllocateException>
 		allocate_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc) override;
@@ -85,8 +89,9 @@ namespace vuk {
 
 		void deallocate_swapchains(std::span<const VkSwapchainKHR> src) override;
 
-		Result<void, AllocateException>
-		allocate_graphics_pipelines(std::span<GraphicsPipelineInfo> dst, std::span<const GraphicsPipelineInstanceCreateInfo> cis, SourceLocationAtFrame loc) override;
+		Result<void, AllocateException> allocate_graphics_pipelines(std::span<GraphicsPipelineInfo> dst,
+		                                                            std::span<const GraphicsPipelineInstanceCreateInfo> cis,
+		                                                            SourceLocationAtFrame loc) override;
 		void deallocate_graphics_pipelines(std::span<const GraphicsPipelineInfo> src) override;
 
 		Result<void, AllocateException>
@@ -94,8 +99,8 @@ namespace vuk {
 		void deallocate_compute_pipelines(std::span<const ComputePipelineInfo> src) override;
 
 		Result<void, AllocateException> allocate_ray_tracing_pipelines(std::span<RayTracingPipelineInfo> dst,
-		                                                                      std::span<const RayTracingPipelineInstanceCreateInfo> cis,
-		                                                                      SourceLocationAtFrame loc) override;
+		                                                               std::span<const RayTracingPipelineInstanceCreateInfo> cis,
+		                                                               SourceLocationAtFrame loc) override;
 		void deallocate_ray_tracing_pipelines(std::span<const RayTracingPipelineInfo> src) override;
 
 		Result<void, AllocateException>

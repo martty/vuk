@@ -250,6 +250,10 @@ namespace vuk {
 		}
 	}
 
+	void DeviceVkResource::set_buffer_allocation_name(Buffer& dst, Name name) {
+		vmaSetAllocationName(impl->allocator, static_cast<VmaAllocation>(dst.allocation), name.c_str());
+	}
+
 	Result<void, AllocateException> DeviceVkResource::allocate_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc) {
 		assert(dst.size() == cis.size());
 		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
@@ -286,6 +290,10 @@ namespace vuk {
 				vmaDestroyImage(impl->allocator, v.image, static_cast<VmaAllocation>(v.allocation));
 			}
 		}
+	}
+
+	void DeviceVkResource::set_image_allocation_name(Image& dst, Name name) {
+		vmaSetAllocationName(impl->allocator, static_cast<VmaAllocation>(dst.allocation), name.c_str());
 	}
 
 	Result<void, AllocateException>
@@ -1102,6 +1110,10 @@ namespace vuk {
 		upstream->deallocate_buffers(src);
 	}
 
+	void DeviceNestedResource::set_buffer_allocation_name(Buffer& dst, Name name) {
+		upstream->set_buffer_allocation_name(dst, name);
+	}
+
 	Result<void, AllocateException>
 	DeviceNestedResource::allocate_framebuffers(std::span<VkFramebuffer> dst, std::span<const FramebufferCreateInfo> cis, SourceLocationAtFrame loc) {
 		return upstream->allocate_framebuffers(dst, cis, loc);
@@ -1117,6 +1129,10 @@ namespace vuk {
 
 	void DeviceNestedResource::deallocate_images(std::span<const Image> src) {
 		upstream->deallocate_images(src);
+	}
+
+	void DeviceNestedResource::set_image_allocation_name(Image& dst, Name name) {
+		upstream->set_image_allocation_name(dst, name);
 	}
 
 	Result<void, AllocateException>
