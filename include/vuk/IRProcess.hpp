@@ -519,7 +519,7 @@ namespace vuk {
 			if (!swp_) {
 				return swp_;
 			}
-			auto swp = *swp_;
+			auto& swp = *swp_;
 			assert(swp.is_ref && swp.ref.node->kind == Node::CONSTRUCT);
 			auto arr = swp.ref.node->construct.args[1]; // array of images
 			assert(arr.node->kind == Node::CONSTRUCT);
@@ -542,7 +542,7 @@ namespace vuk {
 			if (!a_) {
 				return a_;
 			}
-			auto a_rov = *a_;
+			auto& a_rov = *a_;
 			if (a_rov.is_ref) {
 				return { expected_error, CannotBeConstantEvaluated{ ref } };
 			}
@@ -552,7 +552,7 @@ namespace vuk {
 			if (!b_) {
 				return b_;
 			}
-			auto b_rov = *b_;
+			auto& b_rov = *b_;
 			if (b_rov.is_ref) {
 				return { expected_error, CannotBeConstantEvaluated{ ref } };
 			}
@@ -568,12 +568,12 @@ namespace vuk {
 			if (!composite_) {
 				return composite_;
 			}
-			auto composite = *composite_;
+			auto& composite = *composite_;
 			auto start_ = eval(ref.node->slice.start);
 			if (!start_) {
 				return start_;
 			}
-			auto start = *start_;
+			auto& start = *start_;
 			if (start.is_ref) {
 				return { expected_error, CannotBeConstantEvaluated{ ref } };
 			}
@@ -582,7 +582,7 @@ namespace vuk {
 			if (!count_) {
 				return count_;
 			}
-			auto count = *count_;
+			auto& count = *count_;
 			if (count.is_ref) {
 				return { expected_error, CannotBeConstantEvaluated{ ref } };
 			}
@@ -606,7 +606,7 @@ namespace vuk {
 			} else {
 				auto retv = RefOrValue::adopt_value(new char[ref.node->type[0]->size], composite.ref);
 				evaluate_slice(ref.node->slice.src, slice.axis, index, countv, composite.value, retv.value);
-				return { expected_value, retv };
+				return { expected_value, std::move(retv) };
 			}
 
 			return { expected_error, CannotBeConstantEvaluated{ ref } };

@@ -520,18 +520,18 @@ namespace vuk {
 
 	struct RefOrValue {
 		Ref ref;
+		std::unique_ptr<char[]> owned_value;
 		void* value;
 		bool is_ref;
-		bool owned = false;
 
 		static RefOrValue from_ref(Ref r) {
-			return { r, nullptr, true };
+			return { r, nullptr, nullptr, true };
 		}
 		static RefOrValue from_value(void* v, Ref r = {}) {
-			return { r, v, false };
+			return { r, nullptr, v, false };
 		}
 		static RefOrValue adopt_value(void* v, Ref r = {}) {
-			return { r, v, false, true };
+			return { r, std::unique_ptr<char[]>(static_cast<char*>(v)), v, false };
 		}
 	};
 
