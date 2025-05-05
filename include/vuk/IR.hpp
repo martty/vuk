@@ -827,6 +827,8 @@ namespace vuk {
 				// TODO: crimes
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Winvalid-offsetof"
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Winvalid-offsetof"
 				auto image_offsets = std::vector<size_t>{ offsetof(ImageAttachment, extent) + offsetof(Extent3D, width),
 					                                        offsetof(ImageAttachment, extent) + offsetof(Extent3D, height),
 					                                        offsetof(ImageAttachment, extent) + offsetof(Extent3D, depth),
@@ -836,6 +838,7 @@ namespace vuk {
 					                                        offsetof(ImageAttachment, layer_count),
 					                                        offsetof(ImageAttachment, base_level),
 					                                        offsetof(ImageAttachment, level_count) };
+#pragma GCC diagnostic pop
 #pragma clang diagnostic pop
 				auto image_type = emplace_type(std::shared_ptr<Type>(new Type{ .kind = Type::COMPOSITE_TY,
 				                                                               .size = sizeof(ImageAttachment),

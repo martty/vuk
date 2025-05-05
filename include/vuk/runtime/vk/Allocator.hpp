@@ -56,6 +56,7 @@ namespace vuk {
 
 		virtual Result<void, AllocateException> allocate_buffers(std::span<Buffer> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) = 0;
 		virtual void deallocate_buffers(std::span<const Buffer> dst) = 0;
+		virtual void set_buffer_allocation_name(Buffer& dst, Name name) = 0;
 
 		virtual Result<void, AllocateException>
 		allocate_framebuffers(std::span<VkFramebuffer> dst, std::span<const FramebufferCreateInfo> cis, SourceLocationAtFrame loc) = 0;
@@ -64,6 +65,7 @@ namespace vuk {
 		// gpu only
 		virtual Result<void, AllocateException> allocate_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc) = 0;
 		virtual void deallocate_images(std::span<const Image> dst) = 0;
+		virtual void set_image_allocation_name(Image& dst, Name name) = 0;
 
 		virtual Result<void, AllocateException>
 		allocate_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc) = 0;
