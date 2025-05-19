@@ -230,6 +230,11 @@ namespace vuk {
 		/// @param src Span of buffers to be deallocated
 		void deallocate(std::span<const Buffer> src);
 
+		/// @brief Set name of the underlying VMA allocation
+		/// @param dst Destination buffer
+		/// @param name Name of the allocation
+		void set_allocation_name(Buffer& dst, Name name);
+
 		/// @brief Allocate framebuffers from this Allocator
 		/// @param dst Destination span to place allocated framebuffers into
 		/// @param cis Per-element construction info
@@ -267,6 +272,11 @@ namespace vuk {
 		/// @brief Deallocate images previously allocated from this Allocator
 		/// @param src Span of images to be deallocated
 		void deallocate(std::span<const Image> src);
+
+		/// @brief Set name of the underlying VMA allocation
+		/// @param dst Destination image
+		/// @param name Name of the allocation
+		void set_allocation_name(Image& dst, Name name);
 
 		/// @brief Allocate image views from this Allocator
 		/// @param dst Destination span to place allocated image views into
