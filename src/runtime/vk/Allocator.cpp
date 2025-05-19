@@ -84,6 +84,10 @@ namespace vuk {
 		device_resource->deallocate_buffers(src);
 	}
 
+	void Allocator::set_allocation_name(Buffer& dst, Name name) {
+		device_resource->set_buffer_allocation_name(dst, name);
+	}
+
 	Result<void, AllocateException> Allocator::allocate(std::span<VkFramebuffer> dst, std::span<const FramebufferCreateInfo> cis, SourceLocationAtFrame loc) {
 		return device_resource->allocate_framebuffers(dst, cis, loc);
 	}
@@ -107,6 +111,10 @@ namespace vuk {
 
 	void Allocator::deallocate(std::span<const Image> src) {
 		device_resource->deallocate_images(src);
+	}
+
+	void Allocator::set_allocation_name(Image& dst, Name name) {
+		device_resource->set_image_allocation_name(dst, name);
 	}
 
 	Result<void, AllocateException> Allocator::allocate(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc) {
