@@ -171,29 +171,8 @@ namespace vuk {
 		fmt::print("{}", msg);
 	};
 
-	std::string format_message(Level level, ScheduledItem& item, std::span<Ref> args, std::string err) {
+	void format_args(ScheduledItem& item, std::string& line) {
 		Node* node = item.execable;
-		std::string msg = "";
-		msg += format_source_location(node);
-		msg += fmt::format("{}: '", level == Level::eError ? "error" : "other");
-		print_results_to_string(item, msg);
-		msg += fmt::format(" = {}", node_to_string(node));
-		if (node->kind == Node::CONSTRUCT) {
-			auto names = arg_names(node->type[0].get());
-			msg += print_args_to_string_with_arg_names(names, args);
-		} else {
-			print_args_to_string(args, msg);
-		}
-		msg += err;
-		return msg;
-	};
-
-	std::string exec_to_string(ScheduledItem& item) {
-		std::string line;
-		print_results_to_string(item, line);
-		fmt::format_to(std::back_inserter(line), " = ");
-
-		auto node = item.execable;
 		switch (node->kind) {
 		case Node::GARBAGE:
 		case Node::PLACEHOLDER:
@@ -305,7 +284,30 @@ namespace vuk {
 			print_args_to_string(std::span(&node->compile_pipeline.src, 1), line);
 		} break;
 		}
+	}
 
+	std::string format_message(Level level, ScheduledItem& item, std::string err) {
+		Node* node = item.execable;
+		std::string msg = "";
+		fmt::format_to(std::back_inserter(msg), "{}{}: '", format_source_location(node), level == Level::eError ? "error" : "other");
+		print_results_to_string(item, msg);
+		fmt::format_to(std::back_inserter(msg), " = ");
+		if (node->kind == Node::CONSTRUCT) {
+			msg += node_to_string(node);
+			auto names = arg_names(node->type[0].get());
+			msg += print_args_to_string_with_arg_names(names, item.execable->construct.args.subspan(1));
+		} else {
+			format_args(item, msg);
+		}
+		msg += err;
+		return msg;
+	};
+
+	std::string exec_to_string(ScheduledItem& item) {
+		std::string line;
+		print_results_to_string(item, line);
+		fmt::format_to(std::back_inserter(line), " = ");
+		format_args(item, line);
 		return line;
 	}
 } // namespace vuk
@@ -1244,6 +1246,14 @@ namespace vuk {
 
 		for (auto& item : impl->item_list) {
 			item->scheduled_stream = recorder.stream_for_domain(item->scheduled_domain);
+			if (!item->scheduled_stream && item->scheduled_domain != DomainFlagBits::eNone) {
+				return { expected_error,
+					       RenderGraphException(
+					           format_message(Level::eError,
+					                          *item,
+					                          fmt::format("': requested stream from Domain<{}>, but the Runtime was not provided an Executor for this Domain\n",
+					                                      domain_to_string(item->scheduled_domain)))) };
+			}
 		}
 
 		Scheduler sched(alloc, impl, recorder);
@@ -1309,14 +1319,11 @@ namespace vuk {
 			case Node::CONSTRUCT: { // when encountering a CONSTRUCT, allocate the thing if needed
 				for (auto& arg : node->construct.args) {
 					if (arg.node->kind == Node::PLACEHOLDER) {
-						return { expected_error,
-							       RenderGraphException(format_message(Level::eError, item, node->construct.args.subspan(1), "': argument not set or inferrable\n")) };
+						return { expected_error, RenderGraphException(format_message(Level::eError, item, "': argument not set or inferrable\n")) };
 					}
 					if (node->type[0]->hash_value == current_module->types.builtin_buffer || node->type[0]->hash_value == current_module->types.builtin_image) {
 						if (arg.node->kind != Node::CONSTANT) {
-							return { expected_error,
-								       RenderGraphException(
-								           format_message(Level::eError, item, node->construct.args.subspan(1), "': argument(s) not constant evaluatable\n")) };
+							return { expected_error, RenderGraphException(format_message(Level::eError, item, "': argument(s) not constant evaluatable\n")) };
 						}
 					}
 				}
