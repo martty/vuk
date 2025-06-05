@@ -11,8 +11,8 @@
 #include <type_traits>
 #include <utility>
 
-#define FWD(x)               (static_cast<decltype(x)&&>(x))
-#define MOV(x)               (static_cast<std::remove_reference_t<decltype(x)>&&>(x))
+#define FWD(x) (static_cast<decltype(x)&&>(x))
+#define MOV(x) (static_cast<std::remove_reference_t<decltype(x)>&&>(x))
 
 namespace vuk {
 	namespace detail {
@@ -34,6 +34,12 @@ namespace vuk {
 	};
 
 	constexpr ResultErrorTag expected_error;
+
+	struct ResultControlTag {
+		explicit ResultControlTag() = default;
+	};
+
+	constexpr ResultControlTag expected_control;
 
 	struct ResultValueTag {
 		explicit ResultValueTag() = default;
@@ -58,6 +64,13 @@ namespace vuk {
 			fprintf(stderr, "%s", err_t.what());
 			assert(0);
 #endif
+			_error = new V(MOV(err_t));
+		}
+
+		template<class U>
+		Result(ResultControlTag, U&& err_t) : _holds_value(false) {
+			using V = std::remove_reference_t<U>;
+			static_assert(std::is_base_of_v<E, V>, "Concrete error must derive from E");
 			_error = new V(MOV(err_t));
 		}
 

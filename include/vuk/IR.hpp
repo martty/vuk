@@ -547,7 +547,7 @@ namespace vuk {
 		if (res.holds_value() && !res->is_ref) {
 			return { expected_value, *static_cast<T*>(res->value) };
 		} else {
-			return { expected_error, CannotBeConstantEvaluated{ ref } };
+			return { expected_control, CannotBeConstantEvaluated{ ref } };
 		}
 	}
 

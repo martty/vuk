@@ -531,7 +531,7 @@ namespace vuk {
 		case Node::CALL: {
 			auto t = ref.type();
 			if (t->kind != Type::ALIASED_TY) {
-				return { expected_error, CannotBeConstantEvaluated{ ref } };
+				return { expected_control, CannotBeConstantEvaluated{ ref } };
 			}
 			return eval(ref.node->call.args[t->aliased.ref_idx]);
 		}
@@ -544,7 +544,7 @@ namespace vuk {
 			}
 			auto& a_rov = *a_;
 			if (a_rov.is_ref) {
-				return { expected_error, CannotBeConstantEvaluated{ ref } };
+				return { expected_control, CannotBeConstantEvaluated{ ref } };
 			}
 			auto a = a_rov.value;
 
@@ -554,7 +554,7 @@ namespace vuk {
 			}
 			auto& b_rov = *b_;
 			if (b_rov.is_ref) {
-				return { expected_error, CannotBeConstantEvaluated{ ref } };
+				return { expected_control, CannotBeConstantEvaluated{ ref } };
 			}
 			auto b = b_rov.value;
 			return { expected_value, RefOrValue::adopt_value(eval_binop(math_binary.op, ref.type(), a, b)) };
@@ -575,7 +575,7 @@ namespace vuk {
 			}
 			auto& start = *start_;
 			if (start.is_ref) {
-				return { expected_error, CannotBeConstantEvaluated{ ref } };
+				return { expected_control, CannotBeConstantEvaluated{ ref } };
 			}
 			auto index = *static_cast<uint64_t*>(start.value);
 			auto count_ = eval(ref.node->slice.count);
@@ -584,7 +584,7 @@ namespace vuk {
 			}
 			auto& count = *count_;
 			if (count.is_ref) {
-				return { expected_error, CannotBeConstantEvaluated{ ref } };
+				return { expected_control, CannotBeConstantEvaluated{ ref } };
 			}
 			auto countv = *static_cast<uint64_t*>(count.value);
 
@@ -596,7 +596,7 @@ namespace vuk {
 					if (composite.ref.node->kind == Node::CONSTRUCT) {
 						return eval(composite.ref.node->construct.args[index + 1]);
 					} else {
-						return { expected_error, CannotBeConstantEvaluated{ ref } };
+						return { expected_control, CannotBeConstantEvaluated{ ref } };
 					}
 				} else {
 					if (composite.ref.node->kind == Node::CONSTRUCT && type->kind == Type::ARRAY_TY) {
@@ -609,10 +609,10 @@ namespace vuk {
 				return { expected_value, std::move(retv) };
 			}
 
-			return { expected_error, CannotBeConstantEvaluated{ ref } };
+			return { expected_control, CannotBeConstantEvaluated{ ref } };
 		}
 		default:
-			return { expected_error, CannotBeConstantEvaluated{ ref } };
+			return { expected_control, CannotBeConstantEvaluated{ ref } };
 		}
 		assert(0);
 	}
