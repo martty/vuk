@@ -25,7 +25,7 @@
 layout(location = 0) rayPayloadEXT vec3 prd;
 
 layout(binding = 0) uniform accelerationStructureEXT topLevelAS;
-layout(binding = 1, rgba32f) uniform image2D image;
+layout(binding = 1, rgba8) uniform image2D image;
 layout(binding = 2) uniform VP {
     mat4 viewInverse;
     mat4 projInverse;
