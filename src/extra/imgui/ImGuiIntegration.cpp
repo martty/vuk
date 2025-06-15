@@ -38,6 +38,7 @@ namespace vuk::extra {
 		ImGuiData data;
 		auto font_ia =
 		    ImageAttachment::from_preset(ImageAttachment::Preset::eMap2D, Format::eR8G8B8A8Srgb, Extent3D{ (unsigned)width, (unsigned)height, 1u }, Samples::e1);
+		font_ia.level_count = 1; // no mips for font texture
 		auto [image, view, fut] = create_image_and_view_with_data(allocator, DomainFlagBits::eTransferOnTransfer, font_ia, pixels);
 		data.font_image = std::move(image);
 		data.font_image_view = std::move(view);
