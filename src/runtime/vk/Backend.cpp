@@ -447,14 +447,14 @@ namespace vuk {
 		}
 
 		Result<VkResult> present(Swapchain& swp) {
-			batch.back().pres_signal.emplace_back(swp.semaphores[swp.linear_index * 2 + 1]);
+			batch.back().pres_signal.emplace_back(swp.semaphores[swp.image_index]);
 			submit();
 			VkPresentInfoKHR pi{ .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR };
 			pi.swapchainCount = 1;
 			pi.pSwapchains = &swp.swapchain;
 			pi.pImageIndices = &swp.image_index;
 			pi.waitSemaphoreCount = 1;
-			pi.pWaitSemaphores = &swp.semaphores[swp.linear_index * 2 + 1];
+			pi.pWaitSemaphores = &swp.semaphores[swp.image_index];
 			auto res = executor->queue_present(pi);
 			if (res && swp.acquire_result == VK_SUBOPTIMAL_KHR) {
 				return { expected_value, VK_SUBOPTIMAL_KHR };
@@ -804,10 +804,9 @@ namespace vuk {
 	};
 
 	struct VkPEStream : Stream {
-		VkPEStream(Allocator alloc, Swapchain& swp) : Stream(alloc, nullptr), swp(&swp) {
+		VkPEStream(Allocator alloc, Swapchain& swp, VkSemaphore acquire_sema) : Stream(alloc, nullptr), swp(&swp), acquire_sema(acquire_sema) {
 			domain = DomainFlagBits::ePE;
 		}
-		Swapchain* swp;
 
 		void add_dependency(Stream* dep) override {
 			dependencies.push_back(dep);
@@ -828,9 +827,12 @@ namespace vuk {
 
 		Result<SubmitResult> submit() override {
 			assert(swp);
-			SubmitResult sr{ .sema_wait = swp->semaphores[2 * swp->linear_index] };
+			SubmitResult sr{ .sema_wait = acquire_sema };
 			return { expected_value, sr };
 		}
+
+		Swapchain* swp;
+		VkSemaphore acquire_sema;
 	};
 
 	uint64_t value_identity(Type* base_ty, void* value) {
@@ -1709,15 +1711,16 @@ namespace vuk {
 
 			case Node::ACQUIRE_NEXT_IMAGE: {
 				auto& swp = *sched.get_value<Swapchain*>(node->acquire_next_image.swapchain);
-				swp.linear_index = (swp.linear_index + 1) % swp.images.size();
-				swp.acquire_result =
-				    ctx.vkAcquireNextImageKHR(ctx.device, swp.swapchain, UINT64_MAX, swp.semaphores[2 * swp.linear_index], VK_NULL_HANDLE, &swp.image_index);
+				VkSemaphore acquire_sema;
+				alloc.allocate_semaphores(std::span{ &acquire_sema, 1 });
+				alloc.deallocate(std::span{ &acquire_sema, 1 });
+				swp.acquire_result = ctx.vkAcquireNextImageKHR(ctx.device, swp.swapchain, UINT64_MAX, acquire_sema, VK_NULL_HANDLE, &swp.image_index);
 				// VK_SUBOPTIMAL_KHR shouldn't stop presentation; it is handled at the end
 				if (swp.acquire_result != VK_SUCCESS && swp.acquire_result != VK_SUBOPTIMAL_KHR) {
 					return { expected_error, VkException{ swp.acquire_result } };
 				}
 
-				auto pe_stream = &pe_streams.emplace_back(alloc, swp);
+				auto pe_stream = &pe_streams.emplace_back(alloc, swp, acquire_sema);
 				sched.done(node, pe_stream, swp.images[swp.image_index]);
 				image_to_swapchain.emplace(value_identity(node->type[0].get(), &swp.images[swp.image_index]), &swp);
 				auto& lu = recorder.last_use(node->type[0].get(), &swp.images[swp.image_index]);

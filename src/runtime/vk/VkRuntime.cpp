@@ -767,7 +767,7 @@ namespace vuk {
 	}
 
 	Swapchain::Swapchain(Allocator alloc, size_t image_count) : allocator(alloc) {
-		semaphores.resize(image_count * 2);
+		semaphores.resize(image_count);
 		allocator.allocate_semaphores(std::span(semaphores));
 	}
 
@@ -782,7 +782,7 @@ namespace vuk {
 	    allocator(alloc),
 	    swapchain(swapchain),
 	    surface(surface) {
-		semaphores.resize(image_count * 2);
+		semaphores.resize(image_count);
 		allocator.allocate_semaphores(std::span(semaphores));
 		for (auto i = 0; i < images.size(); i++) {
 			ImageAttachment ia;
@@ -814,7 +814,6 @@ namespace vuk {
 	    semaphores(std::move(o.semaphores)) {
 		images = std::move(o.images);
 		surface = o.surface;
-		linear_index = o.linear_index;
 		image_index = o.image_index;
 		acquire_result = o.acquire_result;
 	}
@@ -825,7 +824,6 @@ namespace vuk {
 		allocator = o.allocator;
 		images = std::move(o.images);
 		surface = o.surface;
-		linear_index = o.linear_index;
 		image_index = o.image_index;
 		acquire_result = o.acquire_result;
 

@@ -85,9 +85,8 @@ namespace vuk {
 		VkSurfaceKHR surface = VK_NULL_HANDLE;
 
 		std::vector<ImageAttachment> images;
-		uint32_t linear_index = 0;
 		uint32_t image_index;
-		std::vector<VkSemaphore> semaphores; /* present_rdy_0 render_complete_0 present_rdy_1 render_complete_1 ... */
+		std::vector<VkSemaphore> semaphores; /* render_complete_0 render_complete_1 ... */
 		VkResult acquire_result;
 	};
 } // namespace vuk
