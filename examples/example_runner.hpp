@@ -114,6 +114,7 @@ namespace vuk {
 				if (width == 0 && height == 0) {
 					runner.suspend = true;
 				} else {
+					runner.app->wait_idle();
 					runner.app->update_swapchain();
 					runner.suspend = false;
 				}
