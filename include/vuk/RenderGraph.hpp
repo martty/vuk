@@ -707,6 +707,7 @@ public:
 		Result<void> linearize();
 		Result<void> validate_read_undefined();
 		Result<void> validate_duplicated_resource_ref();
+		Result<void> validate_same_argument_different_access();
 
 		template<class Pred>
 		Result<void> rewrite(Pred pred);

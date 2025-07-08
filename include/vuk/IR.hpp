@@ -224,8 +224,7 @@ namespace vuk {
 			case eMemoryRW:
 				return "MemRW";
 			default:
-				assert(0);
-				return "";
+				return "<multiple>";
 			}
 		}
 

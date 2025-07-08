@@ -1213,6 +1213,44 @@ namespace vuk {
 		return { expected_value };
 	}
 
+	Result<void> Compiler::validate_same_argument_different_access() {
+		std::unordered_map<Ref, size_t> arg_set;
+		for (auto node : impl->nodes) {
+			switch (node->kind) {
+			case Node::CALL: {
+				auto fn_type = node->call.args[0].type();
+				size_t first_parm = fn_type->kind == Type::OPAQUE_FN_TY ? 1 : 4;
+				auto& args = fn_type->kind == Type::OPAQUE_FN_TY ? fn_type->opaque_fn.args : fn_type->shader_fn.args;
+				for (size_t i = first_parm; i < node->call.args.size(); i++) {
+					auto& arg_ty = args[i - first_parm];
+					auto& parm = node->call.args[i];
+					
+					auto [it, succ] = arg_set.try_emplace(parm, i);
+					if (!succ) {
+						auto other_arg_ty = args[it->second - first_parm];
+						assert(arg_ty->kind == Type::IMBUED_TY);
+						assert(other_arg_ty->kind == Type::IMBUED_TY);
+						if (arg_ty->imbued.access == other_arg_ty->imbued.access) { // same is okay
+							continue;
+						}
+						auto msg = fmt::format("tried to pass the same value through #{}({}) and #{}({}) with different access",
+						                       it->second - first_parm,
+						                       Type::to_sv(other_arg_ty->imbued.access),
+						                       i - first_parm,
+						                       Type::to_sv(arg_ty->imbued.access));
+						return { expected_error, RenderGraphException{ format_graph_message(Level::eError, node, msg) } };
+					}
+				}
+				break;
+			}
+			default:
+				break;
+			}
+		}
+
+		return { expected_value };
+	}
+
 	Result<void> Compiler::validate_duplicated_resource_ref() {
 		std::unordered_map<Buffer, Node*> bufs;
 		std::unordered_map<ImageAttachment, Node*> ias;
@@ -1677,6 +1715,7 @@ namespace vuk {
 
 		VUK_DO_OR_RETURN(validate_read_undefined());
 		VUK_DO_OR_RETURN(validate_duplicated_resource_ref());
+		VUK_DO_OR_RETURN(validate_same_argument_different_access());
 
 		VUK_DO_OR_RETURN(impl->collect_chains());
 

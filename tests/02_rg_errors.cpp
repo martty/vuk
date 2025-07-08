@@ -119,5 +119,17 @@ TEST_CASE("error: attaching something twice decl/acq") {
 	}
 }
 
+TEST_CASE("error: passing same things with different access") {
+	{
+		auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, 100, 1 });
+		auto buf_a = vuk::acquire_buf("a", *dst, vuk::Access::eNone);
+
+		auto wr_buf = vuk::make_pass("wr", [](CommandBuffer&, VUK_BA(vuk::eTransferWrite) buf, VUK_BA(vuk::eTransferRead) bufb) { return buf; });
+
+		REQUIRE_THROWS(wr_buf(buf_a, buf_a).get(*test_context.allocator, test_context.compiler));
+	}
+}
+
+
 #pragma clang diagnostic pop
 #pragma warning(pop)
