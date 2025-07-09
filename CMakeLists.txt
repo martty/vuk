@@ -50,11 +50,13 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
   set(VUK_OS_APPLE ON)
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
   set(VUK_OS_WINDOWS ON)
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Android")
+  set(VUK_OS_ANDROID ON)
 else()
   message(FATAL_ERROR "unrecognised operating system '${CMAKE_SYSTEM_NAME}'")
 endif()
 
-message(STATUS "LINUX=${VUK_OS_LINUX}; APPLE=${VUK_OS_APPLE}; WINDOWS=${VUK_OS_WINDOWS}")
+message(STATUS "LINUX=${VUK_OS_LINUX}; APPLE=${VUK_OS_APPLE}; WINDOWS=${VUK_OS_WINDOWS}; ANDROID=${VUK_OS_ANDROID}")
 
 # Detect compilers
 set(VUK_COMPILER_CLANGPP OFF)
@@ -330,6 +332,7 @@ target_compile_definitions(vuk
   VUK_OS_WINDOWS=$<BOOL:${VUK_OS_WINDOWS}>
   VUK_OS_LINUX=$<BOOL:${$VUK_OS_LINUX}>
   VUK_OS_APPLE=$<BOOL:${VUK_OS_APPLE}>
+  VUK_OS_ANDROID=$<BOOL:${VUK_OS_ANDROID}>
 )
 
 target_compile_features(vuk PUBLIC cxx_std_20)
