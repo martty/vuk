@@ -1218,6 +1218,7 @@ namespace vuk {
 		for (auto node : impl->nodes) {
 			switch (node->kind) {
 			case Node::CALL: {
+				arg_set.clear();
 				auto fn_type = node->call.args[0].type();
 				size_t first_parm = fn_type->kind == Type::OPAQUE_FN_TY ? 1 : 4;
 				auto& args = fn_type->kind == Type::OPAQUE_FN_TY ? fn_type->opaque_fn.args : fn_type->shader_fn.args;
