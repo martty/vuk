@@ -39,7 +39,7 @@ namespace vuk {
 		std::vector<ChainLink*> chains;
 		std::pmr::vector<ChainLink*> child_chains;
 
-		std::vector<std::pair<Buffer, ChainLink*>> bufs;
+		std::vector<std::pair<Resolver::BufferWithOffsetAndSize, ChainLink*>> bufs;
 
 		std::span<ScheduledItem*> transfer_passes, compute_passes, graphics_passes;
 
@@ -135,9 +135,10 @@ namespace vuk {
 		}
 
 		Result<void> build_nodes();
-		Result<void> build_links(std::vector<Node*>& working_set, std::pmr::polymorphic_allocator<std::byte> allocator);
+		Result<void> build_links(Runtime& runtime, std::vector<Node*>& working_set, std::pmr::polymorphic_allocator<std::byte> allocator);
 		template<class It>
-		Result<void> build_links(IRModule* module,
+		Result<void> build_links(Runtime& runtime,
+		                         IRModule* module,
 		                         It start,
 		                         It end,
 		                         std::pmr::vector<Ref>& pass_reads,
@@ -393,9 +394,9 @@ namespace vuk {
 		} else if (t->is_bufferlike_view()) {
 			if (axis == 0) {
 				auto& sliced = *static_cast<Buffer<>*>(dst);
-				sliced.offset += start;
+				sliced.ptr += start;
 				if (count != Range::REMAINING) {
-					sliced.size = count;
+					sliced.sz_bytes = count;
 				}
 			} else {
 				assert(0);
@@ -501,7 +502,7 @@ namespace vuk {
 		}
 		case Node::CONSTRUCT: {
 			if (ref.type()->is_bufferlike_view()) {
-				auto& bound = constant<Buffer<>>(ref.node->construct.args[0]);
+				auto& bound = constant<BufferCreateInfo>(ref.node->construct.args[0]);
 				set_if_available(&bound.size, ref.node->construct.args[1]);
 				return { expected_value, RefOrValue::from_value(&bound, ref) };
 			} else if (ref.type()->hash_value == current_module->types.builtin_image) {
@@ -636,8 +637,6 @@ namespace vuk {
 	std::vector<std::string_view> arg_names(Type* t);
 
 	std::string format_graph_message(Level level, Node* node, std::string err);
-
-	uint64_t value_identity(Type* base_ty, void* value);
 
 	namespace errors { /*
 		RenderGraphException make_unattached_resource_exception(PassInfo& pass_info, Resource& resource);

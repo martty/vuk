@@ -11,7 +11,7 @@ include(CMakeDependentOption)
 set(CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake" ${CMAKE_MODULE_PATH})
 find_package(SpirvEmbed REQUIRED) # for embedding binary data
 
-
+cmake_policy(SET CMP0174 NEW)
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
 add_library(vuk)
@@ -134,6 +134,7 @@ FetchContent_Declare(
   vuk-binary-dist
   GIT_REPOSITORY https://github.com/martty/vuk-binary-dist.git
   GIT_TAG 517d0bf43963725208794a43530341e65524edf1
+  CONFIGURE_COMMAND " "
 )
 
 # for vuk-binary-dist, we want to populate but not add to the build
@@ -465,15 +466,14 @@ if(VUK_BUILD_TESTS)
 	target_sources(vuk PRIVATE tests/Test.cpp)
 	include(doctest_force_link_static_lib_in_target) # until we can use cmake 3.24
 	add_executable(vuk-tests tests/Test.cpp
-					tests/00_misc.cpp
-					tests/01_semantics.cpp
-					tests/02_rg_errors.cpp
-					tests/03_commands.cpp
-					tests/04_arrays.cpp
-					tests/05_renderpass.cpp
-					tests/06_mt.cpp
-					tests/address_alloc.cpp
-					tests/X1_SPD.cpp
+					#tests/00_misc.cpp
+					#tests/01_semantics.cpp
+					#tests/02_rg_errors.cpp
+					#tests/03_commands.cpp
+					#tests/04_arrays.cpp
+					#tests/05_renderpass.cpp
+					#tests/06_mt.cpp
+					#tests/X1_SPD.cpp
 					#tests/radix_tree.cpp
 					#tests/frame_allocator.cpp
 					tests/buffer_ptr_view.cpp

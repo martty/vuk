@@ -745,11 +745,6 @@ namespace vuk {
 			size_t union_tag_type_counter = 0;
 
 			// TYPES
-			std::shared_ptr<Type> make_void_ty() {
-				auto t = new Type{ .kind = Type::VOID_TY };
-				return emplace_type(std::shared_ptr<Type>(t));
-			}
-
 			std::shared_ptr<Type> make_imbued_ty(std::shared_ptr<Type> ty, Access access) {
 				auto t = new Type{ .kind = Type::IMBUED_TY, .size = ty->size, .imbued = { .access = access } };
 				t->imbued.T = &t->child_types.emplace_back(ty);

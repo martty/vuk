@@ -238,17 +238,6 @@ namespace vuk {
 		void set_with_extract(Ref construct, Ref src_composite, uint64_t index) {
 			current_module->set_value(construct, index, current_module->make_extract(src_composite, index));
 		}
-
-		auto implicit_view()
-		  requires std::is_base_of_v<ptr_base, T>
-		{
-			using inner_T = typename std::remove_extent_t<typename T::pointed_T>;
-			std::array args = { get_head(), current_module->make_get_allocation_size(get_head()) };
-			auto imp_view = current_module->make_construct(to_IR_type<view<inner_T>>(), nullptr, args);
-			auto vval = Value<view<inner_T>>{ make_ext_ref(imp_view, { node }) };
-			node->deps.push_back(vval.node);
-			return std::move(vval);
-		}
 	};
 
 	template<class T = void, class... Ctrs>

@@ -624,41 +624,6 @@ public:
 		return { make_ext_ref(ref) };
 	}
 
-	template<class T>
-	[[nodiscard]] inline val_view<T> discard_buf(Name name, ptr<T> buf, VUK_CALLSTACK) {
-		Ref ref = current_module->make_constant(buf);
-		std::array args = { ref, current_module->make_get_allocation_size(ref) };
-		ref = current_module->make_construct(to_IR_type<view<T>>(), nullptr, args);
-		current_module->name_output(ref, name.c_str());
-		current_module->set_source_location(ref.node, VUK_CALL);
-		return { make_ext_ref(ref) };
-	}
-
-	template<class T = byte>
-	[[nodiscard]] inline val_ptr<BufferLike<T>> declare_ptr(Name name, BufferCreateInfo bci = {}, VUK_CALLSTACK) {
-		std::array<Ref, 3> args = {};
-		if (bci.memory_usage != BufferCreateInfo{}.memory_usage) {
-			args[0] = current_module->make_constant(&bci.memory_usage);
-		} else {
-			args[0] =
-			    current_module->make_placeholder(to_IR_type<std::remove_cvref_t<decltype(std::get<0>(erased_tuple_adaptor<BufferCreateInfo>::member_types))>>());
-		}
-		if (bci.size != BufferCreateInfo{}.size) {
-			args[1] = current_module->make_constant(&bci.size);
-		} else {
-			args[1] =
-			    current_module->make_placeholder(to_IR_type<std::remove_cvref_t<decltype(std::get<1>(erased_tuple_adaptor<BufferCreateInfo>::member_types))>>());
-		}
-		// don't provide this yet
-		args[2] = current_module->make_constant(&bci.alignment);
-
-		Ref bci_ref = current_module->make_construct(to_IR_type<BufferCreateInfo>(), new BufferCreateInfo{ bci }, args);
-		Ref ref = current_module->make_allocate(current_module->types.make_pointer_ty(to_IR_type<T>()), bci_ref);
-		current_module->name_output(ref, name.c_str());
-		current_module->set_source_location(ref.node, VUK_CALL);
-		return { make_ext_ref(ref) };
-	}
-
 	template<class T = byte>
 	[[nodiscard]] inline Value<Buffer<T>> declare_buf(Name name, BufferCreateInfo bci = {}, VUK_CALLSTACK) {
 		std::array<Ref, 3> args = {};
@@ -694,17 +659,6 @@ public:
 		current_module->name_output(ref, name.c_str());
 		current_module->set_source_location(ref.node, VUK_CALL);
 		return { std::move(ext_ref) };
-	}
-
-	template<class T>
-	[[nodiscard]] inline val_view<T> acquire_buf(Name name, ptr<T> p, Access access, VUK_CALLSTACK) {
-		assert(p);
-		Ref ref = current_module->acquire(to_IR_type<ptr<T>>(), nullptr, p);
-		std::array args = { ref, current_module->make_get_allocation_size(ref) };
-		ref = current_module->make_construct(to_IR_type<view<T>>(), nullptr, args);
-		current_module->name_output(ref, name.c_str());
-		current_module->set_source_location(ref.node, VUK_CALL);
-		return { make_ext_ref(ref) };
 	}
 
 	template<class T>

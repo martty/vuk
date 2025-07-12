@@ -21,6 +21,12 @@ namespace vuk {
 			size_t offset;
 		};
 
+		struct BufferWithOffsetAndSize {
+			VkBuffer buffer;
+			size_t offset;
+			size_t size;
+		};
+
 		AllocationEntry& resolve_ptr(ptr_base ptr);
 		BufferWithOffset ptr_to_buffer_offset(ptr_base ptr);
 		ViewEntry& resolve_view(generic_view_base view);
@@ -70,7 +76,7 @@ namespace vuk {
 			return *(reinterpret_cast<std::remove_extent_t<UnwrappedT>*>(ae.host_ptr + offset) + index);
 		}
 
-		ptr operator+(size_t offset)
+		ptr operator+(size_t offset) const
 		  requires(!std::is_same_v<UnwrappedT, void>)
 		{
 			return { device_address + offset * sizeof(UnwrappedT) };
@@ -150,7 +156,7 @@ namespace vuk {
 	/// @brief A contiguous portion of GPU-visible memory
 	template<class Type, class... Constraints>
 	struct view<BufferLike<Type>, Constraints...> {
-		ptr<Type> ptr;
+		ptr<BufferLike<Type>> ptr;
 		size_t sz_bytes;
 
 		view() = default;
@@ -204,8 +210,12 @@ namespace vuk {
 		}
 
 		/// @brief Create a new view that is a subset of the original
-		[[nodiscard]] view<BufferLike<Type>> subview(VkDeviceSize offset, VkDeviceSize new_count) const {
-			assert(offset + new_count <= count());
+		[[nodiscard]] view<BufferLike<Type>> subview(VkDeviceSize offset, VkDeviceSize new_count = ~(0ULL)) const {
+			if (new_count == ~0ULL) {
+				new_count = count() - offset;
+			} else {
+				assert(offset + new_count <= count());
+			}
 			return { ptr + offset, new_count };
 		}
 

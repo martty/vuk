@@ -258,7 +258,7 @@ namespace vuk {
 		/// @brief Set name of the underlying VMA allocation
 		/// @param dst Destination buffer
 		/// @param name Name of the allocation
-		void set_allocation_name(Buffer& dst, Name name);
+		//void set_allocation_name(Buffer& dst, Name name);
 		
 		/// @brief Allocate framebuffers from this Allocator
 		/// @param dst Destination span to place allocated framebuffers into

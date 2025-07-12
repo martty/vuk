@@ -61,9 +61,9 @@ namespace vuk::extra {
 
 	Value<ImageAttachment> ImGui_ImplVuk_Render(Allocator& allocator, Value<ImageAttachment> target, ImGuiData& data) {
 		auto draw_data = ImGui::GetDrawData();
-		auto reset_render_state = [](const ImGuiData& data, CommandBuffer& command_buffer, ImDrawData* draw_data, Buffer vertex, Buffer index) {
+		auto reset_render_state = [](const ImGuiData& data, CommandBuffer& command_buffer, ImDrawData* draw_data, Buffer<> vertex, Buffer<> index) {
 			command_buffer.bind_image(0, 0, *data.font_image_view).bind_sampler(0, 0, data.font_sci);
-			if (index.size > 0) {
+			if (index.count() > 0) {
 				command_buffer.bind_index_buffer(index, sizeof(ImDrawIdx) == 2 ? IndexType::eUint16 : IndexType::eUint32);
 			}
 			command_buffer.bind_vertex_buffer(0, vertex, 0, Packed{ Format::eR32G32Sfloat, Format::eR32G32Sfloat, Format::eR8G8B8A8Unorm });
@@ -88,11 +88,11 @@ namespace vuk::extra {
 		size_t vtx_dst = 0, idx_dst = 0;
 		for (int n = 0; n < draw_data->CmdListsCount; n++) {
 			const ImDrawList* cmd_list = draw_data->CmdLists[n];
-			auto imverto = imvert->add_offset(vtx_dst * sizeof(ImDrawVert));
-			auto imindo = imind->add_offset(idx_dst * sizeof(ImDrawIdx));
+			auto imverto = imvert->subview(vtx_dst * sizeof(ImDrawVert));
+			auto imindo = imind->subview(idx_dst * sizeof(ImDrawIdx));
 
-			memcpy(imverto.mapped_ptr, cmd_list->VtxBuffer.Data, cmd_list->VtxBuffer.Size * sizeof(ImDrawVert));
-			memcpy(imindo.mapped_ptr, cmd_list->IdxBuffer.Data, cmd_list->IdxBuffer.Size * sizeof(ImDrawIdx));
+			memcpy(&imverto[0], cmd_list->VtxBuffer.Data, cmd_list->VtxBuffer.Size * sizeof(ImDrawVert));
+			memcpy(&imindo[0], cmd_list->IdxBuffer.Data, cmd_list->IdxBuffer.Size * sizeof(ImDrawIdx));
 
 			vtx_dst += cmd_list->VtxBuffer.Size;
 			idx_dst += cmd_list->IdxBuffer.Size;

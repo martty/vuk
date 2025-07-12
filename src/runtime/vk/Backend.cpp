@@ -182,8 +182,8 @@ namespace vuk {
 		case Node::MATH_BINARY: {
 			assert(0);
 		}
-		case Node::CONSTRUCT: { // when encountering a CONSTRUCT, allocate the thing if needed
-			if (node->type[0]->hash_value == current_module->types.builtin_buffer) {
+		case Node::CONSTRUCT: {
+			if (node->type[0]->is_bufferlike_view()) {
 				fmt::format_to(std::back_inserter(line), "construct<buffer> ");
 			} else if (node->type[0]->hash_value == current_module->types.builtin_image) {
 				fmt::format_to(std::back_inserter(line), "construct<image> ");
@@ -223,12 +223,12 @@ namespace vuk {
 		case Node::ACQUIRE: {
 			fmt::format_to(std::back_inserter(line), "acquire<");
 			for (size_t i = 0; i < node->acquire.values.size(); i++) {
-				if (node->type[i]->hash_value == current_module->types.builtin_buffer) {
+				if (node->type[i]->is_bufferlike_view()) {
 					fmt::format_to(std::back_inserter(line), "buffer");
 				} else if (node->type[i]->hash_value == current_module->types.builtin_image) {
 					fmt::format_to(std::back_inserter(line), "image");
 				} else if (node->type[0]->kind == Type::ARRAY_TY) {
-					fmt::format_to(std::back_inserter(line), "{}[]", (*node->type[0]->array.T)->hash_value == current_module->types.builtin_buffer ? "buffer" : "image");
+					fmt::format_to(std::back_inserter(line), "{}[]", (*node->type[0]->array.T)->is_bufferlike_view() ? "buffer" : "image");
 				}
 				if (i + 1 < node->acquire.values.size()) {
 					fmt::format_to(std::back_inserter(line), ", ");
@@ -280,6 +280,12 @@ namespace vuk {
 		} break;
 		case Node::COMPILE_PIPELINE: {
 			print_args_to_string(std::span(&node->compile_pipeline.src, 1), line);
+		} break;
+		case Node::ALLOCATE: {
+			print_args_to_string(std::span(&node->allocate.src, 1), line);
+		} break;
+		case Node::GET_ALLOCATION_SIZE: {
+			print_args_to_string({ &node->get_allocation_size.ptr, 1 }, line);
 		} break;
 		}
 	}
@@ -833,34 +839,6 @@ namespace vuk {
 		VkSemaphore acquire_sema;
 	};
 
-	uint64_t value_identity(Type* base_ty, void* value) {
-		uint64_t key = 0;
-		if (base_ty->hash_value == current_module->types.builtin_image) {
-			auto& img_att = *reinterpret_cast<ImageAttachment*>(value);
-			key = reinterpret_cast<uint64_t>(img_att.image.image);
-		} else if (base_ty->kind == Type::POINTER_TY) {
-			key = reinterpret_cast<ptr_base*>(value)->device_address;
-		} else if (base_ty->is_bufferlike_view()) {
-			auto& v = *reinterpret_cast<view<BufferLike<void>>*>(value);
-			key = v.ptr.device_address;
-			hash_cobine(key, v.sz_bytes); // TODO: look at what we did for boofs - probably key on VkBuffer
-		} else if (base_ty->kind == Type::ARRAY_TY) {
-			if (base_ty->array.count > 0) { // for an array, we key off the the first element, as the array syncs together
-				auto elem_ty = base_ty->array.T->get();
-				auto elems = reinterpret_cast<std::byte*>(value);
-				return value_identity(elem_ty, elems);
-			} else { // zero-len arrays
-				return 0;
-			}
-		} else if (base_ty->hash_value == current_module->types.builtin_sampled_image) { // only image syncs
-			auto& img_att = reinterpret_cast<SampledImage*>(value)->ia;
-			key = reinterpret_cast<uint64_t>(img_att.image.image);
-		} else {
-			return 0;
-		}
-		return key;
-	}
-
 	struct Recorder {
 		Recorder(Allocator alloc, ProfilingCallbacks* callbacks, std::pmr::vector<Ref>& pass_reads) :
 		    ctx(alloc.get_context()),
@@ -910,6 +888,35 @@ namespace vuk {
 			return nullptr;
 		}
 
+		
+	uint64_t value_identity(Type* base_ty, void* value) {
+			uint64_t key = 0;
+			if (base_ty->hash_value == current_module->types.builtin_image) {
+				auto& img_att = *reinterpret_cast<ImageAttachment*>(value);
+				key = reinterpret_cast<uint64_t>(img_att.image.image);
+			} else if (base_ty->kind == Type::POINTER_TY) {
+				key = reinterpret_cast<ptr_base*>(value)->device_address;
+			} else if (base_ty->is_bufferlike_view()) {
+				auto buf = reinterpret_cast<Buffer<>*>(value);
+				auto bo = alloc.get_context().ptr_to_buffer_offset(buf->ptr);
+				key = reinterpret_cast<uint64_t>(bo.buffer);
+			} else if (base_ty->kind == Type::ARRAY_TY) {
+				if (base_ty->array.count > 0) { // for an array, we key off the the first element, as the array syncs together
+					auto elem_ty = base_ty->array.T->get();
+					auto elems = reinterpret_cast<std::byte*>(value);
+					return value_identity(elem_ty, elems);
+				} else { // zero-len arrays
+					return 0;
+				}
+			} else if (base_ty->hash_value == current_module->types.builtin_sampled_image) { // only image syncs
+				auto& img_att = reinterpret_cast<SampledImage*>(value)->ia;
+				key = reinterpret_cast<uint64_t>(img_att.image.image);
+			} else {
+				return 0;
+			}
+			return key;
+		}
+
 		void init_sync(Type* base_ty, StreamResourceUse src_use, void* value, bool enforce_unique = true) {
 			if (base_ty->kind == Type::ARRAY_TY) { // for an array, we init all elements
 				auto elem_ty = base_ty->array.T->get();
@@ -934,9 +941,11 @@ namespace vuk {
 			if (base_ty->hash_value == current_module->types.builtin_image) {
 				auto& img_att = *reinterpret_cast<ImageAttachment*>(value);
 				psru.subrange.image = { img_att.base_level, img_att.level_count, img_att.base_layer, img_att.layer_count };
-			} else if (base_ty->hash_value == current_module->types.builtin_buffer) { // for buffers, we allows underlying resource to alias
-				auto buf = reinterpret_cast<Buffer*>(value);
-				psru.subrange.buffer = { buf->offset, buf->size };
+			} else if (base_ty->is_bufferlike_view()) { // for buffers, we allow underlying resource to alias
+				auto buf = reinterpret_cast<Buffer<>*>(value);
+				auto bo = alloc.get_context().ptr_to_buffer_offset(buf->ptr);
+				// TODO: here we need to get the offset into the VkBuffer
+				psru.subrange.buffer = { bo.offset, buf->sz_bytes };
 
 				auto [v, succ] = last_modify.try_emplace(key, &psru);
 				if (!succ) {
@@ -1049,13 +1058,14 @@ namespace vuk {
 					found->subrange.image.base_layer = isection.base_layer;
 					found->subrange.image.layer_count = isection.layer_count;
 				}
-			} else if (base_ty->kind == Type::POINTER_TY || base_ty->is_bufferlike_view()) {
-				auto& att = *reinterpret_cast<Buffer*>(value);
+			} else if (base_ty->is_bufferlike_view()) {
+				auto& att = *reinterpret_cast<Buffer<>*>(value);
 				if (att.size == 0) {
 					return;
 				}
+				auto bo = alloc.get_context().ptr_to_buffer_offset(att.ptr);
 				std::vector<Subrange::Buffer, inline_alloc<Subrange::Buffer, 1024>> work_queue(this->arena);
-				work_queue.emplace_back(Subrange::Buffer{ att.offset, att.size });
+				work_queue.emplace_back(Subrange::Buffer{ bo.offset, att.sz_bytes });
 
 				while (work_queue.size() > 0) {
 					Subrange::Buffer dst_range = work_queue.back();
@@ -1344,59 +1354,14 @@ namespace vuk {
 					if (arg.node->kind == Node::PLACEHOLDER) {
 						return { expected_error, RenderGraphException(format_message(Level::eError, item, "': argument not set or inferrable\n")) };
 					}
-					if (node->type[0]->hash_value == current_module->types.builtin_buffer || node->type[0]->hash_value == current_module->types.builtin_image) {
+					if (node->type[0]->is_bufferlike_view() || node->type[0]->hash_value == current_module->types.builtin_image) {
 						if (arg.node->kind != Node::CONSTANT) {
 							return { expected_error, RenderGraphException(format_message(Level::eError, item, "': argument(s) not constant evaluatable\n")) };
 						}
 					}
 				}
-				if (node->type[0]->kind == Type::POINTER_TY) {
-					auto& ptr = constant<ptr_base>(node->construct.args[0]);
-					sched.done(node, host_stream, ptr);
-					recorder.init_sync(node->type[0].get(), { to_use(eNone), host_stream }, sched.get_value(first(node)));
-				} else if (node->type[0]->hash_value == current_module->types.builtin_image) {
-					auto& attachment = constant<ImageAttachment>(node->construct.args[0]);
-					// set iv type
-					if (attachment.image_view == ImageView{}) {
-						if (attachment.view_type == ImageViewType::eInfer && attachment.layer_count != VK_REMAINING_ARRAY_LAYERS) {
-							if (attachment.image_type == ImageType::e1D) {
-								if (attachment.layer_count == 1) {
-									attachment.view_type = ImageViewType::e1D;
-								} else {
-									attachment.view_type = ImageViewType::e1DArray;
-								}
-							} else if (attachment.image_type == ImageType::e2D) {
-								if (attachment.layer_count == 1) {
-									attachment.view_type = ImageViewType::e2D;
-								} else {
-									attachment.view_type = ImageViewType::e2DArray;
-								}
-							} else if (attachment.image_type == ImageType::e3D) {
-								if (attachment.layer_count == 1) {
-									attachment.view_type = ImageViewType::e3D;
-								} else {
-									attachment.view_type = ImageViewType::e2DArray;
-								}
-							}
-						}
-					}
-
-					if (!attachment.image) {
-						auto allocator = node->construct.allocator ? *node->construct.allocator : alloc;
-						attachment.usage |= impl->compute_usage(&first(node).link());
-						assert(attachment.usage != ImageUsageFlags{});
-						auto img = allocate_image(allocator, attachment);
-						if (!img) {
-							return img;
-						}
-						attachment.image = **img;
-						if (node->debug_info && node->debug_info->result_names.size() > 0 && !node->debug_info->result_names[0].empty()) {
-							ctx.set_name(attachment.image.image, node->debug_info->result_names[0].c_str());
-						}
-					}
-					recorder.init_sync(node->type[0].get(), { to_use(eNone), host_stream }, &attachment);
-					sched.done(node, host_stream, attachment);
-				} else if (node->type[0]->hash_value == current_module->types.builtin_swapchain) {
+				assert(node->type[0]->kind != Type::POINTER_TY);
+				if (node->type[0]->hash_value == current_module->types.builtin_swapchain) {
 					/* no-op */
 					sched.done(node, host_stream, sched.get_value(node->construct.args[0]));
 					recorder.init_sync(node->type[0].get(), { to_use(eNone), host_stream }, sched.get_value(first(node)));
@@ -1455,81 +1420,43 @@ namespace vuk {
 					node->construct.args[0].node->constant.value = arr_mem;
 					sched.done(node, host_stream, (void*)arr_mem);
 				} else {
-					else {
-						for (size_t i = 1; i < node->construct.args.size(); i++) {
-							auto arg_ty = node->construct.args[i].type();
-							auto& parm = node->construct.args[i];
+					for (size_t i = 1; i < node->construct.args.size(); i++) {
+						auto arg_ty = node->construct.args[i].type();
+						auto& parm = node->construct.args[i];
 
-							recorder.add_sync(sched.base_type(parm).get(), sched.get_dependency_info(parm, arg_ty.get(), RW::eWrite, nullptr), sched.get_value(parm));
-						}
-
-						auto result_ty = node->type[0].get();
-						// allocate type
-						void* result = new char[result_ty->size];
-						// loop args and resolve them
-						std::vector<void*> argvals;
-
-						auto res = [&]() -> Result<void, CannotBeConstantEvaluated> {
-							for (size_t i = 1; i < node->construct.args.size(); i++) {
-								auto& parm = node->construct.args[i];
-								if (parm.node->execution_info) {
-									argvals.push_back(sched.get_value(parm));
-									continue;
-								}
-								auto result = eval2(parm);
-								// the evaluation failed
-								if (!result) {
-									return result;
-								}
-								// the evaluation did not produce a value
-								if (result->is_ref) {
-									return { expected_error, CannotBeConstantEvaluated{ node->construct.args[i] } };
-								}
-								argvals.push_back(result->value);
-								if (result->owned) { // TODO: what is this?
-									delete[] reinterpret_cast<char*>(result->value);
-								};
-							}
-							return { expected_value };
-						}();
-						if (!res) {
-							if (res.error().ref.node->kind == Node::PLACEHOLDER) {
-								return { expected_error,
-									       RenderGraphException(format_message(Level::eError, node, node->construct.args, "': argument(s) not set or inferrable\n")) };
-							} else {
-								return { expected_error,
-									       RenderGraphException(format_message(Level::eError, node, node->construct.args, "': argument(s) not constant evaluatable\n")) };
-							}
-						}
-
-						result_ty->composite.construct(result, argvals);
-#ifdef VUK_DUMP_EXEC
-						print_results(node);
-						fmt::print(" = construct<{}> ", Type::to_string(result_ty));
-						print_args(node->construct.args.subspan(1));
-						fmt::print("\n");
-#endif
-						sched.done(node, host_stream, result);
-						recorder.init_sync(node->type[0].get(),
-						                   { to_use(eNone), host_stream },
-						                   sched.get_value(first(node)),
-						                   false); // TODO: can we figure out when it is safe known aliasing?
+						recorder.add_sync(sched.base_type(parm).get(), sched.get_dependency_info(parm, arg_ty.get(), RW::eWrite, nullptr), sched.get_value(parm));
 					}
-					else {
-						for (auto& parm : node->construct.args) {
-							sched.schedule_dependency(parm, RW::eRead);
+
+					auto result_ty = node->type[0].get();
+					// allocate type
+					void* result = new char[result_ty->size];
+					// loop args and resolve them
+					std::vector<void*> argvals;
+					for (size_t i = 1; i < node->construct.args.size(); i++) {
+						auto& parm = node->construct.args[i];
+						if (parm.node->execution_info) {
+							argvals.push_back(sched.get_value(parm));
+							continue;
 						}
 					}
 
-					break;
+					result_ty->composite.construct(result, argvals);
+					sched.done(node, host_stream, result);
+					recorder.init_sync(node->type[0].get(),
+					                   { to_use(eNone), host_stream },
+					                   sched.get_value(first(node)),
+					                   false); // TODO: can we figure out when it is safe known aliasing?
 				}
+
+				break;
+			}
 
 			// we can allocate ptrs and generic views
 			// TODO: image ptrs and generic views
 			case Node::ALLOCATE: {
-				if (sched.process(item)) {
-					auto allocator = node->allocate.allocator ? *node->allocate.allocator : alloc;
+				auto allocator = node->allocate.allocator ? *node->allocate.allocator : alloc;
 
+				if (node->type[0]->is_bufferlike_view()) {
 					assert(node->type[0]->kind == Type::POINTER_TY);
 					auto pointed_ty = *node->type[0]->pointer.T;
 
@@ -1539,17 +1466,50 @@ namespace vuk {
 						return res;
 					}
 					allocator.deallocate(std::span{ static_cast<ptr_base*>(&buf), 1 });
-#ifdef VUK_DUMP_EXEC
-					print_results(node);
-					fmt::print(" = allocate<{}> ", Type::to_string(node->type[0].get()));
-					print_args({ &node->allocate.src, 1 });
-					fmt::print("\n");
-#endif
 					sched.done(node, host_stream, buf);
-					recorder.init_sync(node->type[0].get(), { to_use(eNone), host_stream }, sched.get_value(first(node)));
+				} else if (node->type[0]->hash_value == current_module->types.builtin_image) {
+					auto& attachment = constant<ImageAttachment>(node->construct.args[0]);
+					// set iv type
+					if (attachment.image_view == ImageView{}) {
+						if (attachment.view_type == ImageViewType::eInfer && attachment.layer_count != VK_REMAINING_ARRAY_LAYERS) {
+							if (attachment.image_type == ImageType::e1D) {
+								if (attachment.layer_count == 1) {
+									attachment.view_type = ImageViewType::e1D;
+								} else {
+									attachment.view_type = ImageViewType::e1DArray;
+								}
+							} else if (attachment.image_type == ImageType::e2D) {
+								if (attachment.layer_count == 1) {
+									attachment.view_type = ImageViewType::e2D;
+								} else {
+									attachment.view_type = ImageViewType::e2DArray;
+								}
+							} else if (attachment.image_type == ImageType::e3D) {
+								if (attachment.layer_count == 1) {
+									attachment.view_type = ImageViewType::e3D;
+								} else {
+									attachment.view_type = ImageViewType::e2DArray;
+								}
+							}
+						}
+					}
+					if (!attachment.image) {
+						attachment.usage |= impl->compute_usage(&first(node).link());
+						assert(attachment.usage != ImageUsageFlags{});
+						auto img = allocate_image(allocator, attachment);
+						if (!img) {
+							return img;
+						}
+						attachment.image = **img;
+						if (node->debug_info && node->debug_info->result_names.size() > 0 && !node->debug_info->result_names[0].empty()) {
+							ctx.set_name(attachment.image.image, node->debug_info->result_names[0].c_str());
+						}
+					}
+					sched.done(node, host_stream, attachment);
 				} else {
-					sched.schedule_dependency(node->allocate.src, RW::eRead);
+					assert(false); // nothing else can be allocated
 				}
+				recorder.init_sync(node->type[0].get(), { to_use(eNone), host_stream }, sched.get_value(first(node)));
 
 				break;
 			}
@@ -1576,8 +1536,8 @@ namespace vuk {
 						// here: figuring out which allocator to use to make image views for the RP and then making them
 						if (is_framebuffer_attachment(access)) {
 							auto def = eval(parm);
-							auto allocator = def.holds_value() && def->ref && def->ref.node->kind == Node::CONSTRUCT && def->ref.node->construct.allocator
-							                     ? *def->ref.node->construct.allocator
+							auto allocator = def.holds_value() && def->ref && def->ref.node->kind == Node::ALLOCATE && def->ref.node->allocate.allocator
+							                     ? *def->ref.node->allocate.allocator
 							                     : alloc;
 							auto& img_att = sched.get_value<ImageAttachment>(parm);
 							if (img_att.view_type == ImageViewType::eInfer || img_att.view_type == ImageViewType::eCube) { // framebuffers need 2D or 2DArray views
@@ -1693,10 +1653,11 @@ namespace vuk {
 							cobuf.bind_image(set, binding->binding, *reinterpret_cast<ImageAttachment*>(val));
 							break;
 						case DescriptorType::eUniformBuffer:
-						case DescriptorType::eStorageBuffer:
-							auto& v = *reinterpret_cast<view<BufferLike<byte>>*>(val);
+						case DescriptorType::eStorageBuffer: {
+							auto& v = *reinterpret_cast<Buffer<>*>(val);
 							cobuf.bind_buffer(set, binding->binding, v);
 							break;
+						}
 						case DescriptorType::eSampler:
 							cobuf.bind_sampler(set, binding->binding, *reinterpret_cast<SamplerCreateInfo*>(val));
 							break;
@@ -1716,7 +1677,7 @@ namespace vuk {
 					if (pbi->reflection_info.push_constant_ranges.size() > 0) {
 						auto& pcr = pbi->reflection_info.push_constant_ranges[0];
 						auto base_ty = current_module->types.make_pointer_ty(current_module->types.u32());
-						for (auto j = 0; j < pcr.num_members; j++) {
+						for (auto parm_idx = 0; parm_idx < pcr.num_members; parm_idx++) {
 							auto& parm = node->call.args[parm_idx];
 							auto val = sched.get_value(parm);
 							auto ptr = *reinterpret_cast<ptr_base*>(val);
@@ -1755,7 +1716,7 @@ namespace vuk {
 				Stream* dst_stream;
 				Swapchain* swp = nullptr;
 				if (node->release.dst_domain == DomainFlagBits::ePE) {
-					swp = reinterpret_cast<Swapchain*>(image_to_swapchain.at(value_identity(node->release.src[0].type().get(), sched.get_value(node->release.src[0]))));
+					swp = reinterpret_cast<Swapchain*>(image_to_swapchain.at(recorder.value_identity(node->release.src[0].type().get(), sched.get_value(node->release.src[0]))));
 					auto it = std::find_if(pe_streams.begin(), pe_streams.end(), [=](auto& pe_stream) { return pe_stream.swp == swp; });
 					assert(it != pe_streams.end());
 					dst_stream = &*it;
@@ -1842,7 +1803,7 @@ namespace vuk {
 
 				auto pe_stream = &pe_streams.emplace_back(alloc, swp, acquire_sema);
 				sched.done(node, pe_stream, swp.images[swp.image_index]);
-				image_to_swapchain.emplace(value_identity(node->type[0].get(), &swp.images[swp.image_index]), &swp);
+				image_to_swapchain.emplace(recorder.value_identity(node->type[0].get(), &swp.images[swp.image_index]), &swp);
 				auto& lu = recorder.last_use(node->type[0].get(), &swp.images[swp.image_index]);
 				lu = StreamResourceUse{ { PipelineStageFlagBits::eAllCommands, AccessFlagBits::eNone, ImageLayout::eUndefined }, pe_stream };
 
@@ -1923,109 +1884,100 @@ namespace vuk {
 				break;
 			}
 			case Node::GET_ALLOCATION_SIZE: {
-				if (sched.process(item)) {
-#ifdef VUK_DUMP_EXEC
-					print_results(node);
-					fmt::print(" = get_allocation_size ");
-					print_args({ &node->get_allocation_size.ptr, 1 });
-					fmt::print("\n");
-#endif
-					auto ptr = sched.get_value<ptr_base>(node->get_allocation_size.ptr);
-					auto size = alloc.get_context().resolve_ptr(ptr).buffer.size;
-					sched.done(node, item.scheduled_stream, size); // converge doesn't execute
-				} else {
-					sched.schedule_new(node->get_allocation_size.ptr.node);
-				}
+				auto ptr = sched.get_value<ptr_base>(node->get_allocation_size.ptr);
+				auto size = alloc.get_context().resolve_ptr(ptr).buffer.size;
+
+				sched.done(node, item.scheduled_stream, size);
 				break;
 			}
 			default:
 				assert(0);
 			}
+		}
+
+		// post-run: checks and cleanup
+		std::vector<std::shared_ptr<IRModule>> modules;
+		for (auto& depnode : impl->depnodes) {
+			modules.push_back(depnode->source_module);
+		}
+		std::sort(modules.begin(), modules.end());
+		modules.erase(std::unique(modules.begin(), modules.end()), modules.end());
+
+		impl->depnodes.clear();
+
+		// populate values and last_use
+		for (auto& [def_link, lr] : impl->live_ranges) {
+			assert(def_link);
+			assert(lr.undef_link);
+			if (def_link->def.node->kind == Node::CONSTANT) {
+				continue;
 			}
 
-			// post-run: checks and cleanup
-			std::vector<std::shared_ptr<IRModule>> modules;
-			for (auto& depnode : impl->depnodes) {
-				modules.push_back(depnode->source_module);
-			}
-			std::sort(modules.begin(), modules.end());
-			modules.erase(std::unique(modules.begin(), modules.end()), modules.end());
+			// get final value
+			Ref final_use = lr.undef_link->def;
+			assert(!final_use.node->rel_acq || final_use.node->rel_acq->status != Signal::Status::eDisarmed);
+			lr.last_value = sched.get_value(final_use);
+			lr.last_use = recorder.last_use(Type::stripped(final_use.type()).get(), lr.last_value);
 
-			impl->depnodes.clear();
-
-			// populate values and last_use
-			for (auto& [def_link, lr] : impl->live_ranges) {
-				assert(def_link);
-				assert(lr.undef_link);
-				if (def_link->def.node->kind == Node::CONSTANT) {
-					continue;
-				}
-
-				// get final value
-				Ref final_use = lr.undef_link->def;
-				assert(!final_use.node->rel_acq || final_use.node->rel_acq->status != Signal::Status::eDisarmed);
-				lr.last_value = sched.get_value(final_use);
-				lr.last_use = recorder.last_use(Type::stripped(final_use.type()).get(), lr.last_value);
-
-				// get final signal
-				AcquireRelease* last_signal = nullptr;
-				for (auto link = lr.undef_link; link; link = link->prev) {
-					if (link->def.node->rel_acq) {
-						last_signal = link->def.node->rel_acq;
-						break;
-					}
-				}
-
-				// put the values on the nodes
-				for (auto link = def_link; link; link = link->next) {
-					auto& ref = link->def;
-					assert(ref);
-					assert(ref.node->kind == Node::ACQUIRE);
-					memcpy(ref.node->acquire.values[ref.index], lr.last_value, ref.node->type[ref.index]->size);
-					if (ref.node->rel_acq) {
-						ref.node->rel_acq->last_use[ref.index] = lr.last_use;
-					}
-					if (ref.node->rel_acq && last_signal) {
-						ref.node->rel_acq->source = last_signal->source;
-						ref.node->rel_acq->status = last_signal->status;
-					}
+			// get final signal
+			AcquireRelease* last_signal = nullptr;
+			for (auto link = lr.undef_link; link; link = link->prev) {
+				if (link->def.node->rel_acq) {
+					last_signal = link->def.node->rel_acq;
+					break;
 				}
 			}
 
-			for (auto& node : impl->nodes) {
-				// shrink slice acquires
-				if (node->execution_info && node->execution_info->kind == Node::SLICE && node->rel_acq) {
-					for (size_t i = 1; i < node->acquire.values.size(); i++) {
-						current_module->types.destroy(Type::stripped(node->type[i]).get(), node->acquire.values[i]);
-					}
-					node->acquire.values = { node->acquire.values.data(), 1 };
-					node->type = { node->type.data(), 1 };
+			// put the values on the nodes
+			for (auto link = def_link; link; link = link->next) {
+				auto& ref = link->def;
+				assert(ref);
+				assert(ref.node->kind == Node::ACQUIRE);
+				memcpy(ref.node->acquire.values[ref.index], lr.last_value, ref.node->type[ref.index]->size);
+				if (ref.node->rel_acq) {
+					ref.node->rel_acq->last_use[ref.index] = lr.last_use;
 				}
-
-				// reset any nodes we ran
-				node->execution_info = nullptr;
-				node->links = nullptr;
-				node->scheduled_item = nullptr;
-			}
-
-			impl->garbage_nodes.insert(impl->garbage_nodes.end(), current_module->garbage.begin(), current_module->garbage.end());
-			std::sort(impl->garbage_nodes.begin(), impl->garbage_nodes.end());
-			impl->garbage_nodes.erase(std::unique(impl->garbage_nodes.begin(), impl->garbage_nodes.end()), impl->garbage_nodes.end());
-			for (auto& node : impl->garbage_nodes) {
-				current_module->destroy_node(node);
-			}
-
-			current_module->garbage.clear();
-			impl->garbage_nodes.clear();
-
-			for (auto& m : modules) {
-				for (auto& op : m->op_arena) {
-					op.links = nullptr;
+				if (ref.node->rel_acq && last_signal) {
+					ref.node->rel_acq->source = last_signal->source;
+					ref.node->rel_acq->status = last_signal->status;
 				}
 			}
+		}
 
-			current_module->types.collect();
+		for (auto& node : impl->nodes) {
+			// shrink slice acquires
+			if (node->execution_info && node->execution_info->kind == Node::SLICE && node->rel_acq) {
+				for (size_t i = 1; i < node->acquire.values.size(); i++) {
+					current_module->types.destroy(Type::stripped(node->type[i]).get(), node->acquire.values[i]);
+				}
+				node->acquire.values = { node->acquire.values.data(), 1 };
+				node->type = { node->type.data(), 1 };
+			}
 
-			return submit_result;
-		} // namespace vuk
+			// reset any nodes we ran
+			node->execution_info = nullptr;
+			node->links = nullptr;
+			node->scheduled_item = nullptr;
+		}
+
+		impl->garbage_nodes.insert(impl->garbage_nodes.end(), current_module->garbage.begin(), current_module->garbage.end());
+		std::sort(impl->garbage_nodes.begin(), impl->garbage_nodes.end());
+		impl->garbage_nodes.erase(std::unique(impl->garbage_nodes.begin(), impl->garbage_nodes.end()), impl->garbage_nodes.end());
+		for (auto& node : impl->garbage_nodes) {
+			current_module->destroy_node(node);
+		}
+
+		current_module->garbage.clear();
+		impl->garbage_nodes.clear();
+
+		for (auto& m : modules) {
+			for (auto& op : m->op_arena) {
+				op.links = nullptr;
+			}
+		}
+
+		current_module->types.collect();
+
+		return submit_result;
 	} // namespace vuk
+} // namespace vuk

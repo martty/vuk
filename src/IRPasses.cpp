@@ -279,12 +279,13 @@ namespace vuk {
 	// #define VUK_DUMP_SSA
 
 	struct NodeContext {
+		Runtime& runtime;
 		IRModule* module;
 		std::pmr::vector<Ref>& pass_reads;
 		std::pmr::vector<ChainLink*>& child_chains;
 		std::pmr::vector<Node*>& new_nodes;
 		std::pmr::polymorphic_allocator<std::byte> allocator;
-		std::vector<std::pair<Buffer, ChainLink*>> bufs;
+		std::vector<std::pair<Resolver::BufferWithOffsetAndSize, ChainLink*>>& bufs;
 		bool do_ssa;
 
 		std::vector<std::string> debug_stack;
@@ -496,10 +497,10 @@ namespace vuk {
 						add_read(node, parm, i);
 					}
 				}
-
-				if (node->type[0]->kind == Type::ARRAY_TY || node->type[0]->hash_value == current_module->types.builtin_sampled_image || parm.type()->kind == Type::POINTER_TY) {
-					for (size_t i = 1; i < node->construct.args.size(); i++) {
-						auto& parm = node->construct.args[i];
+				for (size_t i = 1; i < node->construct.args.size(); i++) {
+					auto& parm = node->construct.args[i];
+					if (node->type[0]->kind == Type::ARRAY_TY || node->type[0]->hash_value == current_module->types.builtin_sampled_image ||
+					    parm.type()->kind == Type::POINTER_TY) {
 						auto& st_parm = parm;
 						st_parm.link().next = &first(node).link();
 					}
@@ -579,12 +580,13 @@ namespace vuk {
 			case Node::ACQUIRE:
 				for (size_t out = 0; out < node->type.size(); out++) {
 					add_breaking_result(node, out);
-					if (do_ssa && node->type[out]->hash_value == current_module->types.builtin_buffer) {
-						auto& buf = *reinterpret_cast<Buffer*>(node->acquire.values[out]);
-						assert(buf.buffer != VK_NULL_HANDLE);
+					if (do_ssa && node->type[out]->is_bufferlike_view()) {
+						auto& buf = *reinterpret_cast<Buffer<>*>(node->acquire.values[out]);
+						auto bo = runtime.ptr_to_buffer_offset(buf.ptr);
+						assert(bo.buffer != VK_NULL_HANDLE);
 						bool found = false;
 						for (auto& [existing_buf, link] : bufs) {
-							if (buf.buffer == existing_buf.buffer && Range{ buf.offset, buf.size }.intersect({ existing_buf.offset, existing_buf.size })) {
+							if (bo.buffer == existing_buf.buffer && Range{ bo.offset, buf.sz_bytes }.intersect({ existing_buf.offset, existing_buf.size })) {
 								// we will need to union the buffers
 
 								std::array args = { Ref{ node, out }, link->def };
@@ -674,7 +676,7 @@ namespace vuk {
 		}
 	};
 
-	Result<void> RGCImpl::build_links(std::vector<Node*>& working_set, std::pmr::polymorphic_allocator<std::byte> allocator) {
+	Result<void> RGCImpl::build_links(Runtime& runtime, std::vector<Node*>& working_set, std::pmr::polymorphic_allocator<std::byte> allocator) {
 		pass_reads.clear();
 		child_chains.clear();
 
@@ -691,7 +693,7 @@ namespace vuk {
 		}
 
 		std::pmr::vector<Node*> new_nodes;
-		NodeContext nc{ current_module.get(), pass_reads, child_chains, new_nodes, allocator, bufs, false };
+		NodeContext nc{ runtime, current_module.get(), pass_reads, child_chains, new_nodes, allocator, bufs, false };
 
 		for (auto& node : working_set) {
 			nc.process_node_links(node);
@@ -709,7 +711,8 @@ namespace vuk {
 	}
 
 	template<class It>
-	Result<void> RGCImpl::build_links(IRModule* module,
+	Result<void> RGCImpl::build_links(Runtime& runtime,
+	                                  IRModule* module,
 	                                  It start,
 	                                  It end,
 	                                  std::pmr::vector<Ref>& pass_reads,
@@ -719,7 +722,7 @@ namespace vuk {
 		for (auto it = start; it != end; ++it) {
 			allocate_node_links(*it, allocator);
 		}
-		NodeContext nc{ current_module.get(), pass_reads, child_chains, new_nodes, allocator, bufs, true };
+		NodeContext nc{ runtime, current_module.get(), pass_reads, child_chains, new_nodes, allocator, bufs, true };
 
 		for (auto it = start; it != end; ++it) {
 			nc.process_node_links(*it);
@@ -1030,7 +1033,7 @@ namespace vuk {
 				if (parm.type()->kind == Type::ARRAY_TY) {
 					type = (*parm.type()->array.T)->hash_value;
 				}
-				if (type != current_module->types.builtin_buffer && type != current_module->types.builtin_image) {
+				if (!parm.type()->is_bufferlike_view() && type != current_module->types.builtin_image) {
 					break;
 				}
 				auto& link = parm.link();
@@ -1273,7 +1276,7 @@ namespace vuk {
 
 	Result<void> Compiler::validate_duplicated_resource_ref() {
 		RadixTree<bool> memory;
-		std::unordered_map<Buffer, Node*> bufs;
+		std::unordered_map<Buffer<>, Node*> bufs;
 		std::unordered_map<ImageAttachment, Node*> ias;
 		std::unordered_map<Swapchain*, Node*> swps;
 		auto add_one = [&](Type* type, Node* node, void* value) -> std::optional<Node*> {
@@ -1288,21 +1291,13 @@ namespace vuk {
 						return ias.at(*ia);
 					}
 				}
-			} else if (type->hash_value == current_module->types.builtin_buffer) {
-				auto buf = reinterpret_cast<Buffer*>(value);
-				if (buf->buffer != VK_NULL_HANDLE) {
-					auto [_, succ] = bufs.emplace(*buf, node);
-					if (!succ) {
-						return bufs.at(*buf);
-					}
-				}
 			} else if (type->hash_value == current_module->types.builtin_swapchain) {
 				auto swp = reinterpret_cast<Swapchain*>(value);
 				auto [_, succ] = swps.emplace();
 				if (!succ) {
 					return swps.at(swp);
 				}
-			} else { // TODO: it is an array, no val yet
+			} else { // TODO: no val yet for arrays
 			}
 
 			return {};
@@ -1312,11 +1307,7 @@ namespace vuk {
 			switch (node->kind) {
 			case Node::CONSTANT: {
 				bool s = true;
-				if (node->type[0]->kind == Type::POINTER_TY) { // pointers - use implicit view
-					auto& ptr = constant<ptr_base>(first(node));
-					auto& ae = Resolver::per_thread->resolve_ptr(ptr); //TODO: PAV: using per_thread here, shouldn't
-					s = memory.insert_unaligned(ptr.device_address, ae.buffer.size, true);
-				} else if (node->type[0]->is_bufferlike_view()) { // bufferlike views
+				if (node->type[0]->is_bufferlike_view()) { // bufferlike views
 					auto& buf = constant<Buffer<>>(first(node));
 					s = memory.insert_unaligned(buf.ptr.device_address, buf.sz_bytes, true);
 				}
@@ -1354,8 +1345,7 @@ namespace vuk {
 						continue;
 					}
 					fail = add_one(node->type[i].get(), node, node->acquire.values[i]);
-					if (fail && node->type[i].get()->hash_value == current_module->types.builtin_buffer &&
-					    fail.value()->kind == Node::ACQUIRE) { // an acq-acq for buffers, this is allowed
+					if (fail && node->type[i]->is_bufferlike_view() && fail.value()->kind == Node::ACQUIRE) { // an acq-acq for buffers, this is allowed
 						fail = {};
 					}
 				}
@@ -1410,7 +1400,7 @@ namespace vuk {
 					case DescriptorType::eUniformBuffer:
 					case DescriptorType::eStorageBuffer:
 						acc = b->non_writable ? Access::eComputeRead : (b->non_readable ? Access::eComputeWrite : Access::eComputeRW);
-						base_ty = current_module->types.get_builtin_buffer();
+						base_ty = to_IR_type<Buffer<>>();
 						break;
 					case DescriptorType::eSampler:
 						acc = Access::eNone;
@@ -1440,7 +1430,7 @@ namespace vuk {
 
 		std::sort(nodes.begin(), nodes.end(), [](Node* a, Node* b) { return a->index < b->index; });
 		// link with SSA
-		build_links(module, nodes.begin(), nodes.end(), pass_reads, child_chains, allocator);
+		build_links(alloc.get_context(), module, nodes.begin(), nodes.end(), pass_reads, child_chains, allocator);
 		module->link_frontier = module->node_counter;
 		return { expected_value };
 	}
@@ -1643,6 +1633,12 @@ namespace vuk {
 					case Node::COMPILE_PIPELINE: {
 						impl->schedule_dependency(node->compile_pipeline.src, RW::eRead);
 					} break;
+					case Node::ALLOCATE: {
+						impl->schedule_dependency(node->allocate.src, RW::eRead);
+					} break;
+					case Node::GET_ALLOCATION_SIZE: {
+						impl->schedule_dependency(node->get_allocation_size.ptr, RW::eRead);
+					} break;
 					default:
 						VUK_ICE(false);
 						break;
@@ -1716,7 +1712,7 @@ namespace vuk {
 		VUK_DO_OR_RETURN(impl->build_nodes());
 
 		std::shuffle(impl->nodes.begin(), impl->nodes.end(), _random_generator);
-		VUK_DO_OR_RETURN(impl->build_links(impl->nodes, allocator));
+		VUK_DO_OR_RETURN(impl->build_links(alloc.get_context(), impl->nodes, allocator));
 		GraphDumper::next_cluster("modules", "full");
 		GraphDumper::dump_graph(impl->nodes, false, false);
 
@@ -1736,7 +1732,7 @@ namespace vuk {
 		}
 
 		VUK_DO_OR_RETURN(impl->build_nodes());
-		VUK_DO_OR_RETURN(impl->build_links(impl->nodes, allocator));
+		VUK_DO_OR_RETURN(impl->build_links(alloc.get_context(), impl->nodes, allocator));
 		impl->set_nodes.clear();
 
 		// constant folding
@@ -1770,7 +1766,7 @@ namespace vuk {
 		}
 
 		VUK_DO_OR_RETURN(impl->build_nodes());
-		VUK_DO_OR_RETURN(impl->build_links(impl->nodes, allocator));
+		VUK_DO_OR_RETURN(impl->build_links(alloc.get_context(), impl->nodes, allocator));
 
 		VUK_DO_OR_RETURN(validate_read_undefined());
 		VUK_DO_OR_RETURN(validate_duplicated_resource_ref());
@@ -1780,7 +1776,7 @@ namespace vuk {
 
 		// do forced convergence here
 		std::pmr::vector<Node*> new_nodes;
-		NodeContext nc{ current_module.get(), impl->pass_reads, impl->child_chains, new_nodes, allocator, impl->bufs, true };
+		NodeContext nc{ alloc.get_context(), current_module.get(), impl->pass_reads, impl->child_chains, new_nodes, allocator, impl->bufs, true };
 		for (auto& [def, lr] : impl->live_ranges) {
 			if (lr.def_link->def.node->kind == Node::SLICE) { // subchains - not important
 				continue;
