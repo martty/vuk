@@ -62,12 +62,13 @@ namespace vuk {
 	}
 
 	template<class T = byte>
-	inline Result<Unique<ptr<BufferLike<T>>>, AllocateException>
+	inline Result<Unique<view<BufferLike<T>>>, AllocateException>
 	allocate_buffer(Allocator& allocator, BufferCreateInfo bci, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
-		Unique<ptr<BufferLike<T>>> buf(allocator);
-		if (auto res = allocator.allocate_memory(std::span{ static_cast<ptr_base*>(&buf.get()), 1 }, std::span{ &bci, 1 }, loc); !res) {
+		Unique<view<BufferLike<T>>> buf(allocator);
+		if (auto res = allocator.allocate_memory(std::span{ static_cast<ptr_base*>(&buf->ptr), 1 }, std::span{ &bci, 1 }, loc); !res) {
 			return { expected_error, res.error() };
 		}
+		buf->sz_bytes = bci.size;
 		return { expected_value, std::move(buf) };
 	}
 

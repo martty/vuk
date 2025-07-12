@@ -298,9 +298,9 @@ namespace vuk {
 		}
 	}
 
-	void DeviceVkResource::set_buffer_allocation_name(Buffer& dst, Name name) {
+	/* void DeviceVkResource::set_buffer_allocation_name(Buffer& dst, Name name) {
 		vmaSetAllocationName(impl->allocator, static_cast<VmaAllocation>(dst.allocation), name.c_str());
-	}
+	}*/
 	
 	Result<void, AllocateException> DeviceVkResource::allocate_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc) {
 		assert(dst.size() == cis.size());
@@ -1251,9 +1251,9 @@ namespace vuk {
 		upstream->deallocate_memory_views(dst);
 	}
 
-	void DeviceNestedResource::set_buffer_allocation_name(Buffer& dst, Name name) {
+	/* void DeviceNestedResource::set_buffer_allocation_name(Buffer& dst, Name name) {
 		upstream->set_buffer_allocation_name(dst, name);
-	}
+	}*/
 
 	Result<void, AllocateException>
 	DeviceNestedResource::allocate_framebuffers(std::span<VkFramebuffer> dst, std::span<const FramebufferCreateInfo> cis, SourceLocationAtFrame loc) {

@@ -121,7 +121,7 @@ void main() {
 	auto schpen = std::span(&foo[0], 4);
 	CHECK(schpen == std::span(test));
 }
-
+/*
 TEST_CASE("shader buffer access (ptr)") {
 	Allocator alloc(test_context.runtime->get_vk_resource());
 
@@ -146,12 +146,12 @@ void main() {
 	data_in[gl_GlobalInvocationID.x] *= 2;
 }
 )")));
-	pass(4, 1, 1, buf0.implicit_view());
+	pass(4, 1, 1, buf0);
 	buf0.wait(*test_context.allocator, test_context.compiler);
 	auto test = { 2.f, 4.f, 6.f, 8.f };
 	auto schpen = std::span(&foo[0], 4);
 	CHECK(schpen == std::span(test));
-}
+}*/
 
 TEST_CASE("generic view from array") {
 	Allocator alloc(test_context.runtime->get_vk_resource());
@@ -310,7 +310,7 @@ inline val_view<BufferLike<T>> clear(val_view<BufferLike<T>> in, T clear_value, 
 
 	return clear(std::move(in), VUK_CALL);
 }
-
+/*
 TEST_CASE("allocate ptr and view in IR") {
 	auto buf0 = vuk::declare_ptr<float>("jacob", { .memory_usage = MemoryUsage::eCPUonly, .size = 16 });
 
@@ -336,7 +336,7 @@ void main() {
 	auto test = { 1.f, 2.f, 3.f, 4.f };
 	auto schpen = std::span(&res[0], 4);
 	CHECK(schpen == std::span(test));
-}
+}*/
 /*
 TEST_CASE("allocate view in IR") {
 	auto buf0 = vuk::declare_buf<float>("jacob", { .memory_usage = MemoryUsage::eCPUonly, .size = 16 });

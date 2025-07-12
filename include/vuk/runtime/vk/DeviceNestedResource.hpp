@@ -34,7 +34,7 @@ namespace vuk {
 		Result<void, AllocateException> allocate_memory_views(std::span<generic_view_base> dst, std::span<const BVCI> cis, SourceLocationAtFrame loc) override;
 		void deallocate_memory_views(std::span<const generic_view_base> dst) override;
 
-		void set_buffer_allocation_name(Buffer& dst, Name name) override final;
+		//void set_buffer_allocation_name(Buffer& dst, Name name) override final;
 				
 		Result<void, AllocateException>
 		allocate_framebuffers(std::span<VkFramebuffer> dst, std::span<const FramebufferCreateInfo> cis, SourceLocationAtFrame loc) override;

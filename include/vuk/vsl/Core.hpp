@@ -93,9 +93,9 @@ namespace vuk {
 		bc.imageSubresource.baseArrayLayer = image.base_layer;
 		assert(image.layer_count == 1); // unsupported yet
 		bc.imageSubresource.layerCount = image.layer_count;
-		bc.bufferOffset = allocator.get_context().ptr_to_buffer_offset(src.get()).offset;
+		bc.bufferOffset = allocator.get_context().ptr_to_buffer_offset(src->ptr).offset;
 
-		auto srcbuf = acquire("src", Buffer<>{ *src, size }, Access::eNone, VUK_CALL);
+		auto srcbuf = acquire("src", *src, Access::eNone, VUK_CALL);
 		auto dst = declare_ia("dst", image, VUK_CALL);
 		auto image_upload = make_pass("image upload", [bc](CommandBuffer& command_buffer, VUK_BA(Access::eTransferRead) src, VUK_IA(Access::eTransferWrite) dst) {
 			command_buffer.copy_buffer_to_image(src, dst, bc);

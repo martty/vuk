@@ -30,7 +30,7 @@ namespace vuk {
 		std::mutex mutex;
 		std::atomic<int> current_buffer = -1;
 		std::atomic<size_t> needle = 0;
-		MemoryUsage mem_usage;
+		MemoryUsage memory_usage;
 		BufferUsageFlags usage;
 		// TODO: convert to deque
 		std::array<LinearSegment, 256> available_allocations; // up to 4 GB of allocations with the default block_size
