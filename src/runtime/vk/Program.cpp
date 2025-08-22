@@ -39,7 +39,7 @@ namespace vuk {
 		using namespace spirv_cross;
 
 		switch (s.basetype) {
-		case SPIRType:Boolean:
+		case SPIRType::Boolean:
 			return Program::Type::ebool;
 		case SPIRType::Float:
 			switch (s.columns) {
