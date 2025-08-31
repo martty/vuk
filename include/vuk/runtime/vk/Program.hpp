@@ -15,6 +15,7 @@ namespace vuk {
 	struct Program {
 		enum class Type {
 			einvalid,
+			ebool,
 			euint8_t,
 			euint16_t,
 			euint,
