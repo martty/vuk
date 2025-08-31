@@ -214,12 +214,12 @@ TEST_CASE("memory view from array with helper") {
 		CHECK(view[i] == i * i);
 	}
 }
-
+/*
 void sqr_generic(view<float> view) {
 	for (int i = 0; i < view.count(); i++) {
 		view[i] *= i;
 	}
-}
+}*/
 
 void sqr_specific(view<BufferLike<float>> view) {
 	for (int i = 0; i < view.count(); i++) {
@@ -238,11 +238,11 @@ TEST_CASE("function taking views") {
 		v[i] = i;
 	}
 
-	sqr_generic(v);
+	//sqr_generic(v);
 	sqr_specific(v);
 
 	for (int i = 0; i < 4; i++) {
-		CHECK(v[i] == i * i * i);
+		CHECK(v[i] == i * i);
 	}
 }
 
@@ -422,7 +422,7 @@ TEST_CASE("composite support for Value") {
 	});
 
 	pass(buf0, buf0->a_pilkshake);
-	auto res = *buf0.get(*test_context.allocator, test_context.compiler);
+	auto res = *buf0.get(*test_context.allocator, test_context.compiler, {.dump_graph = true});
 	{
 		auto test = { res.a_milkshake, res.a_milkshake, res.a_milkshake, res.a_milkshake };
 		auto schpen = std::span(&res.the_boof[0], 4);

@@ -1667,35 +1667,36 @@ namespace vuk {
 					auto& flat_bindings = pbi->reflection_info.flat_bindings;
 					for (size_t i = first_parm; i < (first_parm + flat_bindings.size()); i++) {
 						auto& parm = node->call.args[i];
+						if (parm.type()->kind != Type::POINTER_TY) {
+							auto binding_idx = i - first_parm;
+							auto& [set, binding] = flat_bindings[binding_idx];
+							auto val = sched.get_value(parm);
+							switch (binding->type) {
+							case DescriptorType::eSampledImage:
+							case DescriptorType::eStorageImage:
+								cobuf.bind_image(set, binding->binding, *reinterpret_cast<ImageAttachment*>(val));
+								break;
+							case DescriptorType::eUniformBuffer:
+							case DescriptorType::eStorageBuffer: {
+								auto& v = *reinterpret_cast<Buffer<>*>(val);
+								cobuf.bind_buffer(set, binding->binding, v);
+								break;
+							}
+							case DescriptorType::eSampler:
+								cobuf.bind_sampler(set, binding->binding, *reinterpret_cast<SamplerCreateInfo*>(val));
+								break;
+							case DescriptorType::eCombinedImageSampler: {
+								auto& si = *reinterpret_cast<SampledImage*>(val);
+								cobuf.bind_image(set, binding->binding, si.ia);
+								cobuf.bind_sampler(set, binding->binding, si.sci);
+								break;
+							}
+							default:
+								assert(0);
+							}
 
-						auto binding_idx = i - first_parm;
-						auto& [set, binding] = flat_bindings[binding_idx];
-						auto val = sched.get_value(parm);
-						switch (binding->type) {
-						case DescriptorType::eSampledImage:
-						case DescriptorType::eStorageImage:
-							cobuf.bind_image(set, binding->binding, *reinterpret_cast<ImageAttachment*>(val));
-							break;
-						case DescriptorType::eUniformBuffer:
-						case DescriptorType::eStorageBuffer: {
-							auto& v = *reinterpret_cast<Buffer<>*>(val);
-							cobuf.bind_buffer(set, binding->binding, v);
-							break;
+							opaque_rets[binding_idx] = val;
 						}
-						case DescriptorType::eSampler:
-							cobuf.bind_sampler(set, binding->binding, *reinterpret_cast<SamplerCreateInfo*>(val));
-							break;
-						case DescriptorType::eCombinedImageSampler: {
-							auto& si = *reinterpret_cast<SampledImage*>(val);
-							cobuf.bind_image(set, binding->binding, si.ia);
-							cobuf.bind_sampler(set, binding->binding, si.sci);
-							break;
-						}
-						default:
-							assert(0);
-						}
-
-						opaque_rets[binding_idx] = val;
 					}
 					// remaining arguments as push constants
 					size_t pc_offset = 0;
