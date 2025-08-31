@@ -7,7 +7,7 @@
 
 namespace vuk {
 	inline bool is_write_access(Access ia) {
-		constexpr uint64_t write_mask = eColorResolveWrite | eColorWrite | eDepthStencilWrite | eFragmentWrite | eTransferWrite | eComputeWrite | eHostWrite |
+		constexpr uint64_t write_mask = eColorWrite | eDepthStencilWrite | eFragmentWrite | eTransferWrite | eComputeWrite | eHostWrite |
 		                                eMemoryWrite | eRayTracingWrite | eAccelerationStructureBuildWrite | eClear;
 		return ia & write_mask;
 	}
@@ -35,8 +35,8 @@ namespace vuk {
 	}
 
 	inline ResourceUse to_use(Access ia) {
-		constexpr uint64_t color_read = eColorResolveRead | eColorRead;
-		constexpr uint64_t color_write = eColorResolveWrite | eColorWrite;
+		constexpr uint64_t color_read = eColorRead;
+		constexpr uint64_t color_write = eColorWrite;
 		constexpr uint64_t color_rw = color_read | color_write;
 
 		ResourceUse qr{};
@@ -61,8 +61,12 @@ namespace vuk {
 		if (ia & eDepthStencilRW) {
 			qr.stages |= PipelineStageFlagBits::eEarlyFragmentTests | PipelineStageFlagBits::eLateFragmentTests;
 		}
+		if (ia & (eFragmentUniformRead | eComputeUniformRead | eVertexUniformRead | eRayTracingUniformRead)) {
+			qr.access |= AccessFlagBits::eUniformRead;
+			qr.layout = combine_layout(qr.layout, ImageLayout::eGeneral);
+		}
 		if (ia & (eFragmentRead | eComputeRead | eVertexRead | eRayTracingRead)) {
-			qr.access |= AccessFlagBits::eShaderRead;
+			qr.access |= AccessFlagBits::eShaderStorageRead;
 			qr.layout = combine_layout(qr.layout, ImageLayout::eGeneral);
 		}
 		if (ia & eRayTracingRead) {
@@ -70,24 +74,24 @@ namespace vuk {
 			qr.layout = combine_layout(qr.layout, ImageLayout::eGeneral);
 		}
 		if (ia & (eFragmentWrite | eComputeWrite | eRayTracingWrite)) {
-			qr.access |= AccessFlagBits::eShaderWrite;
+			qr.access |= AccessFlagBits::eShaderStorageWrite;
 			qr.layout = combine_layout(qr.layout, ImageLayout::eGeneral);
 		}
 		if (ia & (eFragmentSampled | eComputeSampled | eRayTracingSampled)) {
-			qr.access |= AccessFlagBits::eShaderRead;
+			qr.access |= AccessFlagBits::eShaderSampledRead;
 			qr.layout = combine_layout(qr.layout, ImageLayout::eReadOnlyOptimalKHR);
 		}
 
-		if (ia & (eVertexRead | eVertexSampled)) {
+		if (ia & (eVertexRead | eVertexSampled | eVertexUniformRead)) {
 			qr.stages |= PipelineStageFlagBits::eVertexShader;
 		}
-		if (ia & (eFragmentRW | eFragmentSampled)) {
+		if (ia & (eFragmentRW | eFragmentSampled | eFragmentUniformRead)) {
 			qr.stages |= PipelineStageFlagBits::eFragmentShader;
 		}
-		if (ia & (eComputeRW | eComputeSampled)) {
+		if (ia & (eComputeRW | eComputeSampled | eComputeUniformRead)) {
 			qr.stages |= PipelineStageFlagBits::eComputeShader;
 		}
-		if (ia & (eRayTracingRW | eRayTracingSampled)) {
+		if (ia & (eRayTracingRW | eRayTracingSampled | eRayTracingUniformRead)) {
 			qr.stages |= PipelineStageFlagBits::eRayTracingShaderKHR;
 		}
 
@@ -99,8 +103,17 @@ namespace vuk {
 			qr.access |= AccessFlagBits::eTransferWrite;
 			qr.layout = combine_layout(qr.layout, ImageLayout::eTransferDstOptimal);
 		}
-		if (ia & eTransferRW) {
-			qr.stages |= PipelineStageFlagBits::eTransfer;
+		if (ia & eCopyRW) {
+			qr.stages |= PipelineStageFlagBits::eCopy;
+		}
+		if (ia & eBlitRW) {
+			qr.stages |= PipelineStageFlagBits::eBlit;
+		}
+		if (ia & eResolveRW) {
+			qr.stages |= PipelineStageFlagBits::eResolve;
+		}
+		if (ia & eClear) {
+			qr.stages |= PipelineStageFlagBits::eClear;
 		}
 
 		if (ia & eAttributeRead) {
@@ -149,12 +162,6 @@ namespace vuk {
 			qr.stages |= PipelineStageFlagBits::eAllCommands;
 		}
 
-		if (ia & eClear) {
-			qr.stages |= PipelineStageFlagBits::eTransfer;
-			qr.access |= AccessFlagBits::eTransferWrite;
-			qr.layout = combine_layout(qr.layout, ImageLayout::eTransferDstOptimal);
-		}
-
 		if (ia & ePresent) {
 			qr.stages = PipelineStageFlagBits::eNone;
 			qr.access = {};
@@ -192,8 +199,6 @@ namespace vuk {
 		case eDepthStencilRW:
 		case eColorRead:
 		case eDepthStencilRead:
-		case eColorResolveRead:
-		case eColorResolveWrite:
 			return true;
 		default:
 			return false;
@@ -224,6 +229,8 @@ namespace vuk {
 		if (u.access & vuk::AccessFlagBits::eMemoryWrite)
 			return true;
 		if (u.access & vuk::AccessFlagBits::eAccelerationStructureWriteKHR)
+			return true;
+		if (u.access & vuk::AccessFlagBits::eShaderStorageWrite)
 			return true;
 		return false;
 	}

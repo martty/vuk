@@ -47,7 +47,7 @@ namespace vuk {
 		return ShaderStageFlags(bit0) ^ bit1;
 	}
 
-	enum class PipelineStageFlagBits : uint32_t {
+	enum class PipelineStageFlagBits : VkFlags64 {
 		eNone = VK_PIPELINE_STAGE_NONE,
 		eTopOfPipe = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
 		eDrawIndirect = VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT,
@@ -76,7 +76,11 @@ namespace vuk {
 		eFragmentDensityProcessEXT = VK_PIPELINE_STAGE_FRAGMENT_DENSITY_PROCESS_BIT_EXT,
 		eCommandPreprocessNV = VK_PIPELINE_STAGE_COMMAND_PREPROCESS_BIT_NV,
 		eAccelerationStructureBuildNV = VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_NV,
-		eRayTracingShaderNV = VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_NV
+		eRayTracingShaderNV = VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_NV,
+		eCopy = VK_PIPELINE_STAGE_2_COPY_BIT_KHR,
+		eBlit = VK_PIPELINE_STAGE_2_BLIT_BIT_KHR,
+		eResolve = VK_PIPELINE_STAGE_2_RESOLVE_BIT_KHR,
+		eClear = VK_PIPELINE_STAGE_2_CLEAR_BIT_KHR
 	};
 
 	using PipelineStageFlags = Flags<PipelineStageFlagBits>;
@@ -92,7 +96,7 @@ namespace vuk {
 		return PipelineStageFlags(bit0) ^ bit1;
 	}
 
-	enum class AccessFlagBits : VkAccessFlags {
+	enum class AccessFlagBits : VkFlags64 {
 		eNone = VK_ACCESS_NONE_KHR,
 		eIndirectCommandRead = VK_ACCESS_INDIRECT_COMMAND_READ_BIT,
 		eIndexRead = VK_ACCESS_INDEX_READ_BIT,
@@ -123,7 +127,10 @@ namespace vuk {
 		eCommandPreprocessReadNV = VK_ACCESS_COMMAND_PREPROCESS_READ_BIT_NV,
 		eCommandPreprocessWriteNV = VK_ACCESS_COMMAND_PREPROCESS_WRITE_BIT_NV,
 		eAccelerationStructureReadNV = VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_NV,
-		eAccelerationStructureWriteNV = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_NV
+		eAccelerationStructureWriteNV = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_NV,
+		eShaderSampledRead = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT_KHR,
+		eShaderStorageRead = VK_ACCESS_2_SHADER_STORAGE_READ_BIT_KHR,
+		eShaderStorageWrite = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT_KHR
 	};
 
 	using AccessFlags = Flags<AccessFlagBits>;

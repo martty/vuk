@@ -148,7 +148,7 @@ namespace vuk {
 	inline Value<ImageAttachment> blit_image(Value<ImageAttachment> src, Value<ImageAttachment> dst, Filter filter, VUK_CALLSTACK) {
 		auto blit = make_pass(
 		    "blit image",
-		    [=](CommandBuffer& cbuf, VUK_IA(Access::eTransferRead) src, VUK_IA(Access::eTransferWrite) dst) {
+		    [=](CommandBuffer& cbuf, VUK_IA(Access::eBlitRead) src, VUK_IA(Access::eBlitWrite) dst) {
 			    ImageBlit region = {};
 			    region.srcOffsets[0] = Offset3D{};
 			    auto src_extent = src->base_mip_extent();
@@ -176,7 +176,7 @@ namespace vuk {
 	}
 
 	inline Value<Buffer> copy(Value<ImageAttachment> src, Value<Buffer> dst, VUK_CALLSTACK) {
-		auto image2buf = make_pass("copy image to buffer", [](CommandBuffer& cbuf, VUK_IA(Access::eTransferRead) src, VUK_BA(Access::eTransferWrite) dst) {
+		auto image2buf = make_pass("copy image to buffer", [](CommandBuffer& cbuf, VUK_IA(Access::eCopyRead) src, VUK_BA(Access::eCopyWrite) dst) {
 			BufferImageCopy bc;
 			bc.imageOffset = { 0, 0, 0 };
 			bc.bufferRowLength = 0;
@@ -196,9 +196,7 @@ namespace vuk {
 	}
 
 	inline Value<Buffer> copy(Value<Buffer> src, Value<Buffer> dst, VUK_CALLSTACK) {
-		auto buf2buf = vuk::make_pass(
-		    "copy buffer to buffer",
-		    [](vuk::CommandBuffer& command_buffer, VUK_BA(vuk::eTransferRead) src, VUK_BA(vuk::eTransferWrite) dst) {
+		auto buf2buf = vuk::make_pass("copy buffer to buffer", [](vuk::CommandBuffer& command_buffer, VUK_BA(vuk::eCopyRead) src, VUK_BA(vuk::eCopyWrite) dst) {
 			    command_buffer.copy_buffer(src, dst);
 			    return dst;
 		    });
@@ -210,14 +208,14 @@ namespace vuk {
 		uint32_t value_as_uint;
 		static_assert(sizeof(T) == sizeof(uint32_t), "T must be 4 bytes");
 		memcpy(&value_as_uint, &value, sizeof(T));
-		auto buf2buf = vuk::make_pass("fill buffer", [value_as_uint](vuk::CommandBuffer& command_buffer, VUK_BA(vuk::eTransferWrite) dst) {
+		auto buf2buf = vuk::make_pass("fill buffer", [value_as_uint](vuk::CommandBuffer& command_buffer, VUK_BA(vuk::eClear) dst) {
 			command_buffer.fill_buffer(dst, value_as_uint);
 		    });
 		buf2buf(dst, VUK_CALL);
 	}
 
 	inline Value<ImageAttachment> copy(Value<Buffer> src, Value<ImageAttachment> dst, VUK_CALLSTACK) {
-		auto buf2img = make_pass("copy buffer to image", [](CommandBuffer& cbuf, VUK_BA(Access::eTransferRead) src, VUK_IA(Access::eTransferWrite) dst) {
+		auto buf2img = make_pass("copy buffer to image", [](CommandBuffer& cbuf, VUK_BA(Access::eCopyRead) src, VUK_IA(Access::eCopyWrite) dst) {
 			BufferImageCopy bc;
 			bc.imageOffset = { 0, 0, 0 };
 			bc.bufferRowLength = 0;
@@ -237,7 +235,7 @@ namespace vuk {
 	}
 
 		inline Value<ImageAttachment> copy(Value<ImageAttachment> src, Value<ImageAttachment> dst, VUK_CALLSTACK) {
-		auto img2img = make_pass("copy image to image", [](CommandBuffer& cbuf, VUK_IA(Access::eTransferRead) src, VUK_IA(Access::eTransferWrite) dst) {
+		auto img2img = make_pass("copy image to image", [](CommandBuffer& cbuf, VUK_IA(Access::eCopyRead) src, VUK_IA(Access::eCopyWrite) dst) {
 			assert(src->level_count == dst->level_count);
 
 			ImageCopy bc;
@@ -270,7 +268,7 @@ namespace vuk {
 
 		auto resolve = make_pass(
 		    "resolve image",
-		    [=](CommandBuffer& cbuf, VUK_IA(Access::eTransferRead) src, VUK_IA(Access::eTransferWrite) dst) {
+		    [=](CommandBuffer& cbuf, VUK_IA(Access::eResolveRead) src, VUK_IA(Access::eResolveWrite) dst) {
 			    cbuf.resolve_image(src, dst);
 			    return dst;
 		    },

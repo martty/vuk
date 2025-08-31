@@ -584,8 +584,8 @@ namespace vuk {
 
 			// compute image barrier for this access -> access
 			VkImageMemoryBarrier2KHR barrier{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2_KHR };
-			barrier.srcAccessMask = is_readonly_access(src_use) ? 0 : (VkAccessFlags)src_use.access;
-			barrier.dstAccessMask = (VkAccessFlags)dst_use.access;
+			barrier.srcAccessMask = is_readonly_access(src_use) ? 0 : (VkAccessFlags2)src_use.access;
+			barrier.dstAccessMask = (VkAccessFlags2)dst_use.access;
 			barrier.oldLayout = (VkImageLayout)src_use.layout;
 			barrier.newLayout = (VkImageLayout)dst_use.layout;
 			barrier.subresourceRange.aspectMask = (VkImageAspectFlags)aspect;
@@ -657,8 +657,8 @@ namespace vuk {
 			scope_to_domain((VkPipelineStageFlagBits2KHR&)src_use.stages, dst_domain & DomainFlagBits::eQueueMask);
 			scope_to_domain((VkPipelineStageFlagBits2KHR&)dst_use.stages, dst_domain & DomainFlagBits::eQueueMask);
 
-			barrier.srcAccessMask = is_readonly_access(src_use) ? 0 : (VkAccessFlags)src_use.access;
-			barrier.dstAccessMask = (VkAccessFlags)dst_use.access;
+			barrier.srcAccessMask = is_readonly_access(src_use) ? 0 : (VkAccessFlags2)src_use.access;
+			barrier.dstAccessMask = (VkAccessFlags2)dst_use.access;
 			barrier.srcStageMask = (VkPipelineStageFlagBits2)src_use.stages.m_mask;
 			barrier.dstStageMask = (VkPipelineStageFlagBits2)dst_use.stages.m_mask;
 			if (barrier.srcStageMask == 0) {

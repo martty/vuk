@@ -37,7 +37,7 @@ namespace vuk {
 	}
 
 	constexpr void access_to_usage(ImageUsageFlags& usage, Access acc) {
-		if (acc & (eMemoryRW | eColorResolveRead | eColorResolveWrite | eColorRW)) {
+		if (acc & (eMemoryRW | eColorRW)) {
 			usage |= ImageUsageFlagBits::eColorAttachment;
 		}
 		if (acc & (eMemoryRW | eFragmentSampled | eComputeSampled | eRayTracingSampled | eVertexSampled)) {
@@ -49,7 +49,7 @@ namespace vuk {
 		if (acc & (eMemoryRW | eTransferRead)) {
 			usage |= ImageUsageFlagBits::eTransferSrc;
 		}
-		if (acc & (eMemoryRW | eTransferWrite | eClear)) {
+		if (acc & (eMemoryRW | eTransferWrite)) {
 			usage |= ImageUsageFlagBits::eTransferDst;
 		}
 		if (acc & (eMemoryRW | eFragmentRW | eComputeRW | eRayTracingRW)) {

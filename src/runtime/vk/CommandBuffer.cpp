@@ -815,12 +815,17 @@ namespace vuk {
 	}
 
 	CommandBuffer& CommandBuffer::memory_barrier(Access src_access, Access dst_access) {
-		VkMemoryBarrier mb{ .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER };
+		VkMemoryBarrier2KHR mb{ .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2_KHR };
 		auto src_use = to_use(src_access);
 		auto dst_use = to_use(dst_access);
-		mb.srcAccessMask = is_readonly_access(src_use) ? 0 : (VkAccessFlags)src_use.access;
-		mb.dstAccessMask = (VkAccessFlags)dst_use.access;
-		ctx.vkCmdPipelineBarrier(command_buffer, (VkPipelineStageFlags)src_use.stages, (VkPipelineStageFlags)dst_use.stages, {}, 1, &mb, 0, nullptr, 0, nullptr);
+		mb.srcStageMask = (VkPipelineStageFlags2)src_use.stages;
+		mb.dstStageMask = (VkPipelineStageFlags2)dst_use.stages;
+		mb.srcAccessMask = is_readonly_access(src_use) ? 0 : (VkAccessFlags2)src_use.access;
+		mb.dstAccessMask = (VkAccessFlags2)dst_use.access;
+		VkDependencyInfo di{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO_KHR};
+		di.pMemoryBarriers = &mb;
+		di.memoryBarrierCount = 1;
+		ctx.vkCmdPipelineBarrier2KHR(command_buffer, &di);
 		return *this;
 	}
 
@@ -834,12 +839,14 @@ namespace vuk {
 		isr.layerCount = VK_REMAINING_ARRAY_LAYERS;
 		isr.baseMipLevel = mip_level;
 		isr.levelCount = level_count;
-		VkImageMemoryBarrier imb{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+		VkImageMemoryBarrier2 imb{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2_KHR };
 		imb.image = src.image.image;
 		auto src_use = to_use(src_acc);
 		auto dst_use = to_use(dst_acc);
-		imb.srcAccessMask = (VkAccessFlags)src_use.access;
-		imb.dstAccessMask = (VkAccessFlags)dst_use.access;
+		imb.srcStageMask = (VkPipelineStageFlags2)src_use.stages;
+		imb.dstStageMask = (VkPipelineStageFlags2)dst_use.stages;
+		imb.srcAccessMask = (VkAccessFlags2)src_use.access;
+		imb.dstAccessMask = (VkAccessFlags2)dst_use.access;
 
 		// TODO: questionable
 		if (src.layout == ImageLayout::eGeneral) {
@@ -849,7 +856,10 @@ namespace vuk {
 			imb.newLayout = (VkImageLayout)dst_use.layout;
 		}
 		imb.subresourceRange = isr;
-		ctx.vkCmdPipelineBarrier(command_buffer, (VkPipelineStageFlags)src_use.stages, (VkPipelineStageFlags)dst_use.stages, {}, 0, nullptr, 0, nullptr, 1, &imb);
+		VkDependencyInfo di{ .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO_KHR };
+		di.pImageMemoryBarriers = &imb;
+		di.imageMemoryBarrierCount = 1;
+		ctx.vkCmdPipelineBarrier2KHR(command_buffer, &di);
 
 		return *this;
 	}
