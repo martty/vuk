@@ -21,9 +21,7 @@ namespace vuk {
 			size_t offset;
 		};
 
-		struct BufferWithOffsetAndSize {
-			VkBuffer buffer;
-			size_t offset;
+		struct BufferWithOffsetAndSize : BufferWithOffset {
 			size_t size;
 		};
 
@@ -178,12 +176,6 @@ namespace vuk {
 			return ptr[index];
 		}
 
-		operator view<Type>() const noexcept {
-			view<Type> v;
-			v.key = reinterpret_cast<uintptr_t>(this) | 0x2;
-			return v;
-		}
-
 		explicit operator bool() const noexcept {
 			return !!ptr;
 		}
@@ -293,3 +285,14 @@ namespace vuk {
 		// enum class ViewEntryFlags {} flags;
 	};
 } // namespace vuk
+
+namespace std {
+	template<class T, class... Constraints>
+	struct hash<vuk::view<vuk::BufferLike<T>, Constraints...>> {
+		size_t operator()(vuk::view<vuk::BufferLike<T>, Constraints...> const& x) const {
+			uint32_t v = std::hash<uint64_t>(x.ptr);
+			hash_combine_direct(v, std::hash<uint64_t>(x.sz_bytes));
+			return v;
+		}
+	};
+}; // namespace std

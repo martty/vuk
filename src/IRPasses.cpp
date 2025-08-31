@@ -600,7 +600,7 @@ namespace vuk {
 							}
 						}
 						if (!found) {
-							bufs.emplace_back(buf, &nth(node, out).link());
+							bufs.emplace_back(Runtime::Resolver::BufferWithOffsetAndSize{ runtime.ptr_to_buffer_offset(buf.ptr), buf.sz_bytes }, &nth(node, out).link());
 						}
 					}
 				}
@@ -797,9 +797,9 @@ namespace vuk {
 					auto* base = constant(args_ptr[0]);
 					if (ty->is_bufferlike_view() &&
 					    node->construct.args[2].node->kind != Node::PLACEHOLDER) { // if we are constructing a view, and the view has known size
-						auto def = get_def2(node->construct.args[1]);
-						if (def && def->node->kind == Node::CONSTRUCT && def->node->construct.args[2].node->kind == Node::PLACEHOLDER) {
-							def->node->construct.args[2] = node->construct.args[2];
+						auto def = eval(node->construct.args[1]);
+						if (def && def->is_ref && def->ref.node->kind == Node::CONSTRUCT && def->ref.node->construct.args[2].node->kind == Node::PLACEHOLDER) {
+							def->ref.node->construct.args[2] = node->construct.args[2];
 						}
 					}
 					if (!base) { // if there was no value provided here, then we don't perform any reification
@@ -1318,7 +1318,7 @@ namespace vuk {
 				if (node->type[0]->hash_value == current_module->types.builtin_image) {
 					auto ia = reinterpret_cast<ImageAttachment*>(node->construct.args[0].node->constant.value);
 					if (ia->image) {
-						auto [_, succ] = ias.emplace(*ia);
+						auto [_, succ] = ias.emplace(*ia, node);
 						s = succ;
 					}
 				} else if (node->type[0]->is_bufferlike_view()) { // bufferlike views
@@ -1329,7 +1329,7 @@ namespace vuk {
 					}
 					s = memory.insert_unaligned(buf->ptr.device_address, buf->sz_bytes, true);
 				} else if (node->type[0]->hash_value == current_module->types.builtin_swapchain) {
-					auto [_, succ] = swps.emplace(reinterpret_cast<Swapchain*>(node->construct.args[0].node->constant.value));
+					auto [_, succ] = swps.emplace(reinterpret_cast<Swapchain*>(node->construct.args[0].node->constant.value), node);
 					s = succ;
 				} else { // TODO: it is an array, no val yet
 				}
