@@ -4,13 +4,12 @@
 #include <memory>
 #include <vector>
 
-#include "vuk/EmbeddedResource.hpp"
 #include "vuk/RenderGraph.hpp"
 #include "vuk/Value.hpp"
 
-namespace vuk::extra {
-	VUK_EMBEDDED_RESOURCE(spd_cs_hlsl_spv);
+#include "spd_cs_hlsl_spv_shader.h"
 
+namespace vuk::extra {
 	enum class ReductionType : uint32_t {
 		Avg = 0,
 		Min = 1,
@@ -22,8 +21,7 @@ namespace vuk::extra {
 	/// @param type downsampling operator
 	inline Value<ImageAttachment> generate_mips_spd(Value<ImageAttachment> image, ReductionType type = ReductionType::Avg) {
 		PipelineBaseCreateInfo spd_pci;
-		auto res = spd_cs_hlsl_spv();
-		spd_pci.add_static_spirv((uint32_t*)res.data, res.size / 4, "spd.cs.hlsl");
+		spd_pci.add_static_spirv((uint32_t*)spd_cs_hlsl_spv_shader, sizeof(spd_cs_hlsl_spv_shader) / 4, "spd.cs.hlsl");
 
 		auto pass = vuk::make_pass("SPD", [type](CommandBuffer& command_buffer, VUK_IA(eComputeRW | eComputeSampled) src, VUK_ARG(PipelineBaseInfo*, eNone) pipeline) {
 			// Collect details about the image

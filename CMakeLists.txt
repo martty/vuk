@@ -9,7 +9,6 @@ include(FetchContent)
 include(CMakeDependentOption)
 
 set(CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake" ${CMAKE_MODULE_PATH})
-find_package(Embed REQUIRED) # for embedding binary data
 find_package(SpirvEmbed REQUIRED) # for embedding binary data
 
 
