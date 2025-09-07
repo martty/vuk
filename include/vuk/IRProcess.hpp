@@ -9,6 +9,7 @@
 #include <deque>
 #include <memory_resource>
 #include <robin_hood.h>
+#include <unordered_set>
 
 namespace vuk {
 
@@ -59,10 +60,15 @@ namespace vuk {
 		};
 		std::deque<Sched> work_queue;
 		robin_hood::unordered_flat_set<Node*> scheduled;
+		std::unordered_set<Node*> expanded;
 		std::vector<ScheduledItem*> item_list;
 
 		size_t naming_index_counter = 0;
 		void schedule_new(Node* node) {
+			if (scheduled.contains(node)) {
+				return;
+			}
+			assert(!expanded.contains(node)); // TODO: cycle detected
 			assert(node);
 			if (node->scheduled_item) { // we have scheduling info for this
 				work_queue.emplace_front(Sched{ node, false });
