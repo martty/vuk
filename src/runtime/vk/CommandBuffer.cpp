@@ -840,10 +840,18 @@ namespace vuk {
 
 		VkImageSubresourceRange isr = {};
 		isr.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		assert(src.base_layer + base_layer + layer_count <= src.base_layer + src.layer_count); // no barriering out of range
+		if (layer_count != VK_REMAINING_ARRAY_LAYERS && src.layer_count != VK_REMAINING_ARRAY_LAYERS) {
+			assert(src.base_layer + base_layer + layer_count <= src.base_layer + src.layer_count); // no barriering out of range
+		} else if (src.layer_count != VK_REMAINING_ARRAY_LAYERS) {
+			assert(src.base_layer + base_layer <= src.base_layer + src.layer_count); // only validate start
+		}
 		isr.baseArrayLayer = src.base_layer + base_layer;
 		isr.layerCount = layer_count;
-		assert(src.base_level + mip_level + level_count <= src.base_level + src.level_count); // no barriering out of range
+		if (level_count != VK_REMAINING_MIP_LEVELS && src.level_count != VK_REMAINING_MIP_LEVELS) {
+			assert(src.base_level + mip_level + level_count <= src.base_level + src.level_count); // no barriering out of range
+		} else if (src.level_count != VK_REMAINING_MIP_LEVELS) {
+			assert(src.base_level + mip_level <= src.base_level + src.level_count); // only validate start
+		}
 		isr.baseMipLevel = src.base_level + mip_level;
 		isr.levelCount = level_count;
 		VkImageMemoryBarrier2 imb{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2_KHR };
