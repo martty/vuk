@@ -4,7 +4,6 @@
 #include "vuk/Exception.hpp"
 #include "vuk/FixedVector.hpp"
 #include "vuk/Result.hpp"
-#include "vuk/runtime/vk/Allocation.hpp"
 #include "vuk/runtime/vk/Image.hpp"
 #include "vuk/runtime/vk/PipelineInstance.hpp"
 #include "vuk/runtime/vk/Query.hpp"
