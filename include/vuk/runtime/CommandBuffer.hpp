@@ -4,10 +4,11 @@
 #include "vuk/Exception.hpp"
 #include "vuk/FixedVector.hpp"
 #include "vuk/Result.hpp"
-#include "vuk/Types.hpp"
+#include "vuk/runtime/vk/Allocation.hpp"
 #include "vuk/runtime/vk/Image.hpp"
 #include "vuk/runtime/vk/PipelineInstance.hpp"
 #include "vuk/runtime/vk/Query.hpp"
+#include "vuk/Types.hpp"
 #include "vuk/vuk_fwd.hpp"
 
 #include <optional>
@@ -694,17 +695,21 @@ namespace vuk {
 		/// @param src_access previous Access
 		/// @param dst_access subsequent Access
 		CommandBuffer& memory_barrier(Access src_access, Access dst_access);
-		/// @brief Issue an image barrier for an image resource
-		/// @param resource_name the Name of the image Resource
+		/// @brief Issue an image barrier for an image
+		/// @param image_attachment the ImageAttachment to be synchronized
 		/// @param src_access previous Access
 		/// @param dst_access subsequent Access
-		/// @param base_level base mip level affected by the barrier
-		/// @param level_count number of mip levels affected by the barrier
-		CommandBuffer& image_barrier(const ImageAttachment& resource_name,
+		/// @param base_level base mip level affected by the barrier (relative to the ImageAttachment)
+		/// @param level_count number of mip levels affected by the barrier (relative to the ImageAttachment)
+		/// @param base_layer base array layer affected by the barrier (relative to the ImageAttachment)
+		/// @param layer_count number of array layers affected by the barrier (relative to the ImageAttachment)
+		CommandBuffer& image_barrier(const ImageAttachment& image_attachment,
 		                             Access src_access,
 		                             Access dst_access,
 		                             uint32_t base_level = 0,
-		                             uint32_t level_count = VK_REMAINING_MIP_LEVELS);
+		                             uint32_t level_count = VK_REMAINING_MIP_LEVELS,
+		                             uint32_t base_layer = 0,
+		                             uint32_t layer_count = VK_REMAINING_ARRAY_LAYERS);
 
 		// queries
 

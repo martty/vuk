@@ -1,9 +1,9 @@
-#include "vuk/runtime/CommandBuffer.hpp"
 #include "vuk/RenderGraph.hpp"
-#include "vuk/SyncLowering.hpp"
+#include "vuk/runtime/CommandBuffer.hpp"
 #include "vuk/runtime/Stream.hpp"
 #include "vuk/runtime/vk/AllocatorHelpers.hpp"
 #include "vuk/runtime/vk/VkRuntime.hpp"
+#include "vuk/SyncLowering.hpp"
 
 #include <cmath>
 #include <fmt/printf.h>
@@ -822,22 +822,29 @@ namespace vuk {
 		mb.dstStageMask = (VkPipelineStageFlags2)dst_use.stages;
 		mb.srcAccessMask = is_readonly_access(src_use) ? 0 : (VkAccessFlags2)src_use.access;
 		mb.dstAccessMask = (VkAccessFlags2)dst_use.access;
-		VkDependencyInfo di{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO_KHR};
+		VkDependencyInfo di{ .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO_KHR };
 		di.pMemoryBarriers = &mb;
 		di.memoryBarrierCount = 1;
 		ctx.vkCmdPipelineBarrier2KHR(command_buffer, &di);
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::image_barrier(const ImageAttachment& src, vuk::Access src_acc, vuk::Access dst_acc, uint32_t mip_level, uint32_t level_count) {
+	CommandBuffer& CommandBuffer::image_barrier(const ImageAttachment& src,
+	                                            vuk::Access src_acc,
+	                                            vuk::Access dst_acc,
+	                                            uint32_t mip_level,
+	                                            uint32_t level_count,
+	                                            uint32_t base_layer,
+	                                            uint32_t layer_count) {
 		VUK_EARLY_RET();
 
-		// TODO: fill these out from attachment
 		VkImageSubresourceRange isr = {};
 		isr.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		isr.baseArrayLayer = 0;
-		isr.layerCount = VK_REMAINING_ARRAY_LAYERS;
-		isr.baseMipLevel = mip_level;
+		assert(src.base_layer + base_layer + layer_count <= src.base_layer + src.layer_count); // no barriering out of range
+		isr.baseArrayLayer = src.base_layer + base_layer;
+		isr.layerCount = layer_count;
+		assert(src.base_level + mip_level + level_count <= src.base_level + src.level_count); // no barriering out of range
+		isr.baseMipLevel = src.base_level + mip_level;
 		isr.levelCount = level_count;
 		VkImageMemoryBarrier2 imb{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2_KHR };
 		imb.image = src.image.image;
