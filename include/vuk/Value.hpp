@@ -92,9 +92,14 @@ namespace vuk {
 		  requires(erased_tuple_adaptor<T>::value)
 		{
 			return std::apply(
-			    [head = get_head()](auto... a) {
+			    [head = get_head(), this](auto... a) {
 				    size_t i = 0;
-				    return typename erased_tuple_adaptor<T>::proxy{ make_ext_ref(current_module->make_extract((a, head), i++))... };
+				    return typename erased_tuple_adaptor<T>::proxy{ [&, this](auto a, auto i) {
+					    Ref ref = current_module->make_extract(head, i);
+					    ExtRef exref = make_ext_ref(ref);
+					    node->deps.push_back(exref.node);
+					    return exref;
+					  }((a, head), i++)... };
 			    },
 			    erased_tuple_adaptor<T>::member_types);
 		}

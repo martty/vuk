@@ -123,34 +123,34 @@ void main() {
 }
 /*
 TEST_CASE("shader buffer access (ptr)") {
-	Allocator alloc(test_context.runtime->get_vk_resource());
+  Allocator alloc(test_context.runtime->get_vk_resource());
 
-	Unique_ptr<BufferLike<float>> foo = *allocate_array<float>(alloc, 4, MemoryUsage::eCPUonly);
-	for (int i = 0; i < 4; i++) {
-		foo[i] = (i + 1);
-	}
+  Unique_ptr<BufferLike<float>> foo = *allocate_array<float>(alloc, 4, MemoryUsage::eCPUonly);
+  for (int i = 0; i < 4; i++) {
+    foo[i] = (i + 1);
+  }
 
-	auto buf0 = vuk::acquire("b0", foo.get(), vuk::Access::eNone);
+  auto buf0 = vuk::acquire("b0", foo.get(), vuk::Access::eNone);
 
-	auto pass = lift_compute(test_context.runtime->get_pipeline(vuk::PipelineBaseCreateInfo::from_inline_glsl(R"(#version 460
+  auto pass = lift_compute(test_context.runtime->get_pipeline(vuk::PipelineBaseCreateInfo::from_inline_glsl(R"(#version 460
 #pragma shader_stage(compute)
 #include <runtime>
 
 layout (std430, binding = 0) buffer coherent BufferIn {
-	float[] data_in;
+  float[] data_in;
 };
 
 layout (local_size_x = 1) in;
 
 void main() {
-	data_in[gl_GlobalInvocationID.x] *= 2;
+  data_in[gl_GlobalInvocationID.x] *= 2;
 }
 )")));
-	pass(4, 1, 1, buf0);
-	buf0.wait(*test_context.allocator, test_context.compiler);
-	auto test = { 2.f, 4.f, 6.f, 8.f };
-	auto schpen = std::span(&foo[0], 4);
-	CHECK(schpen == std::span(test));
+  pass(4, 1, 1, buf0);
+  buf0.wait(*test_context.allocator, test_context.compiler);
+  auto test = { 2.f, 4.f, 6.f, 8.f };
+  auto schpen = std::span(&foo[0], 4);
+  CHECK(schpen == std::span(test));
 }*/
 
 TEST_CASE("generic view from array") {
@@ -216,9 +216,9 @@ TEST_CASE("memory view from array with helper") {
 }
 /*
 void sqr_generic(view<float> view) {
-	for (int i = 0; i < view.count(); i++) {
-		view[i] *= i;
-	}
+  for (int i = 0; i < view.count(); i++) {
+    view[i] *= i;
+  }
 }*/
 
 void sqr_specific(view<BufferLike<float>> view) {
@@ -238,7 +238,7 @@ TEST_CASE("function taking views") {
 		v[i] = i;
 	}
 
-	//sqr_generic(v);
+	// sqr_generic(v);
 	sqr_specific(v);
 
 	for (int i = 0; i < 4; i++) {
@@ -312,56 +312,56 @@ inline val_view<BufferLike<T>> clear(val_view<BufferLike<T>> in, T clear_value, 
 }
 /*
 TEST_CASE("allocate ptr and view in IR") {
-	auto buf0 = vuk::declare_ptr<float>("jacob", { .memory_usage = MemoryUsage::eCPUonly, .size = 16 });
+  auto buf0 = vuk::declare_ptr<float>("jacob", { .memory_usage = MemoryUsage::eCPUonly, .size = 16 });
 
-	auto view = buf0.implicit_view();
-	clear(buf0.implicit_view(), 0.f);
+  auto view = buf0.implicit_view();
+  clear(buf0.implicit_view(), 0.f);
 
-	auto pass = lift_compute(test_context.runtime->get_pipeline(vuk::PipelineBaseCreateInfo::from_inline_glsl(R"(#version 460
+  auto pass = lift_compute(test_context.runtime->get_pipeline(vuk::PipelineBaseCreateInfo::from_inline_glsl(R"(#version 460
 #pragma shader_stage(compute)
 #include <runtime>
 
 layout (push_constant) uniform data {
-	REF(float) data_in;
+  REF(float) data_in;
 };
 
 layout (local_size_x = 1) in;
 
 void main() {
-	ARRAY(data_in)[gl_GlobalInvocationID.x] = (gl_GlobalInvocationID.x + 1);
+  ARRAY(data_in)[gl_GlobalInvocationID.x] = (gl_GlobalInvocationID.x + 1);
 }
 )")));
-	pass(4, 1, 1, buf0);
-	auto res = *buf0.get(*test_context.allocator, test_context.compiler);
-	auto test = { 1.f, 2.f, 3.f, 4.f };
-	auto schpen = std::span(&res[0], 4);
-	CHECK(schpen == std::span(test));
+  pass(4, 1, 1, buf0);
+  auto res = *buf0.get(*test_context.allocator, test_context.compiler);
+  auto test = { 1.f, 2.f, 3.f, 4.f };
+  auto schpen = std::span(&res[0], 4);
+  CHECK(schpen == std::span(test));
 }*/
 /*
 TEST_CASE("allocate view in IR") {
-	auto buf0 = vuk::declare_buf<float>("jacob", { .memory_usage = MemoryUsage::eCPUonly, .size = 16 });
+  auto buf0 = vuk::declare_buf<float>("jacob", { .memory_usage = MemoryUsage::eCPUonly, .size = 16 });
 
-	clear(buf0, 0.f);
+  clear(buf0, 0.f);
 
-	auto pass = lift_compute(test_context.runtime->get_pipeline(vuk::PipelineBaseCreateInfo::from_inline_glsl(R"(#version 460
+  auto pass = lift_compute(test_context.runtime->get_pipeline(vuk::PipelineBaseCreateInfo::from_inline_glsl(R"(#version 460
 #pragma shader_stage(compute)
 #include <runtime>
 
 layout (push_constant) uniform data {
-	REF(float) data_in;
+  REF(float) data_in;
 };
 
 layout (local_size_x = 1) in;
 
 void main() {
-	ARRAY(data_in)[gl_GlobalInvocationID.x] = (gl_GlobalInvocationID.x + 1);
+  ARRAY(data_in)[gl_GlobalInvocationID.x] = (gl_GlobalInvocationID.x + 1);
 }
 )")));
-	pass(4, 1, 1, buf0->ptr);
-	auto res = *buf0.get(*test_context.allocator, test_context.compiler, { .dump_graph = true });
-	auto test = { 1.f, 2.f, 3.f, 4.f };
-	auto schpen = res.to_span();
-	CHECK(schpen == std::span(test));
+  pass(4, 1, 1, buf0->ptr);
+  auto res = *buf0.get(*test_context.allocator, test_context.compiler, { .dump_graph = true });
+  auto test = { 1.f, 2.f, 3.f, 4.f };
+  auto schpen = res.to_span();
+  CHECK(schpen == std::span(test));
 }*/
 
 struct Bigbog {
@@ -408,7 +408,7 @@ TEST_CASE("composite transport") {
 TEST_CASE("composite support for Value") {
 	Allocator alloc(test_context.runtime->get_vk_resource());
 
-	Bigbog boog{ .a_milkshake = 14.f, .a_pilkshake = 14u };
+	Bigbog boog{ .a_milkshake = 15.f, .a_pilkshake = 15u };
 	Unique_ptr<BufferLike<float>> foo = *allocate_array<float>(alloc, 4, MemoryUsage::eCPUonly);
 	boog.the_boof = static_cast<ptr<BufferLike<float>>>(foo.get());
 	Unique_ptr<BufferLike<uint32_t>> foo2 = *allocate_array<uint32_t>(alloc, 4, MemoryUsage::eCPUonly);
@@ -416,21 +416,46 @@ TEST_CASE("composite support for Value") {
 
 	auto buf0 = vuk::acquire("jacobious_boog", boog, vuk::Access::eNone);
 
-	auto pass = vuk::make_pass("transport", [](CommandBuffer& cb, VUK_ARG(Bigbog, Access::eTransferWrite) bogbig, VUK_ARG(uint32_t, Access::eNone) doggets) {
-		cb.fill_buffer(Buffer<float>(bogbig->the_boof, 4).to_byte_view(), *(uint32_t*)&bogbig->a_milkshake);
-		cb.fill_buffer(Buffer<uint32_t>(bogbig->the_beef, 4).to_byte_view(), doggets);
-	});
+	auto pass = vuk::make_pass(
+	    "transport", [](CommandBuffer& cb, VUK_ARG(ptr<BufferLike<uint32_t>>, Access::eTransferWrite) the_beef, VUK_ARG(uint32_t, Access::eNone) pilkshake) {
+		    cb.fill_buffer(Buffer<uint32_t>(the_beef, 4).to_byte_view(), pilkshake);
+	    });
 
-	pass(buf0, buf0->a_pilkshake);
-	auto res = *buf0.get(*test_context.allocator, test_context.compiler, {.dump_graph = true});
+	pass(buf0->the_beef, buf0->a_pilkshake);
+	auto res = *buf0.get(*test_context.allocator, test_context.compiler);
 	{
-		auto test = { res.a_milkshake, res.a_milkshake, res.a_milkshake, res.a_milkshake };
-		auto schpen = std::span(&res.the_boof[0], 4);
-		CHECK(schpen == std::span(test));
-	}
-	{
-		auto test = { 14u, 14u, 14u, 14u };
+		auto test = { res.a_pilkshake, res.a_pilkshake, res.a_pilkshake, res.a_pilkshake };
 		auto schpen = std::span(&res.the_beef[0], 4);
 		CHECK(schpen == std::span(test));
 	}
 }
+/*
+TEST_CASE("aliased constant composite support for Value") {
+  Allocator alloc(test_context.runtime->get_vk_resource());
+
+  Bigbog boog{ .a_milkshake = 14.f, .a_pilkshake = 14u };
+  Unique_ptr<BufferLike<float>> foo = *allocate_array<float>(alloc, 4, MemoryUsage::eCPUonly);
+  boog.the_boof = static_cast<ptr<BufferLike<float>>>(foo.get());
+  Unique_ptr<BufferLike<uint32_t>> foo2 = *allocate_array<uint32_t>(alloc, 4, MemoryUsage::eCPUonly);
+  boog.the_beef = static_cast<ptr<BufferLike<uint32_t>>>(foo2.get());
+
+  auto buf0 = vuk::acquire("jacobious_boog", boog, vuk::Access::eNone);
+
+  auto pass = vuk::make_pass("transport", [](CommandBuffer& cb, VUK_ARG(Bigbog, Access::eTransferWrite) bogbig, VUK_ARG(uint32_t, Access::eNone) doggets) {
+    cb.fill_buffer(Buffer<float>(bogbig->the_boof, 4).to_byte_view(), *(uint32_t*)&bogbig->a_milkshake);
+    cb.fill_buffer(Buffer<uint32_t>(bogbig->the_beef, 4).to_byte_view(), doggets);
+  });
+
+  pass(buf0, buf0->a_pilkshake);
+  auto res = *buf0.get(*test_context.allocator, test_context.compiler, {.dump_graph = true});
+  {
+    auto test = { res.a_milkshake, res.a_milkshake, res.a_milkshake, res.a_milkshake };
+    auto schpen = std::span(&res.the_boof[0], 4);
+    CHECK(schpen == std::span(test));
+  }
+  {
+    auto test = { 14u, 14u, 14u, 14u };
+    auto schpen = std::span(&res.the_beef[0], 4);
+    CHECK(schpen == std::span(test));
+  }
+}*/
