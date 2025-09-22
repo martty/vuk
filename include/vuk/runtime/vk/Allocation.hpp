@@ -37,7 +37,7 @@ namespace vuk {
 	template<Format f>
 	struct FormatT {};
 
-	template<class Type = byte, class... Constraints>
+	template<class Type = byte>
 	struct ptr : ptr_base {
 		using pointed_T = Type;
 		using UnwrappedT = detail::unwrap<Type>::T;
@@ -90,7 +90,7 @@ namespace vuk {
 	template<class T>
 	using Unique_ptr = Unique<ptr<T>>;
 
-	template<class Type = void, class... Constraints>
+	template<class Type = void, size_t Extent = dynamic_extent>
 	struct view : generic_view_base {
 		auto& operator[](size_t index)
 		  requires(!std::is_same_v<Type, void>)
@@ -152,8 +152,88 @@ namespace vuk {
 	};
 
 	/// @brief A contiguous portion of GPU-visible memory
-	template<class Type, class... Constraints>
-	struct view<BufferLike<Type>, Constraints...> {
+	// fixed extent
+	template<class Type, size_t Extent>
+	struct view<BufferLike<Type>, Extent> {
+		ptr<BufferLike<Type>> ptr;
+		static constexpr size_t sz_bytes = Extent * sizeof(Type);
+
+		view() = default;
+
+		view(vuk::ptr<BufferLike<Type>> ptr)
+		  requires(!std::is_array_v<Type>)
+		    : ptr(ptr) {}
+
+		auto& operator[](size_t index)
+		  requires(!std::is_same_v<Type, void>)
+		{
+			assert(index < (sz_bytes / sizeof(Type)));
+			return ptr[index];
+		}
+
+		const auto& operator[](size_t index) const
+		  requires(!std::is_same_v<Type, void>)
+		{
+			assert(index < (sz_bytes / sizeof(Type)));
+			return ptr[index];
+		}
+
+		explicit operator bool() const noexcept {
+			return !!ptr;
+		}
+
+		[[nodiscard]] auto& data() noexcept {
+			return ptr;
+		}
+
+		[[nodiscard]] size_t size_bytes() const noexcept {
+			return sz_bytes;
+		}
+
+		[[nodiscard]] size_t count() const noexcept {
+			return sz_bytes / sizeof(Type);
+		}
+
+		[[nodiscard]] view<BufferLike<byte>, sz_bytes> to_byte_view() const noexcept {
+			return view<BufferLike<byte>, sz_bytes>{ vuk::ptr<BufferLike<byte>>{ ptr.device_address } };
+		}
+
+		template<class new_T>
+		[[nodiscard]] view<BufferLike<new_T>, Extent * sizeof(Type) / sizeof(new_T)> cast() const noexcept {
+			return view<BufferLike<new_T>, Extent * sizeof(Type) / sizeof(new_T)>{ vuk::ptr<BufferLike<new_T>>{ ptr.device_address } };
+		}
+
+		/// @brief Create a new view that is a subset of the original
+		[[nodiscard]] view<BufferLike<Type>> subview(VkDeviceSize offset, VkDeviceSize new_count = ~(0ULL)) const {
+			if (new_count == ~0ULL) {
+				new_count = count() - offset;
+			} else {
+				assert(offset + new_count <= count());
+			}
+			return { ptr + offset, new_count };
+		}
+
+		[[nodiscard]] std::span<Type> to_span() noexcept {
+			return std::span{ &*ptr, count() };
+		}
+
+		[[nodiscard]] std::span<const Type> to_span() const noexcept {
+			return std::span{ &*ptr, count() };
+		}
+
+		operator view<BufferLike<Type>, dynamic_extent>() const noexcept {
+			return { ptr, sz_bytes };
+		}
+		std::strong_ordering operator<=>(const view<BufferLike<Type>, Extent>&) const noexcept = default;
+	};
+
+	template<size_t FixedExtent>
+	static view<BufferLike<Type>, FixedExtent> fixed_view(vuk::ptr<BufferLike<Type>> ptr) {
+		return { ptr };
+	}
+
+	template<class Type>
+	struct view<BufferLike<Type>, dynamic_extent> {
 		ptr<BufferLike<Type>> ptr;
 		size_t sz_bytes;
 
@@ -218,24 +298,17 @@ namespace vuk {
 		[[nodiscard]] std::span<const Type> to_span() const noexcept {
 			return std::span{ &*ptr, count() };
 		}
-		std::strong_ordering operator<=>(const view<BufferLike<Type>, Constraints...>&) const noexcept = default;
+		std::strong_ordering operator<=>(const view<BufferLike<Type>, dynamic_extent>&) const noexcept = default;
 	};
 
-	template<class T, class... Constraints>
-	struct is_view_type<view<T, Constraints...>> {
+	template<class T, size_t Extent>
+	struct is_view_type<view<T, Extent>> {
 		static constexpr bool value = true;
 	};
 
-	template<class T, class... Constraints>
-	struct is_bufferlike_view_type<view<BufferLike<T>, Constraints...>> {
+	template<class T>
+	struct is_bufferlike_view_type<view<BufferLike<T>>> {
 		static constexpr bool value = true;
-	};
-
-	template<class... Constraints>
-	struct view<BufferLike<FormatT<Format::eUndefined>>, Constraints...> {
-		ptr<BufferLike<FormatT<Format::eUndefined>>> ptr;
-		size_t size_bytes;
-		Format format;
 	};
 
 	struct BufferViewCreateInfo {
@@ -287,11 +360,11 @@ namespace vuk {
 } // namespace vuk
 
 namespace std {
-	template<class T, class... Constraints>
-	struct hash<vuk::view<vuk::BufferLike<T>, Constraints...>> {
-		size_t operator()(vuk::view<vuk::BufferLike<T>, Constraints...> const& x) const {
-			uint32_t v = std::hash<uint64_t>(x.ptr);
-			hash_combine_direct(v, std::hash<uint64_t>(x.sz_bytes));
+	template<class T, size_t Extent>
+	struct hash<vuk::view<vuk::BufferLike<T>, Extent>> {
+		size_t operator()(vuk::view<vuk::BufferLike<T>, Extent> const& x) const {
+			uint32_t v = std::hash<uint32_t>()(x.ptr);
+			hash_combine_direct(v, std::hash<uint32_t>(x.sz_bytes));
 			return v;
 		}
 	};

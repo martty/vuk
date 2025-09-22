@@ -1,10 +1,10 @@
 #pragma once
 
 #include "vuk/RenderGraph.hpp"
-#include "vuk/SourceLocation.hpp"
-#include "vuk/Value.hpp"
 #include "vuk/runtime/CommandBuffer.hpp"
 #include "vuk/runtime/vk/AllocatorHelpers.hpp"
+#include "vuk/SourceLocation.hpp"
+#include "vuk/Value.hpp"
 #include <math.h>
 #include <span>
 
@@ -192,34 +192,32 @@ namespace vuk {
 
 	template<class T>
 	inline Value<Buffer<T>> copy(Value<ImageAttachment> src, Value<Buffer<T>> dst, VUK_CALLSTACK) {
-		auto image2buf =
-		    make_pass("copy image to buffer", [](CommandBuffer& cbuf, VUK_IA(Access::eCopyRead) src, VUK_ARG(Buffer<T>, Access::eCopyWrite) dst) {
-			    BufferImageCopy bc;
-			    bc.imageOffset = { 0, 0, 0 };
-			    bc.bufferRowLength = 0;
-			    bc.bufferImageHeight = 0;
-			    bc.imageExtent = src->base_mip_extent();
-			    bc.imageSubresource.aspectMask = format_to_aspect(src->format);
-			    bc.imageSubresource.mipLevel = src->base_level;
-			    bc.imageSubresource.baseArrayLayer = src->base_layer;
-			    assert(src->layer_count == 1); // unsupported yet
-			    bc.imageSubresource.layerCount = src->layer_count;
-			    bc.bufferOffset = cbuf.get_context().ptr_to_buffer_offset(dst->ptr).offset; // TODO: PAV: bad
-			    cbuf.copy_image_to_buffer(src, dst->to_byte_view(), bc);
-			    return dst;
-		    });
+		auto image2buf = make_pass("copy image to buffer", [](CommandBuffer& cbuf, VUK_IA(Access::eCopyRead) src, VUK_ARG(Buffer<T>, Access::eCopyWrite) dst) {
+			BufferImageCopy bc;
+			bc.imageOffset = { 0, 0, 0 };
+			bc.bufferRowLength = 0;
+			bc.bufferImageHeight = 0;
+			bc.imageExtent = src->base_mip_extent();
+			bc.imageSubresource.aspectMask = format_to_aspect(src->format);
+			bc.imageSubresource.mipLevel = src->base_level;
+			bc.imageSubresource.baseArrayLayer = src->base_layer;
+			assert(src->layer_count == 1); // unsupported yet
+			bc.imageSubresource.layerCount = src->layer_count;
+			bc.bufferOffset = cbuf.get_context().ptr_to_buffer_offset(dst->ptr).offset; // TODO: PAV: bad
+			cbuf.copy_image_to_buffer(src, dst->to_byte_view(), bc);
+			return dst;
+		});
 
 		return image2buf(src, dst, VUK_CALL);
 	}
 
 	template<class T>
 	inline Value<Buffer<T>> copy(Value<Buffer<T>> src, Value<Buffer<T>> dst, VUK_CALLSTACK) {
-		auto buf2buf =
-		    vuk::make_pass("copy buffer to buffer",
-		                   [](vuk::CommandBuffer& command_buffer, VUK_ARG(Buffer<T>, vuk::eCopyRead) src, VUK_ARG(Buffer<T>, vuk::eCopyWrite) dst) {
-			                   command_buffer.copy_buffer(src, dst);
-			                   return dst;
-		                   });
+		auto buf2buf = vuk::make_pass("copy buffer to buffer",
+		                              [](vuk::CommandBuffer& command_buffer, VUK_ARG(Buffer<T>, vuk::eCopyRead) src, VUK_ARG(Buffer<T>, vuk::eCopyWrite) dst) {
+			                              command_buffer.copy_buffer(src, dst);
+			                              return dst;
+		                              });
 		return buf2buf(src, dst, VUK_CALL);
 	}
 
@@ -228,30 +226,28 @@ namespace vuk {
 		uint32_t value_as_uint;
 		static_assert(sizeof(T) == sizeof(uint32_t), "T must be 4 bytes");
 		memcpy(&value_as_uint, &value, sizeof(T));
-		auto buf2buf = vuk::make_pass("fill buffer", [value_as_uint](vuk::CommandBuffer& command_buffer, VUK_BA(vuk::eClear) dst) {
-			command_buffer.fill_buffer(dst, value_as_uint);
-		    });
+		auto buf2buf = vuk::make_pass(
+		    "fill buffer", [value_as_uint](vuk::CommandBuffer& command_buffer, VUK_BA(vuk::eClear) dst) { command_buffer.fill_buffer(dst, value_as_uint); });
 		buf2buf(dst, VUK_CALL);
 	}
 
 	template<class T>
 	inline Value<ImageAttachment> copy(Value<Buffer<T>> src, Value<ImageAttachment> dst, VUK_CALLSTACK) {
-		auto buf2img =
-		    make_pass("copy buffer to image", [](CommandBuffer& cbuf, VUK_ARG(Buffer<T>, Access::eCopyRead) src, VUK_IA(Access::eCopyWrite) dst) {
-			    BufferImageCopy bc;
-			    bc.imageOffset = { 0, 0, 0 };
-			    bc.bufferRowLength = 0;
-			    bc.bufferImageHeight = 0;
-			    bc.imageExtent = dst->base_mip_extent();
-			    bc.imageSubresource.aspectMask = format_to_aspect(dst->format);
-			    bc.imageSubresource.mipLevel = dst->base_level;
-			    bc.imageSubresource.baseArrayLayer = dst->base_layer;
-			    assert(dst->layer_count == 1); // unsupported yet
-			    bc.imageSubresource.layerCount = dst->layer_count;
-			    bc.bufferOffset = cbuf.get_context().ptr_to_buffer_offset(dst.ptr).offset; // TODO: PAV: bad
-			    cbuf.copy_buffer_to_image(src, dst, bc);
-			    return dst;
-		    });
+		auto buf2img = make_pass("copy buffer to image", [](CommandBuffer& cbuf, VUK_ARG(Buffer<T>, Access::eCopyRead) src, VUK_IA(Access::eCopyWrite) dst) {
+			BufferImageCopy bc;
+			bc.imageOffset = { 0, 0, 0 };
+			bc.bufferRowLength = 0;
+			bc.bufferImageHeight = 0;
+			bc.imageExtent = dst->base_mip_extent();
+			bc.imageSubresource.aspectMask = format_to_aspect(dst->format);
+			bc.imageSubresource.mipLevel = dst->base_level;
+			bc.imageSubresource.baseArrayLayer = dst->base_layer;
+			assert(dst->layer_count == 1); // unsupported yet
+			bc.imageSubresource.layerCount = dst->layer_count;
+			bc.bufferOffset = cbuf.get_context().ptr_to_buffer_offset(src.ptr).offset; // TODO: PAV: bad
+			cbuf.copy_buffer_to_image(src, dst, bc);
+			return dst;
+		});
 
 		return buf2img(src, dst, VUK_CALL);
 	}

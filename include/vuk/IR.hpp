@@ -32,7 +32,20 @@ namespace vuk {
 	using UserCallbackType = fu2::unique_function<void(CommandBuffer&, std::span<void*>, std::span<void*>, std::span<void*>)>;
 
 	struct Type {
-		enum TypeKind { VOID_TY = 0, MEMORY_TY = 1, INTEGER_TY, FLOAT_TY, POINTER_TY, COMPOSITE_TY, ARRAY_TY, UNION_TY, IMBUED_TY, ALIASED_TY, OPAQUE_FN_TY, SHADER_FN_TY } kind;
+		enum TypeKind {
+			VOID_TY = 0,
+			MEMORY_TY = 1,
+			INTEGER_TY,
+			FLOAT_TY,
+			POINTER_TY,
+			COMPOSITE_TY,
+			ARRAY_TY,
+			UNION_TY,
+			IMBUED_TY,
+			ALIASED_TY,
+			OPAQUE_FN_TY,
+			SHADER_FN_TY
+		} kind;
 		enum Tags { TAG_BUFFERLIKE_VIEW = 1, TAG_IMAGE = 3, TAG_SWAPCHAIN = 4 };
 		size_t size = ~0ULL;
 
@@ -768,7 +781,7 @@ namespace vuk {
 				t->pointer.T = &t->child_types.emplace_back(ty);
 				return emplace_type(std::shared_ptr<Type>(t));
 			}
-			
+
 			std::shared_ptr<Type> make_union_ty(std::vector<std::shared_ptr<Type>> types) {
 				std::vector<size_t> offsets;
 				size_t offset = 0;
@@ -1348,7 +1361,6 @@ namespace vuk {
 			return first(emplace_op(Node{ .kind = Node::GET_ALLOCATION_SIZE, .type = std::span{ ty, 1 }, .get_allocation_size = { .ptr = ptr } }));
 		}
 
-
 		// slice splits a range into two halves
 		// converge is essentially an unslice -> it returns back to before the slice was made
 		// since a slice source is always a single range, converge produces a single range too
@@ -1449,7 +1461,6 @@ namespace vuk {
 		}
 
 		// EDITS
-
 
 		// GC
 		void collect_garbage();

@@ -53,13 +53,15 @@ namespace vuk {
 	struct BufferLike;
 
 	struct ImageAttachment;
-	
-	template<class Type, class... Constraints>
+
+	template<class Type, size_t Extent>
 	struct view;
 
 	using byte = std::byte;
-	template<class Type = byte>
-	using Buffer = view<BufferLike<Type>>;
+	inline constexpr size_t dynamic_extent = -1;
+
+	template<class Type = byte, size_t Extent = dynamic_extent>
+	using Buffer = view<BufferLike<Type>, Extent>;
 
 	struct VirtualAllocation;
 	struct VirtualAddressSpace;

@@ -4,6 +4,8 @@
 #include "vuk/Hash.hpp"
 #include "vuk/ImageAttachment.hpp"
 #include "vuk/IR.hpp"
+#include "vuk/IRCppSupport.hpp"
+#include "vuk/IRCppTypes.hpp"
 #include "vuk/Result.hpp"
 #include "vuk/runtime/vk/Image.hpp"
 #include "vuk/runtime/vk/Pipeline.hpp"
@@ -39,243 +41,14 @@ namespace vuk {
 #define VUK_CALL      (_pscope != _scope ? _scope.parent = &_pscope, _scope : _scope)
 
 namespace vuk {
+	ADAPT_TEMPLATED_STRUCT_FOR_IR(Buffer, ptr, sz_bytes);
+	ADAPT_STRUCT_FOR_IR(BufferCreateInfo, memory_usage, size, alignment);
+
+	static_assert(erased_tuple_adaptor<view<BufferLike<float>>>::value);
+} // namespace vuk
+
+namespace vuk {
 	ResourceUse to_use(Access acc);
-
-	// from: https://stackoverflow.com/a/28213747
-	template<typename T>
-	struct closure_traits {};
-
-#define REM_CTOR(...) __VA_ARGS__
-#define SPEC(cv, var, is_var)                                                                                                                                  \
-	template<typename C, typename R, typename... Args>                                                                                                           \
-	struct closure_traits<R (C::*)(Args... REM_CTOR var) cv> {                                                                                                   \
-		using arity = std::integral_constant<std::size_t, sizeof...(Args)>;                                                                                        \
-		using is_variadic = std::integral_constant<bool, is_var>;                                                                                                  \
-		using is_const = std::is_const<int cv>;                                                                                                                    \
-                                                                                                                                                               \
-		using result_type = R;                                                                                                                                     \
-                                                                                                                                                               \
-		template<std::size_t i>                                                                                                                                    \
-		using arg = typename std::tuple_element<i, std::tuple<Args...>>::type;                                                                                     \
-		static constexpr size_t count = sizeof...(Args);                                                                                                           \
-		using types = std::tuple<Args...>;                                                                                                                         \
-	};
-
-	SPEC(const, (, ...), 1)
-	SPEC(const, (), 0)
-	SPEC(, (, ...), 1)
-	SPEC(, (), 0)
-
-#undef SPEC
-#undef REM_CTOR
-
-	template<int i, typename T>
-	struct drop {
-		using type = T;
-	};
-
-	template<int i, typename T>
-	using drop_t = typename drop<i, T>::type;
-
-	template<typename T>
-	struct drop<0, T> {
-		using type = T;
-	};
-
-	template<int i, typename T, typename... Ts>
-	  requires(i > 0)
-	struct drop<i, std::tuple<T, Ts...>> {
-		using type = drop_t<i - 1, std::tuple<Ts...>>;
-	};
-
-#define DELAYED_ERROR(error)                                                                                                                                   \
-private:                                                                                                                                                       \
-	template<typename T>                                                                                                                                         \
-	struct Error {                                                                                                                                               \
-		static_assert(std::is_same_v<T, T> == false, error);                                                                                                       \
-		using type = T;                                                                                                                                            \
-	};                                                                                                                                                           \
-	using error_t = typename Error<void>::type;                                                                                                                  \
-                                                                                                                                                               \
-public:
-	// END OF DELAYED_ERROR
-
-	template<typename... Ts>
-	struct type_list {
-		static constexpr size_t length = sizeof...(Ts);
-		using type = type_list<Ts...>;
-	};
-
-	template<typename>
-	struct tuple_to_typelist {
-		DELAYED_ERROR("tuple_to_typelist expects a std::tuple");
-	};
-
-	template<typename... Ts>
-	struct tuple_to_typelist<std::tuple<Ts...>> {
-		using type = type_list<Ts...>;
-	};
-
-	template<typename T>
-	using tuple_to_typelist_t = typename tuple_to_typelist<T>::type;
-
-	template<typename>
-	struct typelist_to_tuple {
-		DELAYED_ERROR("typelist_to_tuple expects a type_list");
-	};
-
-	template<typename... Ts>
-	struct typelist_to_tuple<type_list<Ts...>> {
-		using type = std::tuple<Ts...>;
-	};
-
-	template<typename T>
-	using typelist_to_tuple_t = typename typelist_to_tuple<T>::type;
-
-	template<typename T, typename List>
-	struct prepend_type;
-
-	template<typename T, typename... Ts>
-	struct prepend_type<T, type_list<Ts...>> {
-		using type = type_list<T, Ts...>;
-	};
-
-	template<typename T1, typename T2>
-	struct intersect_type_lists;
-
-	template<typename... T1>
-	struct intersect_type_lists<type_list<T1...>, type_list<>> {
-		using type = type_list<>;
-	};
-
-	template<typename... T1, typename T2_Head, typename... T2>
-	struct intersect_type_lists<type_list<T1...>, type_list<T2_Head, T2...>> {
-	private:
-		using rest = intersect_type_lists<type_list<T1...>, type_list<T2...>>;
-		using rest_type = typename rest::type;
-
-		static constexpr bool condition = (std::is_same_v<T1, T2_Head> || ...);
-
-	public:
-		using type = std::conditional_t<condition, typename prepend_type<T2_Head, rest_type>::type, rest_type>;
-	};
-
-	template<typename Tuple, typename... Ts>
-	auto make_subtuple(const Tuple& tuple, type_list<Ts...>) -> typelist_to_tuple_t<type_list<Ts...>> {
-		return typelist_to_tuple_t<type_list<Ts...>>(std::get<Ts>(tuple)...);
-	}
-
-	//	https://devblogs.microsoft.com/oldnewthing/20200629-00/?p=103910
-	template<typename T, typename Tuple>
-	struct tuple_element_index_helper;
-
-	template<typename T>
-	struct tuple_element_index_helper<T, std::tuple<>> {
-		static constexpr std::size_t value = 0;
-	};
-
-	template<typename T, typename... Rest>
-	struct tuple_element_index_helper<T, std::tuple<T, Rest...>> {
-		static constexpr std::size_t value = 0;
-		using RestTuple = std::tuple<Rest...>;
-		static_assert(tuple_element_index_helper<T, RestTuple>::value == std::tuple_size_v<RestTuple>, "type appears more than once in tuple");
-	};
-
-	template<typename T, typename First, typename... Rest>
-	struct tuple_element_index_helper<T, std::tuple<First, Rest...>> {
-		using RestTuple = std::tuple<Rest...>;
-		static constexpr std::size_t value = 1 + tuple_element_index_helper<T, RestTuple>::value;
-	};
-
-	template<typename T, typename Tuple>
-	struct tuple_element_index {
-		static constexpr std::size_t value = tuple_element_index_helper<T, Tuple>::value;
-		static_assert(value < std::tuple_size_v<Tuple>, "type does not appear in tuple");
-	};
-
-	template<typename T, typename Tuple>
-	inline constexpr std::size_t tuple_element_index_v = tuple_element_index<T, Tuple>::value;
-
-	template<typename Tuple, typename... Ts>
-	auto make_indices(const Tuple& tuple, type_list<Ts...>) {
-		return std::array{ tuple_element_index_v<Ts, Tuple>... };
-	}
-
-	template<typename T1, typename T2>
-	auto intersect_tuples(const T1& tuple) {
-		using T1_list = tuple_to_typelist_t<T1>;
-		using T2_list = tuple_to_typelist_t<T2>;
-		using intersection = intersect_type_lists<T1_list, T2_list>;
-		using intersection_type = typename intersection::type;
-		auto subtuple = make_subtuple(tuple, intersection_type{});
-		auto indices = make_indices(tuple, intersection_type{});
-		return std::pair{ indices, subtuple };
-	}
-
-	template<typename Tuple>
-	struct TupleMap;
-
-	template<typename... T>
-	void pack_typed_tuple(std::span<void*> src, std::span<void*> meta, CommandBuffer& cb, void* dst) {
-		std::tuple<CommandBuffer*, T...>& tuple = *new (dst) std::tuple<CommandBuffer*, T...>;
-		std::get<0>(tuple) = &cb;
-#define X(n)                                                                                                                                                   \
-	if constexpr ((sizeof...(T)) > n) {                                                                                                                          \
-		auto& elem = std::get<n + 1>(tuple);                                                                                                                       \
-		elem.ptr = reinterpret_cast<decltype(elem.ptr)>(src[n]);                                                                                                   \
-		elem.def = *reinterpret_cast<Ref*>(meta[n]);                                                                                                               \
-	}
-		X(0)
-		X(1)
-		X(2)
-		X(3)
-		X(4)
-		X(5)
-		X(6)
-		X(7)
-		X(8)
-		X(9)
-		X(10)
-		X(11)
-		X(12)
-		X(13)
-		X(14)
-		X(15)
-		static_assert(sizeof...(T) <= 16);
-#undef X
-	}; // namespace vuk
-
-	template<typename... T>
-	void unpack_typed_tuple(const std::tuple<T...>& src, std::span<void*> dst) {
-#define X(n)                                                                                                                                                   \
-	if constexpr ((sizeof...(T)) > n) {                                                                                                                          \
-		dst[n] = std::get<n>(src).ptr;                                                                                                                             \
-	}
-		X(0)
-		X(1)
-		X(2)
-		X(3)
-		X(4)
-		X(5)
-		X(6)
-		X(7)
-		X(8)
-		X(9)
-		X(10)
-		X(11)
-		X(12)
-		X(13)
-		X(14)
-		X(15)
-		static_assert(sizeof...(T) <= 16);
-#undef X
-	}
-
-	template<typename>
-	struct is_tuple : std::false_type {};
-
-	template<typename... T>
-	struct is_tuple<std::tuple<T...>> : std::true_type {};
 
 	template<typename... T>
 	static auto make_ret(std::shared_ptr<ExtNode> extnode, const std::tuple<T...>& us) {
@@ -300,9 +73,45 @@ public:
 		return first;
 	};
 
+	template<class T>
+	struct AsDynamicExtentView {
+		using type = T;
+	};
+
+	template<class T, size_t Extent>
+	struct AsDynamicExtentView<Buffer<T, Extent>> {
+		using type = Buffer<T>;
+	};
+
+	template<class T>
+	struct UnwrapArg;
+
+	template<class T, Access acc, class UniqueT>
+	struct UnwrapArg<Arg<T, acc, UniqueT>> {
+		using type = typename AsDynamicExtentView<T>::type;
+	};
+
+	template<Unsynchronized T>
+	struct UnwrapArg<T> {
+		using type = T;
+	};
+
+	template<class T>
+	struct AsArg;
+
+	template<class T, Access acc, class UniqueT>
+	struct AsArg<Arg<T, acc, UniqueT>> {
+		using type = Arg<T, acc, UniqueT>;
+	};
+
+	template<Unsynchronized T>
+	struct AsArg<T> {
+		using type = Arg<T, Access::eNone, int>;
+	};
+
 	template<typename... T>
 	struct TupleMap<std::tuple<T...>> {
-		using ret_tuple = std::tuple<Value<typename T::type>...>;
+		using ret_tuple = std::tuple<Value<typename UnwrapArg<T>::type>...>;
 
 		template<class Ret, class F>
 		static auto make_lam(Name name, F&& body, SchedulingInfo scheduling_info, VUK_CALLSTACK) {
@@ -310,10 +119,11 @@ public:
 
 			auto callback = [typed_cb = std::move(body)](CommandBuffer& cb, std::span<void*> args, std::span<void*> meta, std::span<void*> rets) mutable {
 				// we do type recovery here -> convert untyped args to typed ones
-				alignas(alignof(std::tuple<CommandBuffer&, T...>)) char storage[sizeof(std::tuple<CommandBuffer&, T...>)];
-				pack_typed_tuple<T...>(args, meta, cb, storage);
-				if constexpr (!std::is_same_v<void, decltype(std::apply(typed_cb, *reinterpret_cast<std::tuple<CommandBuffer&, T...>*>(storage)))>) {
-					auto typed_ret = std::apply(typed_cb, *reinterpret_cast<std::tuple<CommandBuffer&, T...>*>(storage));
+				alignas(alignof(std::tuple<CommandBuffer&, typename AsArg<T>::type...>)) char storage[sizeof(std::tuple<CommandBuffer&, typename AsArg<T>::type...>)];
+				pack_typed_tuple<typename AsArg<T>::type...>(args, meta, cb, storage);
+				if constexpr (!std::is_same_v<void,
+				                              decltype(std::apply(typed_cb, *reinterpret_cast<std::tuple<CommandBuffer&, typename AsArg<T>::type...>*>(storage)))>) {
+					auto typed_ret = std::apply(typed_cb, *reinterpret_cast<std::tuple<CommandBuffer&, typename AsArg<T>::type...>*>(storage));
 					// now we erase these types
 					if constexpr (!is_tuple<Ret>::value) {
 						rets[0] = typed_ret.ptr;
@@ -321,33 +131,33 @@ public:
 						unpack_typed_tuple(typed_ret, rets);
 					}
 				} else {
-					std::apply(typed_cb, *reinterpret_cast<std::tuple<CommandBuffer&, T...>*>(storage));
+					std::apply(typed_cb, *reinterpret_cast<std::tuple<CommandBuffer&, typename AsArg<T>::type...>*>(storage));
 				}
 			};
 
 			std::shared_ptr<Type> opaque_fn_ty;
 
 			// when this function is called, we weave in this call into the IR
-			return [untyped_cb = std::move(callback), name, scheduling_info, hash_code, opaque_fn_ty, inner_scope = VUK_CALL](Value<typename T::type>... args,
-			                                                                                                                  VUK_CALLSTACK) mutable {
+			return [untyped_cb = std::move(callback), name, scheduling_info, hash_code, opaque_fn_ty, inner_scope = VUK_CALL](
+			           Value<typename UnwrapArg<T>::type>... args, VUK_CALLSTACK) mutable {
 				auto& first = First(args...);
 
 				bool reuse_node = first.node.use_count() == 1 && first.node->acqrel->status == Signal::Status::eDisarmed;
 				reuse_node = false;
 
-				std::tuple arg_tuple_as_a = { T{ nullptr, args.get_head() }... };
+				std::tuple arg_tuple_as_a = { typename AsArg<T>::type{ nullptr, args.get_head() }... };
 				constexpr size_t arg_count = std::tuple_size_v<decltype(arg_tuple_as_a)>;
 
 				if (!opaque_fn_ty) {
-					std::array<std::shared_ptr<Type>, arg_count> arg_types = { current_module->types.make_imbued_ty(T{ nullptr, args.get_head() }.src.type(),
-						                                                                                              T::access)... };
+					std::array<std::shared_ptr<Type>, arg_count> arg_types = { current_module->types.make_imbued_ty(
+						  typename AsArg<T>::type{ nullptr, args.get_head() }.src.type(), AsArg<T>::type::access)... };
 
 					fixed_vector<std::shared_ptr<Type>, arg_count> ret_types;
 					if constexpr (is_tuple<Ret>::value) {
-						auto [idxs, ret_tuple] = intersect_tuples<std::tuple<T...>, Ret>(arg_tuple_as_a);
+						auto [idxs, ret_tuple] = intersect_tuples<std::tuple<typename AsArg<T>::type...>, Ret>(arg_tuple_as_a);
 						fill_ret_ty(idxs, ret_tuple, ret_types);
 					} else if constexpr (!std::is_same_v<Ret, void>) {
-						auto [idxs, ret_tuple] = intersect_tuples<std::tuple<T...>, std::tuple<Ret>>(arg_tuple_as_a);
+						auto [idxs, ret_tuple] = intersect_tuples<std::tuple<typename AsArg<T>::type...>, std::tuple<Ret>>(arg_tuple_as_a);
 						fill_ret_ty(idxs, ret_tuple, ret_types);
 					}
 
@@ -412,10 +222,10 @@ public:
 				current_module->set_source_location(extnode->get_node(), inner_scope);
 
 				if constexpr (is_tuple<Ret>::value) {
-					auto [idxs, ret_tuple] = intersect_tuples<std::tuple<T...>, Ret>(arg_tuple_as_a);
+					auto [idxs, ret_tuple] = intersect_tuples<std::tuple<typename AsArg<T>::type...>, Ret>(arg_tuple_as_a);
 					return make_ret(std::move(extnode), ret_tuple);
 				} else if constexpr (!std::is_same_v<Ret, void>) {
-					auto [idxs, ret_tuple] = intersect_tuples<std::tuple<T...>, std::tuple<Ret>>(arg_tuple_as_a);
+					auto [idxs, ret_tuple] = intersect_tuples<std::tuple<typename AsArg<T>::type...>, std::tuple<Ret>>(arg_tuple_as_a);
 					return std::get<0>(make_ret(std::move(extnode), ret_tuple));
 				}
 			};
@@ -433,57 +243,6 @@ public:
 		static_assert(std::is_same_v<std::tuple_element_t<0, typename traits::types>, CommandBuffer&>, "First argument to pass MUST be CommandBuffer&");
 		return TupleMap<drop_t<1, typename traits::types>>::template make_lam<typename traits::result_type, F>(
 		    name, std::forward<F>(body), scheduling_info, VUK_CALL);
-	}
-
-	ADAPT_TEMPLATED_STRUCT_FOR_IR(Buffer, ptr, sz_bytes);
-	ADAPT_STRUCT_FOR_IR(BufferCreateInfo, memory_usage, size, alignment);
-
-	template<class T>
-	inline std::shared_ptr<Type> to_IR_type() {
-		if constexpr (!std::is_same_v<T, typename detail::unwrap<T>::T>) {
-			return to_IR_type<typename detail::unwrap<T>::T>();
-		}
-		if constexpr (std::is_array_v<T> && std::extent_v<T> == 0) {
-			return to_IR_type<std::remove_all_extents_t<T>>();
-		}
-
-		if constexpr (std::is_void_v<T>) {
-			return current_module->types.make_void_ty();
-		} else if constexpr (std::is_integral_v<T>) {
-			return current_module->types.make_scalar_ty(Type::INTEGER_TY, sizeof(T) * 8);
-		} else if constexpr (std::is_floating_point_v<T>) {
-			return current_module->types.make_scalar_ty(Type::FLOAT_TY, sizeof(T) * 8);
-		} else if constexpr (std::is_enum_v<T>) {
-			return current_module->types.make_scalar_ty(Type::INTEGER_TY, sizeof(T) * 8);
-		} else if constexpr (std::is_base_of_v<ptr_base, T>) {
-			return current_module->types.make_pointer_ty(to_IR_type<typename T::pointed_T>());
-		} else if constexpr (erased_tuple_adaptor<T>::value) {
-			std::vector<std::shared_ptr<Type>> child_types =
-			    std::apply([&](auto... member_tys) { return std::vector<std::shared_ptr<Type>>{ to_IR_type<decltype(member_tys)>()... }; },
-			               erased_tuple_adaptor<T>::member_types);
-			auto offsets = std::vector<size_t>(erased_tuple_adaptor<T>::offsets.begin(), erased_tuple_adaptor<T>::offsets.end());
-			auto composite_type = current_module->types.emplace_type(
-			    std::shared_ptr<Type>(new Type{ .kind = Type::COMPOSITE_TY,
-			                                    .size = sizeof(T),
-			                                    .debug_info = current_module->types.allocate_type_debug_info(erased_tuple_adaptor<T>::name),
-			                                    .child_types = child_types,
-			                                    .offsets = offsets,
-			                                    .member_names = { erased_tuple_adaptor<T>::member_names.begin(), erased_tuple_adaptor<T>::member_names.end() },
-			                                    .composite = { .types = child_types,
-			                                                   .tag = std::hash<const char*>{}(erased_tuple_adaptor<T>::name),
-			                                                   .construct = &erased_tuple_adaptor<T>::construct,
-			                                                   .get = &erased_tuple_adaptor<T>::get,
-			                                                   .is_default = &erased_tuple_adaptor<T>::is_default,
-			                                                   .destroy = &erased_tuple_adaptor<T>::destroy } }));
-			return composite_type;
-		}
-	}
-
-	template<class T, class... Ts>
-	constexpr std::size_t index_of(const std::tuple<Ts...>&) {
-		int found{}, count{};
-		((!found ? (++count, found = std::is_same_v<T, Ts>) : 0), ...);
-		return found ? count - 1 : count;
 	}
 	
 	/// @brief Turn a compute pipeline create info into a callable compute pass
@@ -581,7 +340,7 @@ public:
 		current_module->set_source_location(ref.node, VUK_CALL);
 		return { make_ext_ref(ref) };
 	}
-	
+
 	// declare ~~ int* x;
 	// acquire ~~ int* x = _existing_;
 	// discard ~~ int* x = _existing_; invalidate(x);
@@ -662,11 +421,10 @@ public:
 	}
 
 	template<class T>
-	[[nodiscard]] inline val_view<BufferLike<T>> make_view(Name name, val_ptr<BufferLike<T>> buf, Value<size_t> size, VUK_CALLSTACK) {
-		assert(buf);
-		Ref ref = current_module->make_construct(to_IR_type<view<BufferLike<T>>>(), buf.get_head(), size.get_head());
+	[[nodiscard]] inline val_view<BufferLike<T>> make_view(val_ptr<BufferLike<T>> buf, Value<size_t> size, VUK_CALLSTACK) {
+		std::array<Ref, 2> args = { buf.get_head(), size.get_head() };
+		Ref ref = current_module->make_construct(to_IR_type<view<BufferLike<T>>>(), nullptr, args);
 		auto ext_ref = make_ext_ref(ref, { buf.node, size.node });
-		current_module->name_output(ref, name.c_str());
 		current_module->set_source_location(ref.node, VUK_CALL);
 		return { std::move(ext_ref) };
 	}

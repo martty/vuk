@@ -923,6 +923,21 @@ namespace vuk {
 		return DescriptorSetStrategyFlags(bit0) ^ bit1;
 	}
 
+	template<class T>
+	void synchronize(Buffer<T>, struct SyncHelper&);
+	template<class T, size_t Extent>
+	void synchronize(Buffer<T, Extent>, struct SyncHelper&);
+	void synchronize(ImageAttachment, struct SyncHelper&);
+	void synchronize(struct SampledImage, struct SyncHelper&);
+
+	template<class T>
+	concept Synchronized = requires(std::remove_all_extents_t<T> a, SyncHelper& sh) {
+		{ synchronize(a, sh) } -> std::same_as<void>;
+	};
+
+	template<typename T>
+	concept Unsynchronized = not Synchronized<T>;
+
 	struct Node;
 	struct Type;
 	struct ChainLink;
@@ -941,8 +956,9 @@ namespace vuk {
 		constexpr std::strong_ordering operator<=>(const Ref&) const noexcept = default;
 	};
 
-	template<class Type, Access acc, class UniqueT>
+	template<class Type, Access acc, class UniqueT = decltype([]() {})>
 	struct Arg {
+		static_assert(Synchronized<Type>, "Type used in Arg must be Synchronized (=> implement vuk::synchronize for your type or pass it without Arg<T,...>)");
 		using type = Type;
 		static constexpr Access access = acc;
 
@@ -973,8 +989,47 @@ namespace vuk {
 			return (*ptr)[index];
 		}
 
-		Arg<Buffer<Type>, acc, void> to_view(size_t count) 
-			requires std::is_base_of_v<ptr_base, Type>
+		Arg<Buffer<Type>, acc, void> to_view(size_t count)
+		  requires std::is_base_of_v<ptr_base, Type>
+		{
+			return { Buffer<Type>{ ptr, count }, {}, {} };
+		}
+	};
+
+	template<class Type, Access acc>
+	struct Arg<Type, acc, int> {
+		using type = Type;
+		static constexpr Access access = acc;
+
+		Type* ptr;
+
+		Ref src;
+		Ref def;
+
+		operator const Type&() const noexcept
+		  requires(!std::is_array_v<Type>)
+		{
+			return *ptr;
+		}
+
+		const Type* operator->() const noexcept
+		  requires(!std::is_array_v<Type>)
+		{
+			return ptr;
+		}
+
+		size_t size() const noexcept
+		  requires std::is_array_v<Type>;
+
+		auto& operator[](size_t index) const noexcept
+		  requires std::is_array_v<Type>
+		{
+			assert(index < size());
+			return (*ptr)[index];
+		}
+
+		Arg<Buffer<Type>, acc, void> to_view(size_t count)
+		  requires std::is_base_of_v<ptr_base, Type>
 		{
 			return { Buffer<Type>{ ptr, count }, {}, {} };
 		}

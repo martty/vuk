@@ -1,0 +1,53 @@
+#pragma once
+
+#include "vuk/ErasedTupleAdaptor.hpp"
+#include "vuk/IR.hpp"
+
+namespace vuk {
+	template<class>
+	struct dependent_false : std::false_type {};
+
+	template<class T>
+	inline std::shared_ptr<Type> to_IR_type() {
+		if constexpr (!std::is_same_v<T, typename detail::unwrap<T>::T>) {
+			return to_IR_type<typename detail::unwrap<T>::T>();
+		}
+		if constexpr (std::is_array_v<T> && std::extent_v<T> == 0) {
+			return to_IR_type<std::remove_all_extents_t<T>>();
+		}
+
+		if constexpr (std::is_void_v<T>) {
+			return current_module->types.make_void_ty();
+		} else if constexpr (std::is_integral_v<T>) {
+			return current_module->types.make_scalar_ty(Type::INTEGER_TY, sizeof(T) * 8);
+		} else if constexpr (std::is_floating_point_v<T>) {
+			return current_module->types.make_scalar_ty(Type::FLOAT_TY, sizeof(T) * 8);
+		} else if constexpr (std::is_enum_v<T>) {
+			return current_module->types.make_scalar_ty(Type::INTEGER_TY, sizeof(T) * 8);
+		} else if constexpr (std::is_base_of_v<ptr_base, T>) {
+			return current_module->types.make_pointer_ty(to_IR_type<typename T::UnwrappedT>());
+		} else if constexpr (erased_tuple_adaptor<T>::value) {
+			std::vector<std::shared_ptr<Type>> child_types =
+			    std::apply([&](auto... member_tys) { return std::vector<std::shared_ptr<Type>>{ to_IR_type<decltype(member_tys)>()... }; },
+			               erased_tuple_adaptor<T>::member_types);
+			auto offsets = std::vector<size_t>(erased_tuple_adaptor<T>::offsets.begin(), erased_tuple_adaptor<T>::offsets.end());
+			auto composite_type = current_module->types.emplace_type(
+			    std::shared_ptr<Type>(new Type{ .kind = Type::COMPOSITE_TY,
+			                                    .size = sizeof(T),
+			                                    .debug_info = current_module->types.allocate_type_debug_info(erased_tuple_adaptor<T>::name),
+			                                    .child_types = child_types,
+			                                    .offsets = offsets,
+			                                    .member_names = { erased_tuple_adaptor<T>::member_names.begin(), erased_tuple_adaptor<T>::member_names.end() },
+			                                    .composite = { .types = child_types,
+			                                                   .tag = std::hash<const char*>{}(erased_tuple_adaptor<T>::name),
+			                                                   .construct = &erased_tuple_adaptor<T>::construct,
+			                                                   .get = &erased_tuple_adaptor<T>::get,
+			                                                   .is_default = &erased_tuple_adaptor<T>::is_default,
+			                                                   .destroy = &erased_tuple_adaptor<T>::destroy } }));
+			return composite_type;
+		} else {
+			static_assert(dependent_false<T>::value, "Cannot convert type to IR");
+		}
+	}
+
+} // namespace vuk
