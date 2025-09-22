@@ -2,6 +2,7 @@
 
 #include "vuk/ImageAttachment.hpp"
 #include "vuk/IR.hpp"
+#include "vuk/IRCppTypes.hpp"
 #include "vuk/runtime/vk/Allocator.hpp"
 #include "vuk/runtime/vk/VkRuntime.hpp"
 #include "vuk/Types.hpp"
@@ -12,6 +13,11 @@
 #include <variant>
 
 namespace vuk {
+	struct SyncHelper;
+
+	template<class T>
+	struct is_value : std::false_type {};
+
 	/// @brief Base class for typed Value, provides execution methods
 	class UntypedValue {
 	public:
@@ -68,6 +74,16 @@ namespace vuk {
 	class Value : public UntypedValue {
 	public:
 		using UntypedValue::UntypedValue;
+
+		/// @brief Create a Value from a unsynchronized type (eg. int)
+		template<class U = T>
+		Value(U s)
+		  requires(Unsynchronized<U> && std::is_convertible_v<U, T>)
+		{
+			Ref ref = current_module->make_constant(to_IR_type<U>(), &s);
+			node = std::make_shared<ExtNode>(ref.node);
+			index = ref.index;
+		}
 
 		/// @brief Internal: Transmute this Value to a different type
 		/// @tparam U New type for the Value
@@ -245,27 +261,20 @@ namespace vuk {
 		}
 	};
 
-	template<class T = void, class... Ctrs>
-	using val_ptr = Value<ptr<T, Ctrs...>>;
+	template<class T>
+	struct is_value<Value<T>> : std::true_type {};
 
-	template<class T = void, class... Ctrs>
-	using val_view = Value<view<T, Ctrs...>>;
+	template<class T = void>
+	using val_ptr = Value<ptr<T>>;
 
+	template<class T = void>
+	using val_view = Value<view<T>>;
+	
 	// Arithmetic operators for Value<uint64_t>
-
-	inline Value<uint64_t> operator+(Value<uint64_t> a, uint64_t b) {
-		Ref ref = current_module->make_math_binary_op(Node::BinOp::ADD, a.get_head(), current_module->make_constant(b));
-		return std::move(a).transmute<uint64_t>(ref);
-	}
 
 	inline Value<uint64_t> operator+(Value<uint64_t> a, Value<uint64_t> b) {
 		Ref ref = current_module->make_math_binary_op(Node::BinOp::ADD, a.get_head(), b.get_head());
 		a.node->deps.push_back(b.node);
-		return std::move(a).transmute<uint64_t>(ref);
-	}
-
-	inline Value<uint64_t> operator-(Value<uint64_t> a, uint64_t b) {
-		Ref ref = current_module->make_math_binary_op(Node::BinOp::SUB, a.get_head(), current_module->make_constant(b));
 		return std::move(a).transmute<uint64_t>(ref);
 	}
 
@@ -275,30 +284,15 @@ namespace vuk {
 		return std::move(a).transmute<uint64_t>(ref);
 	}
 
-	inline Value<uint64_t> operator*(Value<uint64_t> a, uint64_t b) {
-		Ref ref = current_module->make_math_binary_op(Node::BinOp::MUL, a.get_head(), current_module->make_constant(b));
-		return std::move(a).transmute<uint64_t>(ref);
-	}
-
 	inline Value<uint64_t> operator*(Value<uint64_t> a, Value<uint64_t> b) {
 		Ref ref = current_module->make_math_binary_op(Node::BinOp::MUL, a.get_head(), b.get_head());
 		a.node->deps.push_back(b.node);
 		return std::move(a).transmute<uint64_t>(ref);
 	}
 
-	inline Value<uint64_t> operator/(Value<uint64_t> a, uint64_t b) {
-		Ref ref = current_module->make_math_binary_op(Node::BinOp::DIV, a.get_head(), current_module->make_constant(b));
-		return std::move(a).transmute<uint64_t>(ref);
-	}
-
 	inline Value<uint64_t> operator/(Value<uint64_t> a, Value<uint64_t> b) {
 		Ref ref = current_module->make_math_binary_op(Node::BinOp::DIV, a.get_head(), b.get_head());
 		a.node->deps.push_back(b.node);
-		return std::move(a).transmute<uint64_t>(ref);
-	}
-
-	inline Value<uint64_t> operator%(Value<uint64_t> a, uint64_t b) {
-		Ref ref = current_module->make_math_binary_op(Node::BinOp::MOD, a.get_head(), current_module->make_constant(b));
 		return std::move(a).transmute<uint64_t>(ref);
 	}
 
