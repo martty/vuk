@@ -192,25 +192,25 @@ TEST_CASE("scheduling single-queue") {
 	});
 
 	{
-		auto b0 = discard_buf("src0", **buf0);
+		auto b0 = discard("src0", **buf0);
 		write(write(b0)).wait(*test_context.allocator, test_context.compiler);
 		CHECK(execution == "ww");
 		execution = "";
 	}
 	{
-		auto b0 = discard_buf("src0", **buf0);
+		auto b0 = discard("src0", **buf0);
 		read(write(b0)).wait(*test_context.allocator, test_context.compiler);
 		CHECK(execution == "wr");
 		execution = "";
 	}
 	{
-		auto b0 = discard_buf("src0", **buf0);
+		auto b0 = discard("src0", **buf0);
 		write2(read(write(b0))).wait(*test_context.allocator, test_context.compiler);
 		CHECK(execution == "wrw");
 		execution = "";
 	}
 	{
-		auto b0 = discard_buf("src0", **buf0);
+		auto b0 = discard("src0", **buf0);
 		write(read(read(write(b0)))).wait(*test_context.allocator, test_context.compiler);
 		CHECK(execution == "wrrw");
 	}
@@ -238,9 +238,9 @@ TEST_CASE("write-read-write") {
 		});
 
 		{
-			auto b0 = discard_buf("src0", **buf0);
-			auto b1 = discard_buf("src1", **buf1);
-			auto b2 = discard_buf("src2", **buf2);
+			auto b0 = discard("src0", **buf0);
+			auto b1 = discard("src1", **buf1);
+			auto b2 = discard("src2", **buf2);
 			b0 = write(b0);
 			b1 = write(b1);
 			b2 = write(b2);
@@ -273,10 +273,10 @@ TEST_CASE("scheduling with submitted") {
 	});
 
 	{
-		auto written = write(discard_buf("src0", **buf0));
+		auto written = write(discard("src0", **buf0));
 		written.wait(*test_context.allocator, test_context.compiler);
 		{
-			auto buf2 = discard_buf("src1", **buf1);
+			auto buf2 = discard("src1", **buf1);
 			auto res = read2(write(buf2), written);
 			res.wait(*test_context.allocator, test_context.compiler);
 		}
@@ -289,21 +289,21 @@ TEST_CASE("scheduling with submitted") {
 	}
 
 	{
-		auto written = write(discard_buf("src0", **buf0));
+		auto written = write(discard("src0", **buf0));
 		written.wait(*test_context.allocator, test_context.compiler);
 		read(written).wait(*test_context.allocator, test_context.compiler);
 		CHECK(execution == "wr");
 		execution = "";
 	}
 	{
-		auto written = write(discard_buf("src0", **buf0));
+		auto written = write(discard("src0", **buf0));
 		written.wait(*test_context.allocator, test_context.compiler);
 		read(std::move(written)).wait(*test_context.allocator, test_context.compiler);
 		CHECK(execution == "wr");
 		execution = "";
 	}
 	{
-		auto written = write(discard_buf("src0", **buf0));
+		auto written = write(discard("src0", **buf0));
 		written.wait(*test_context.allocator, test_context.compiler);
 		auto res = write(std::move(written));
 		res.wait(*test_context.allocator, test_context.compiler);
@@ -339,7 +339,7 @@ TEST_CASE("multi-queue buffers") {
 	    "read_B",
 	    [&](CommandBuffer& cbuf, VUK_BA(Access::eTransferRead) dst) {
 		    auto dummy = allocate_buffer<uint32_t>(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
-		    cbuf.copy_buffer(Buffer<uint32_t>{ **dummy, 4 }.to_byte_view(), dst);
+		    cbuf.copy_buffer((*dummy)->to_byte_view(), dst);
 		    execution += "r";
 		    CHECK((cbuf.get_scheduled_domain() & DomainFlagBits::eGraphicsQueue).m_mask != 0);
 		    return dst;
@@ -348,7 +348,7 @@ TEST_CASE("multi-queue buffers") {
 
 	{
 		CHECK(current_module->op_arena.size() == 0);
-		auto written = write(discard_buf("src0", **buf0));
+		auto written = write(discard("src0", **buf0));
 		written.wait(*test_context.allocator, test_context.compiler);
 		read(written).wait(*test_context.allocator, test_context.compiler);
 		CHECK(execution == "wr");
@@ -359,7 +359,7 @@ TEST_CASE("multi-queue buffers") {
 		current_module->collect_garbage();
 		CHECK(current_module->op_arena.size() == 0);
 #endif
-		auto written = write(discard_buf("src0", **buf0));
+		auto written = write(discard("src0", **buf0));
 		written.wait(*test_context.allocator, test_context.compiler);
 		read(std::move(written)).wait(*test_context.allocator, test_context.compiler);
 		CHECK(execution == "wr");
@@ -370,7 +370,7 @@ TEST_CASE("multi-queue buffers") {
 		current_module->collect_garbage();
 		CHECK(current_module->op_arena.size() == 0);
 #endif
-		auto written = write(discard_buf("src0", **buf0));
+		auto written = write(discard("src0", **buf0));
 		written.wait(*test_context.allocator, test_context.compiler);
 		write2(read(std::move(written))).wait(*test_context.allocator, test_context.compiler);
 		CHECK(execution == "wrw");
@@ -381,7 +381,7 @@ TEST_CASE("multi-queue buffers") {
 		current_module->collect_garbage();
 		CHECK(current_module->op_arena.size() == 0);
 #endif
-		auto written = write(discard_buf("src0", **buf0));
+		auto written = write(discard("src0", **buf0));
 		read(written).wait(*test_context.allocator, test_context.compiler);
 		CHECK(execution == "wr");
 		execution = "";
@@ -391,7 +391,7 @@ TEST_CASE("multi-queue buffers") {
 		current_module->collect_garbage();
 		CHECK(current_module->op_arena.size() == 0);
 #endif
-		auto written = write(discard_buf("src0", **buf0));
+		auto written = write(discard("src0", **buf0));
 		read(std::move(written)).wait(*test_context.allocator, test_context.compiler);
 		CHECK(execution == "wr");
 		execution = "";
@@ -401,7 +401,7 @@ TEST_CASE("multi-queue buffers") {
 		current_module->collect_garbage();
 		CHECK(current_module->op_arena.size() == 0);
 #endif
-		auto written = write(discard_buf("src0", **buf0));
+		auto written = write(discard("src0", **buf0));
 		write2(read(std::move(written))).wait(*test_context.allocator, test_context.compiler);
 		CHECK(execution == "wrw");
 		execution = "";
@@ -434,7 +434,7 @@ TEST_CASE("queue inference") {
 	    "gfx",
 	    [&](CommandBuffer& cbuf, VUK_BA(Access::eTransferWrite) dst) {
 		    auto dummy = allocate_buffer<uint32_t>(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
-		    cbuf.copy_buffer(Buffer<uint32_t>{ **dummy, 4 }.to_byte_view(), dst);
+		    cbuf.copy_buffer((*dummy)->to_byte_view(), dst);
 		    execution += "g";
 		    CHECK((cbuf.get_scheduled_domain() & DomainFlagBits::eGraphicsQueue).m_mask != 0);
 		    return dst;
@@ -443,7 +443,7 @@ TEST_CASE("queue inference") {
 
 	{
 		CHECK(current_module->op_arena.size() == 0);
-		auto written = gfx(neutral(transfer(discard_buf("src0", **buf0))));
+		auto written = gfx(neutral(transfer(discard("src0", **buf0))));
 		written.wait(*test_context.allocator, test_context.compiler);
 		CHECK(execution == "tng");
 	}
@@ -465,7 +465,7 @@ TEST_CASE("multi return pass") {
 		                       return std::tuple{ dst0, dst1, dst2 };
 	                       });
 
-	auto [buf0p, buf1p, buf2p] = fills(discard_buf("src0", **buf0), discard_buf("src1", **buf1), discard_buf("src2", **buf2));
+	auto [buf0p, buf1p, buf2p] = fills(discard("src0", **buf0), discard("src1", **buf1), discard("src2", **buf2));
 	{
 		auto data = { 0xfcu, 0xfcu, 0xfcu, 0xfcu };
 		auto res = download_buffer(buf0p).get(*test_context.allocator, test_context.compiler);
@@ -492,7 +492,7 @@ TEST_CASE("multi fn calls") {
 		return dst0;
 	});
 
-	p(p(discard_buf("src0", **buf0))).wait(*test_context.allocator, test_context.compiler);
+	p(p(discard("src0", **buf0))).wait(*test_context.allocator, test_context.compiler);
 }
 
 TEST_CASE("release sync") {

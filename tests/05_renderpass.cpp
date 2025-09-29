@@ -38,9 +38,9 @@ TEST_CASE("renderpass clear") {
 		size_t size = compute_image_size(fut->format, fut->extent);
 		auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
 		auto fut2 = rpclear(fut);
-		auto dst_buf = discard_buf("dst", *dst);
-		auto res = download_buffer(image2buf(fut2, dst_buf)).get(*test_context.allocator, test_context.compiler);
-		auto updata = std::span((uint32_t*)res->mapped_ptr, 4);
+		auto dst_buf = discard("dst", *dst);
+		auto res = download_buffer(copy(fut2, dst_buf)).get(*test_context.allocator, test_context.compiler);
+		auto updata = res->to_span<uint32_t>();
 		CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 5; }));
 	}
 }
@@ -64,9 +64,9 @@ TEST_CASE("renderpass framebuffer inference") {
 		depth_img->format = vuk::Format::eD32Sfloat;
 
 		auto fut2 = rpclear(fut, std::move(depth_img));
-		auto dst_buf = discard_buf("dst", *dst);
-		auto res = download_buffer(image2buf(fut2, dst_buf)).get(*test_context.allocator, test_context.compiler);
-		auto updata = std::span((uint32_t*)res->mapped_ptr, 4);
+		auto dst_buf = discard("dst", *dst);
+		auto res = download_buffer(copy(fut2, dst_buf)).get(*test_context.allocator, test_context.compiler);
+		auto updata = res->to_span<uint32_t>();
 		CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 5; }));
 	}
 }
@@ -173,7 +173,7 @@ void main() {
 	pass(3, 1, 1, buf0);
 	auto res = download_buffer(buf0).get(*test_context.allocator, test_context.compiler);
 	auto test = { 2u, 4u, 6u };
-	CHECK(std::span((uint32_t*)res->mapped_ptr, 3) == std::span(test));
+	CHECK(res->to_span<uint32_t>() == std::span(test));
 }
 
 TEST_CASE("lift compute 2") {
@@ -205,7 +205,7 @@ void main() {
 	pass(4, 1, 1, buf0, buf1);
 	auto res = download_buffer(buf0).get(*test_context.allocator, test_context.compiler);
 	auto test = { 4u, 8u, 6u, 8u };
-	CHECK(std::span((uint32_t*)res->mapped_ptr, 4) == std::span(test));
+	CHECK(res->to_span<uint32_t>() == std::span(test));
 }
 
 TEST_CASE("lift compute 3") {
@@ -234,7 +234,7 @@ void main() {
 	pass(4, 1, 1, buf0, img0);
 	auto res = download_buffer(buf0).get(*test_context.allocator, test_context.compiler);
 	auto test = { 4u, 8u, 6u, 8u };
-	CHECK(std::span((uint32_t*)res->mapped_ptr, 4) == std::span(test));
+	CHECK(res->to_span<uint32_t>() == std::span(test));
 }
 
 TEST_CASE("separate sampler") {
@@ -273,16 +273,16 @@ void main() {
 	size_t alignment = format_to_texel_block_size(out_nearest->format);
 	size_t size = compute_image_size(out_nearest->format, out_nearest->extent);
 	auto dst0 = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
-	auto dst_buf0 = discard_buf("dst", *dst0);
+	auto dst_buf0 = discard("dst", *dst0);
 	auto dst1 = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
-	auto dst_buf1 = discard_buf("dst", *dst1);
+	auto dst_buf1 = discard("dst", *dst1);
 	auto dl = download_buffer(copy(out_nearest, dst_buf0));
 	auto res1 = download_buffer(copy(out_linear, dst_buf1)).get(*test_context.allocator, test_context.compiler);
 	auto res0 = dl.get(*test_context.allocator, test_context.compiler);
 	auto test0 = { 4.f, 4.f, 4.f, 4.f };
-	CHECK(std::span((float*)res0->mapped_ptr, 4) == std::span(test0));
+	CHECK(res0->to_span<float>() == std::span(test0));
 	auto test1 = { 3.f, 3.f, 3.f, 3.f };
-	CHECK(std::span((float*)res1->mapped_ptr, 4) == std::span(test1));
+	CHECK(res1->to_span<float>() == std::span(test1));
 }
 
 TEST_CASE("combined sampler") {
@@ -316,10 +316,10 @@ void main() {
 	size_t alignment = format_to_texel_block_size(out_nearest->format);
 	size_t size = compute_image_size(out_nearest->format, out_nearest->extent);
 	auto dst0 = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
-	auto dst_buf0 = discard_buf("dst", *dst0);
+	auto dst_buf0 = discard("dst", *dst0);
 	auto res0 = download_buffer(copy(out_nearest, dst_buf0)).get(*test_context.allocator, test_context.compiler);
 	auto test0 = { 4.f, 4.f, 4.f, 4.f };
-	CHECK(std::span((float*)res0->mapped_ptr, 4) == std::span(test0));
+	CHECK(res0->to_span<float>() == std::span(test0));
 }
 
 TEST_CASE("lift compute with IR pipeline compile") {
@@ -344,7 +344,7 @@ void main() {
 	pass(3, 1, 1, buf0);
 	auto res = download_buffer(buf0).get(*test_context.allocator, test_context.compiler);
 	auto test = { 2u, 4u, 6u };
-	CHECK(std::span((uint32_t*)res->mapped_ptr, 3) == std::span(test));
+	CHECK(res->to_span<uint32_t>() == std::span(test));
 }
 
 TEST_CASE("IR pipeline compile") {
@@ -365,7 +365,7 @@ void main() {
 }
 )",
 	              "<>");
-	auto pass = make_pass("IR shader", [](CommandBuffer& cbuf, VUK_ARG(PipelineBaseInfo*, Access::eNone) pipe, VUK_BA(Access::eComputeRW) buf) {
+	auto pass = make_pass("IR shader", [](CommandBuffer& cbuf, PipelineBaseInfo* pipe, VUK_BA(Access::eComputeRW) buf) {
 		cbuf.bind_compute_pipeline(pipe);
 		cbuf.bind_buffer(0, 0, buf);
 		cbuf.dispatch(3, 1, 1);
@@ -374,7 +374,7 @@ void main() {
 	pass(shader, buf0);
 	auto res = download_buffer(buf0).get(*test_context.allocator, test_context.compiler);
 	auto test = { 2u, 4u, 6u };
-	CHECK(std::span((uint32_t*)res->mapped_ptr, 3) == std::span(test));
+	CHECK(res->to_span<uint32_t>() == std::span(test));
 }
 
 TEST_CASE("attachmentless fb") {

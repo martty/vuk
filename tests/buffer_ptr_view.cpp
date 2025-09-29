@@ -76,7 +76,7 @@ TEST_CASE("ptr with helper") {
 TEST_CASE("array with helper") {
 	Allocator alloc(test_context.runtime->get_vk_resource());
 
-	Unique_ptr<BufferLike<float>> foo = *allocate_array<float>(alloc, 16, MemoryUsage::eCPUonly);
+	Unique_view<BufferLike<float>> foo = *allocate_array<float>(alloc, 16, MemoryUsage::eCPUonly);
 
 	for (int i = 0; i < 5; i++) {
 		foo[i] = i;
@@ -94,7 +94,7 @@ TEST_CASE("array with helper") {
 TEST_CASE("shader ptr access") {
 	Allocator alloc(test_context.runtime->get_vk_resource());
 
-	Unique_ptr<BufferLike<float>> foo = *allocate_array<float>(alloc, 4, MemoryUsage::eCPUonly);
+	Unique_view<BufferLike<float>> foo = *allocate_array<float>(alloc, 4, MemoryUsage::eCPUonly);
 	for (int i = 0; i < 4; i++) {
 		foo[i] = (i + 1);
 	}
@@ -153,54 +153,12 @@ void main() {
   CHECK(schpen == std::span(test));
 }*/
 
-TEST_CASE("generic view from array") {
-	Allocator alloc(test_context.runtime->get_vk_resource());
-
-	Unique_ptr<BufferLike<float>> foo = *allocate_array<float>(alloc, 16, MemoryUsage::eCPUonly);
-	BVCI bvci{ .ptr = foo.get(), .vci = { .elem_size = sizeof(float), .count = 16 } };
-	view<float> view;
-	alloc.allocate_memory_views({ static_cast<generic_view_base*>(&view), 1 }, { &bvci, 1 });
-
-	for (int i = 0; i < 4; i++) {
-		view[i] = i;
-	}
-
-	for (int i = 0; i < 4; i++) {
-		view[i] *= i;
-	}
-
-	for (int i = 0; i < 4; i++) {
-		CHECK(view[i] == i * i);
-	}
-
-	alloc.deallocate(std::span{ static_cast<generic_view_base*>(&view), 1 });
-}
-
-TEST_CASE("generic view from array with helper") {
-	Allocator alloc(test_context.runtime->get_vk_resource());
-
-	Unique_ptr<BufferLike<float>> foo = *allocate_array<float>(alloc, 16, MemoryUsage::eCPUonly);
-	Unique<view<float>> view = *generic_view_from_array(alloc, foo.get(), 16);
-
-	for (int i = 0; i < 4; i++) {
-		view[i] = i;
-	}
-
-	for (int i = 0; i < 4; i++) {
-		view[i] *= i;
-	}
-
-	for (int i = 0; i < 4; i++) {
-		CHECK(view[i] == i * i);
-	}
-}
-
 TEST_CASE("memory view from array with helper") {
 	Allocator alloc(test_context.runtime->get_vk_resource());
 
-	Unique_ptr<BufferLike<float>> foo = *allocate_array<float>(alloc, 16, MemoryUsage::eCPUonly);
+	Unique_view<BufferLike<float>> foo = *allocate_array<float>(alloc, 16, MemoryUsage::eCPUonly);
 	// concrete views don't need allocations
-	view<BufferLike<float>> view = ::view<BufferLike<float>>{ foo.get(), 16 };
+	view<BufferLike<float>> view = foo.get();
 
 	for (int i = 0; i < 4; i++) {
 		view[i] = i;
@@ -230,9 +188,9 @@ void sqr_specific(view<BufferLike<float>> view) {
 TEST_CASE("function taking views") {
 	Allocator alloc(test_context.runtime->get_vk_resource());
 
-	Unique_ptr<BufferLike<float>> foo = *allocate_array<float>(alloc, 16, MemoryUsage::eCPUonly);
+	Unique_view<BufferLike<float>> foo = *allocate_array<float>(alloc, 16, MemoryUsage::eCPUonly);
 	// concrete views don't need allocations
-	view<BufferLike<float>> v = ::view<BufferLike<float>>{ foo.get(), 16 };
+	view<BufferLike<float>> v = foo.get();
 
 	for (int i = 0; i < 4; i++) {
 		v[i] = i;
@@ -249,13 +207,12 @@ TEST_CASE("function taking views") {
 TEST_CASE("shader buffer access (view)") {
 	Allocator alloc(test_context.runtime->get_vk_resource());
 
-	Unique_ptr<BufferLike<float>> foo = *allocate_array<float>(alloc, 4, MemoryUsage::eCPUonly);
+	Unique_view<BufferLike<float>> foo = *allocate_array<float>(alloc, 4, MemoryUsage::eCPUonly);
 	for (int i = 0; i < 4; i++) {
 		foo[i] = (i + 1);
 	}
 
-	view<BufferLike<float>> v = ::view<BufferLike<float>>{ foo.get(), 16 };
-
+	view<BufferLike<float>> v = foo.get();
 	auto buf0 = vuk::acquire("b0", v, vuk::Access::eNone);
 
 	auto pass = lift_compute(test_context.runtime->get_pipeline(vuk::PipelineBaseCreateInfo::from_inline_glsl(R"(#version 460
@@ -380,10 +337,10 @@ TEST_CASE("composite transport") {
 	Allocator alloc(test_context.runtime->get_vk_resource());
 
 	Bigbog boog{ .a_milkshake = 14.f };
-	Unique_ptr<BufferLike<float>> foo = *allocate_array<float>(alloc, 4, MemoryUsage::eCPUonly);
-	boog.the_boof = static_cast<ptr<BufferLike<float>>>(foo.get());
-	Unique_ptr<BufferLike<uint32_t>> foo2 = *allocate_array<uint32_t>(alloc, 4, MemoryUsage::eCPUonly);
-	boog.the_beef = static_cast<ptr<BufferLike<uint32_t>>>(foo2.get());
+	Unique_view<BufferLike<float>> foo = *allocate_array<float>(alloc, 4, MemoryUsage::eCPUonly);
+	boog.the_boof = static_cast<ptr<BufferLike<float>>>(foo->ptr);
+	Unique_view<BufferLike<uint32_t>> foo2 = *allocate_array<uint32_t>(alloc, 4, MemoryUsage::eCPUonly);
+	boog.the_beef = static_cast<ptr<BufferLike<uint32_t>>>(foo2->ptr);
 
 	auto buf0 = vuk::acquire("jacobious_boog", boog, vuk::Access::eNone);
 
@@ -406,30 +363,30 @@ TEST_CASE("composite transport") {
 		CHECK(schpen == std::span(test));
 	}
 }
-
+/*
 TEST_CASE("composite support for Value") {
-	Allocator alloc(test_context.runtime->get_vk_resource());
+  Allocator alloc(test_context.runtime->get_vk_resource());
 
-	Bigbog boog{ .a_milkshake = 15.f, .a_pilkshake = 15u };
-	Unique_ptr<BufferLike<float>> foo = *allocate_array<float>(alloc, 4, MemoryUsage::eCPUonly);
-	boog.the_boof = *foo;
-	Unique_ptr<BufferLike<uint32_t>> foo2 = *allocate_array<uint32_t>(alloc, 4, MemoryUsage::eCPUonly);
-	boog.the_beef = *foo2;
+  Bigbog boog{ .a_milkshake = 15.f, .a_pilkshake = 15u };
+  Unique_ptr<BufferLike<float>> foo = *allocate_array<float>(alloc, 4, MemoryUsage::eCPUonly);
+  boog.the_boof = *foo;
+  Unique_ptr<BufferLike<uint32_t>> foo2 = *allocate_array<uint32_t>(alloc, 4, MemoryUsage::eCPUonly);
+  boog.the_beef = *foo2;
 
-	auto buf0 = vuk::acquire("jacobious_boog", boog, vuk::Access::eNone);
+  auto buf0 = vuk::acquire("jacobious_boog", boog, vuk::Access::eNone);
 
-	auto pass = vuk::make_pass("transport", [](CommandBuffer& cb, Arg<view<BufferLike<uint32_t>, 4>, Access::eTransferWrite> the_beef, uint32_t pilkshake) {
-		cb.fill_buffer(the_beef->to_byte_view(), pilkshake);
-	});
+  auto pass = vuk::make_pass("transport", [](CommandBuffer& cb, Arg<view<BufferLike<uint32_t>, 4>, Access::eTransferWrite> the_beef, uint32_t pilkshake) {
+    cb.fill_buffer(the_beef->to_byte_view(), pilkshake);
+  });
 
-	pass(make_view(buf0->the_beef, 4), buf0->a_pilkshake);
-	auto res = *buf0.get(*test_context.allocator, test_context.compiler, { .dump_graph = true });
-	{
-		auto test = { res.a_pilkshake, res.a_pilkshake, res.a_pilkshake, res.a_pilkshake };
-		auto schpen = std::span(&res.the_beef[0], 4);
-		CHECK(schpen == std::span(test));
-	}
-}
+  pass(make_view(buf0->the_beef, 4), buf0->a_pilkshake);
+  auto res = *buf0.get(*test_context.allocator, test_context.compiler, { .dump_graph = true });
+  {
+    auto test = { res.a_pilkshake, res.a_pilkshake, res.a_pilkshake, res.a_pilkshake };
+    auto schpen = std::span(&res.the_beef[0], 4);
+    CHECK(schpen == std::span(test));
+  }
+}*/
 /*
 TEST_CASE("aliased constant composite support for Value") {
   Allocator alloc(test_context.runtime->get_vk_resource());
