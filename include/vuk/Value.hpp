@@ -201,6 +201,7 @@ namespace vuk {
 		}
 
 		// Buffer inferences
+		// TODO: PAV: operate on Ts, not bytes
 
 		/// @brief Create a subrange view of this buffer
 		/// @param new_offset Offset in bytes from the start of the buffer

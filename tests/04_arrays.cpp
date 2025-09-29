@@ -9,21 +9,20 @@ TEST_CASE("arrayed buffers") {
 	{
 		auto data = { 0xfeu, 0xfeu, 0xfeu, 0xfeu };
 		auto data2 = { 0xfdu, 0xfdu, 0xfdu, 0xfdu };
-		auto buf = allocate_buffer(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
-		auto buf2 = allocate_buffer(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
-
-		auto fill = make_pass("fill two", [](CommandBuffer& cbuf, VUK_ARG(Buffer[], Access::eTransferWrite) dst) {
-			cbuf.fill_buffer(dst[0], 0xfe);
-			cbuf.fill_buffer(dst[1], 0xfd);
+		auto buf = allocate_array<uint32_t>(*test_context.allocator, 4, MemoryUsage::eGPUonly);
+		auto buf2 = allocate_array<uint32_t>(*test_context.allocator, 4, MemoryUsage::eGPUonly);
+		auto fill = make_pass("fill two", [](CommandBuffer& cbuf, VUK_ARG(Buffer<uint32_t>[], Access::eTransferWrite) dst) {
+			cbuf.fill_buffer(dst[0].to_byte_view(), 0xfe);
+			cbuf.fill_buffer(dst[1].to_byte_view(), 0xfd);
 			return dst;
 		});
 
-		auto arr = declare_array("buffers", discard_buf("src", **buf), discard_buf("src2", **buf2));
-		Value<Buffer[]> filled_bufs = fill(arr);
+		auto arr = declare_array("buffers", discard("src", **buf), discard("src2", **buf2));
+		auto filled_bufs = fill(arr);
 		auto res = download_buffer(filled_bufs[0]).get(*test_context.allocator, test_context.compiler);
-		CHECK(std::span((uint32_t*)res->mapped_ptr, 4) == std::span(data));
+		CHECK(res->to_span() == std::span(data));
 		res = download_buffer(filled_bufs[1]).get(*test_context.allocator, test_context.compiler);
-		CHECK(std::span((uint32_t*)res->mapped_ptr, 4) == std::span(data2));
+		CHECK(res->to_span() == std::span(data2));
 	}
 }
 
@@ -31,42 +30,42 @@ TEST_CASE("arrayed buffers, internal loop") {
 	{
 		auto data = { 0xfeu, 0xfeu, 0xfeu, 0xfeu };
 		auto data2 = { 0xfdu, 0xfdu, 0xfdu, 0xfdu };
-		auto buf = allocate_buffer(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
-		auto buf2 = allocate_buffer(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
+		auto buf = allocate_array<uint32_t>(*test_context.allocator, 4, MemoryUsage::eGPUonly);
+		auto buf2 = allocate_array<uint32_t>(*test_context.allocator, 4, MemoryUsage::eGPUonly);
 
-		auto fill = make_pass("fill two", [](CommandBuffer& cbuf, VUK_ARG(Buffer[], Access::eTransferWrite) dst) {
+		auto fill = make_pass("fill two", [](CommandBuffer& cbuf, VUK_ARG(Buffer<uint32_t>[], Access::eTransferWrite) dst) {
 			for (size_t i = 0; i < dst.size(); i++) {
-				cbuf.fill_buffer(dst[i], (uint32_t)(0xfe - i));
+				cbuf.fill_buffer(dst[i].to_byte_view(), (uint32_t)(0xfe - i));
 			}
 			return dst;
 		});
 
-		auto arr = declare_array("buffers", discard_buf("src", **buf), discard_buf("src2", **buf2));
-		Value<Buffer[]> filled_bufs = fill(arr);
+		auto arr = declare_array("buffers", discard("src", **buf), discard("src2", **buf2));
+		auto filled_bufs = fill(arr);
 		auto res = download_buffer(filled_bufs[0]).get(*test_context.allocator, test_context.compiler);
-		CHECK(std::span((uint32_t*)res->mapped_ptr, 4) == std::span(data));
+		CHECK(res->to_span() == std::span(data));
 		res = download_buffer(filled_bufs[1]).get(*test_context.allocator, test_context.compiler);
-		CHECK(std::span((uint32_t*)res->mapped_ptr, 4) == std::span(data2));
+		CHECK(res->to_span() == std::span(data2));
 	}
 }
 
 TEST_CASE("zero len arrayed buffers") {
 	{
-		auto buf = allocate_buffer(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
-		auto buf2 = allocate_buffer(*test_context.allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(uint32_t) * 4 });
+		auto buf = allocate_array<uint32_t>(*test_context.allocator, 4, MemoryUsage::eGPUonly);
+		auto buf2 = allocate_array<uint32_t>(*test_context.allocator, 4, MemoryUsage::eGPUonly);
 
 		std::string trace = "";
 
-		auto fill = make_pass("fill two", [&](CommandBuffer& cbuf, VUK_ARG(Buffer[], Access::eTransferWrite) dst) {
+		auto fill = make_pass("fill two", [&](CommandBuffer& cbuf, VUK_ARG(Buffer<uint32_t>[], Access::eTransferWrite) dst) {
 			for (size_t i = 0; i < dst.size(); i++) {
-				cbuf.fill_buffer(dst[i], (uint32_t)(0xfe - i));
+				cbuf.fill_buffer(dst[i].to_byte_view(), (uint32_t)(0xfe - i));
 				trace += "+";
 			}
 			return dst;
 		});
 
-		auto arr = declare_array("buffers", std::span<vuk::Value<vuk::Buffer>>{});
-		Value<Buffer[]> filled_bufs = fill(arr);
+		auto arr = declare_array("buffers", std::span<vuk::Value<vuk::Buffer<uint32_t>>>{});
+		auto filled_bufs = fill(arr);
 		auto res = filled_bufs.wait(*test_context.allocator, test_context.compiler);
 		CHECK(trace == "");
 	}
@@ -86,16 +85,16 @@ TEST_CASE("arrayed images, commands") {
 		auto arr = declare_array("images", std::move(fut), std::move(fut2));
 		{
 			auto futc = clear_image(arr[0], vuk::ClearColor(5u, 5u, 5u, 5u));
-			auto dst_buf = discard_buf("dst", *dst);
+			auto dst_buf = discard("dst", *dst);
 			auto res = download_buffer(copy(std::move(futc), std::move(dst_buf))).get(*test_context.allocator, test_context.compiler);
-			auto updata = std::span((uint32_t*)res->mapped_ptr, 4);
+			auto updata = res->to_span<uint32_t>();
 			CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 5; }));
 		}
 		{
 			auto futc2 = clear_image(arr[1], vuk::ClearColor(6u, 6u, 6u, 6u));
-			auto dst_buf = discard_buf("dst", *dst);
+			auto dst_buf = discard("dst", *dst);
 			auto res = download_buffer(copy(std::move(futc2), std::move(dst_buf))).get(*test_context.allocator, test_context.compiler);
-			auto updata = std::span((uint32_t*)res->mapped_ptr, 4);
+			auto updata = res->to_span<uint32_t>();
 			CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 6; }));
 		}
 	}
@@ -126,15 +125,15 @@ TEST_CASE("arrayed images, divergent source sync") {
 		arr = array_use(std::move(arr));
 
 		{
-			auto dst_buf = discard_buf("dst", *dst);
+			auto dst_buf = discard("dst", *dst);
 			auto res = download_buffer(copy(std::move(arr[0]), std::move(dst_buf))).get(*test_context.allocator, test_context.compiler);
-			auto updata = std::span((uint32_t*)res->mapped_ptr, 4);
+			auto updata = res->to_span<uint32_t>();
 			CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 5; }));
 		}
 		{
-			auto dst_buf = discard_buf("dst", *dst);
+			auto dst_buf = discard("dst", *dst);
 			auto res = download_buffer(copy(std::move(arr[1]), std::move(dst_buf))).get(*test_context.allocator, test_context.compiler);
-			auto updata = std::span((uint32_t*)res->mapped_ptr, 4);
+			auto updata = res->to_span<uint32_t>();
 			CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 6; }));
 		}
 	}
@@ -153,16 +152,16 @@ TEST_CASE("image slicing, mips") {
 
 		{
 			auto futc = clear_image(fut.mip(0), vuk::ClearColor(5u, 5u, 5u, 5u));
-			auto dst_buf = discard_buf("dst", *dst);
+			auto dst_buf = discard("dst", *dst);
 			auto res = download_buffer(copy(std::move(futc), std::move(dst_buf))).get(*test_context.allocator, test_context.compiler);
-			auto updata = std::span((uint32_t*)res->mapped_ptr, 4);
+			auto updata = res->to_span<uint32_t>();
 			CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 5; }));
 		}
 		{
 			auto futc2 = clear_image(fut.mip(1), vuk::ClearColor(6u, 6u, 6u, 6u));
-			auto dst_buf = discard_buf("dst", *dst);
+			auto dst_buf = discard("dst", *dst);
 			auto res = download_buffer(copy(std::move(futc2), std::move(dst_buf))).get(*test_context.allocator, test_context.compiler);
-			auto updata = std::span((uint32_t*)res->mapped_ptr, 1);
+			auto updata = res->to_span<uint32_t>();
 			CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 6; }));
 		}
 	}
@@ -205,9 +204,9 @@ TEST_CASE("image slicing, reconvergence") {
 		auto m2 = clear_image(fut.mip(1), vuk::ClearColor(6u, 6u, 6u, 6u));
 		auto futp = blit_down(std::move(fut));
 
-		auto dst_buf = discard_buf("dst", *dst);
+		auto dst_buf = discard("dst", *dst);
 		auto res = download_buffer(copy(futp.mip(1), std::move(dst_buf))).get(*test_context.allocator, test_context.compiler);
-		auto updata = std::span((uint32_t*)res->mapped_ptr, 1);
+		auto updata = res->to_span<uint32_t>();
 		CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 5; }));
 	}
 }
@@ -228,9 +227,9 @@ TEST_CASE("image slicing, reconvergence 2") {
 			auto m2 = image_use<Access::eTransferWrite>(clear_image(fut.mip(1), vuk::ClearColor(6u, 6u, 6u, 6u)));
 			auto futp = blit_down(std::move(fut));
 
-			auto dst_buf = discard_buf("dst", *dst);
+			auto dst_buf = discard("dst", *dst);
 			auto res = download_buffer(copy(futp.mip(1), std::move(dst_buf))).get(*test_context.allocator, test_context.compiler);
-			auto updata = std::span((uint32_t*)res->mapped_ptr, 1);
+			auto updata = res->to_span<uint32_t>();
 			CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 5; }));
 		}
 	}
@@ -250,9 +249,9 @@ TEST_CASE("image slicing, reconvergence 3") {
 		{
 			auto m1 = clear_image(fut.mip(0), vuk::ClearColor(5u, 5u, 5u, 5u));
 			auto futp = blit_down(fut);
-			auto dst_buf = discard_buf("dst", *dst);
+			auto dst_buf = discard("dst", *dst);
 			auto res = download_buffer(copy(futp.mip(1), std::move(dst_buf))).get(*test_context.allocator, test_context.compiler);
-			auto updata = std::span((uint32_t*)res->mapped_ptr, 1);
+			auto updata = res->to_span<uint32_t>();
 			CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 5; }));
 		}
 	}
@@ -278,9 +277,9 @@ TEST_CASE("image slicing, reconvergence with undef") {
 		{
 			void_clear_image(fut.mip(0), vuk::ClearColor(7u, 7u, 7u, 7u));
 			auto futp = blit_down(fut);
-			auto dst_buf = discard_buf("dst", *dst);
+			auto dst_buf = discard("dst", *dst);
 			auto res = download_buffer(copy(futp.mip(1), std::move(dst_buf))).get(*test_context.allocator, test_context.compiler);
-			auto updata = std::span((uint32_t*)res->mapped_ptr, 1);
+			auto updata = res->to_span<uint32_t>();
 			CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 7; }));
 		}
 	}
@@ -299,16 +298,16 @@ TEST_CASE("image slicing, forced reconvergence") {
 
 		{
 			auto futc = clear_image(fut.mip(0), vuk::ClearColor(5u, 5u, 5u, 5u));
-			auto dst_buf = discard_buf("dst", *dst);
+			auto dst_buf = discard("dst", *dst);
 			auto res = download_buffer(copy(std::move(futc), std::move(dst_buf))).get(*test_context.allocator, test_context.compiler);
-			auto updata = std::span((uint32_t*)res->mapped_ptr, 4);
+			auto updata = res->to_span<uint32_t>();
 			CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 5; }));
 		}
 		{
 			auto futp = blit_down(fut);
-			auto dst_buf = discard_buf("dst", *dst);
+			auto dst_buf = discard("dst", *dst);
 			auto res = download_buffer(copy(std::move(fut.mip(1)), std::move(dst_buf))).get(*test_context.allocator, test_context.compiler);
-			auto updata = std::span((uint32_t*)res->mapped_ptr, 1);
+			auto updata = res->to_span<uint32_t>();
 			CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 5; }));
 		}
 	}
@@ -399,8 +398,8 @@ TEST_CASE("mip generation 2") {
 	size_t alignment = format_to_texel_block_size(mipped->format);
 	size_t size = compute_image_size(mipped->format, { 1, 1, 1 });
 	auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
-	auto res = download_buffer(copy(mipped.mip(4), discard_buf("dst", *dst))).get(*test_context.allocator, test_context.compiler);
-	auto updata = std::span((float*)res->mapped_ptr, 1);
+	auto res = download_buffer(copy(mipped.mip(4), discard("dst", *dst))).get(*test_context.allocator, test_context.compiler);
+	auto updata = res->to_span<float>();
 	CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem - 0.1f < 0.001f; }));
 	CHECK(trace == "1234");
 }
@@ -445,8 +444,8 @@ TEST_CASE("mip generation 3") {
 	size_t alignment = format_to_texel_block_size(img->format);
 	size_t size = compute_image_size(img->format, { 1, 1, 1 });
 	auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
-	auto res = download_buffer(copy(img.mip(4), discard_buf("dst", *dst))).get(*test_context.allocator, test_context.compiler);
-	auto updata = std::span((float*)res->mapped_ptr, 1);
+	auto res = download_buffer(copy(img.mip(4), discard("dst", *dst))).get(*test_context.allocator, test_context.compiler);
+	auto updata = res->to_span<float>();
 	CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem - 0.1f < 0.001f; }));
 	CHECK(trace == "1234");
 }
@@ -462,8 +461,8 @@ TEST_CASE("mip generation 4") {
 	size_t alignment = format_to_texel_block_size(img->format);
 	size_t size = compute_image_size(img->format, { 1, 1, 1 });
 	auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
-	auto res = download_buffer(copy(img.mip(4), discard_buf("dst", *dst))).get(*test_context.allocator, test_context.compiler);
-	auto updata = std::span((float*)res->mapped_ptr, 1);
+	auto res = download_buffer(copy(img.mip(4), discard("dst", *dst))).get(*test_context.allocator, test_context.compiler);
+	auto updata = res->to_span<float>();
 	CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem - 0.1f < 0.001f; }));
 	CHECK(trace == "1234");
 }
@@ -478,8 +477,8 @@ TEST_CASE("mip generation 5") {
 	size_t alignment = format_to_texel_block_size(img->format);
 	size_t size = compute_image_size(img->format, { 1, 1, 1 });
 	auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
-	auto res = download_buffer(copy(img.mip(4), discard_buf("dst", *dst))).get(*test_context.allocator, test_context.compiler);
-	auto updata = std::span((float*)res->mapped_ptr, 1);
+	auto res = download_buffer(copy(img.mip(4), discard("dst", *dst))).get(*test_context.allocator, test_context.compiler);
+	auto updata = res->to_span<float>();
 	CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem - 0.1f < 0.001f; }));
 	CHECK(trace == "1234");
 }
@@ -495,8 +494,8 @@ TEST_CASE("mip2mip dep") {
 	size_t alignment = format_to_texel_block_size(img->format);
 	size_t size = compute_image_size(img->format, { 1, 1, 1 });
 	auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
-	auto res = download_buffer(copy(img.mip(4), discard_buf("dst", *dst))).get(*test_context.allocator, test_context.compiler);
-	auto updata = std::span((float*)res->mapped_ptr, 1);
+	auto res = download_buffer(copy(img.mip(4), discard("dst", *dst))).get(*test_context.allocator, test_context.compiler);
+	auto updata = res->to_span<float>();
 	CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem - 0.1f < 0.001f; }));
 }
 
@@ -551,15 +550,15 @@ TEST_CASE("buffer slicing") {
 	auto data = { 0xfeu, 0xfeu, 0xfeu, 0xfeu, 0xfeu, 0xfeu, 0xfeu };
 	auto [alloc, buf] = create_buffer(*test_context.allocator, MemoryUsage::eGPUonly, DomainFlagBits::eAny, std::span(data));
 
-	auto fill1 = make_pass("fill some 1", [](CommandBuffer& cbuf, VUK_ARG(Buffer, Access::eTransferWrite) dst) {
-		cbuf.fill_buffer(dst, 0xfd);
+	auto fill1 = make_pass("fill some 1", [](CommandBuffer& cbuf, VUK_ARG(Buffer<uint32_t>, Access::eTransferWrite) dst) {
+		cbuf.fill_buffer(dst->to_byte_view(), 0xfd);
 		return dst;
 	});
 
 	fill1(buf.subrange(1 * sizeof(uint32_t), sizeof(uint32_t)));
 
-	auto fill2 = make_pass("fill some 2", [](CommandBuffer& cbuf, VUK_ARG(Buffer, Access::eTransferWrite) dst) {
-		cbuf.fill_buffer(dst, 0xfc);
+	auto fill2 = make_pass("fill some 2", [](CommandBuffer& cbuf, VUK_ARG(Buffer<uint32_t>, Access::eTransferWrite) dst) {
+		cbuf.fill_buffer(dst->to_byte_view(), 0xfc);
 		return dst;
 	});
 
@@ -571,7 +570,7 @@ TEST_CASE("buffer slicing") {
 
 	auto check = { 0xfeu, 0xfdu, 0xfeu, 0xfcu, 0xfdu, 0xfeu, 0xfcu };
 	auto res = download_buffer(buf).get(*test_context.allocator, test_context.compiler);
-	auto schpen = std::span((uint32_t*)res->mapped_ptr, check.size());
+	auto schpen = res->to_span();
 	CHECK(schpen == std::span(check));
 }
 
@@ -579,15 +578,15 @@ TEST_CASE("buffer slice-conv-slice") {
 	auto data = { 0xfeu, 0xfeu, 0xfeu, 0xfeu };
 	auto [alloc, buf] = create_buffer(*test_context.allocator, MemoryUsage::eGPUonly, DomainFlagBits::eAny, std::span(data));
 
-	auto fill1 = make_pass("fill some 1", [](CommandBuffer& cbuf, VUK_ARG(Buffer, Access::eTransferWrite) dst) {
-		cbuf.fill_buffer(dst, 0xfd);
+	auto fill1 = make_pass("fill some 1", [](CommandBuffer& cbuf, VUK_ARG(Buffer<uint32_t>, Access::eTransferWrite) dst) {
+		cbuf.fill_buffer(dst->to_byte_view(), 0xfd);
 		return dst;
 	});
 
 	fill1(buf.subrange(1 * sizeof(uint32_t), sizeof(uint32_t)));
 
-	auto fill2 = make_pass("fill some 2", [](CommandBuffer& cbuf, VUK_ARG(Buffer, Access::eTransferWrite) dst) {
-		cbuf.fill_buffer(dst, 0xfc);
+	auto fill2 = make_pass("fill some 2", [](CommandBuffer& cbuf, VUK_ARG(Buffer<uint32_t>, Access::eTransferWrite) dst) {
+		cbuf.fill_buffer(dst->to_byte_view(), 0xfc);
 		return dst;
 	});
 
@@ -597,7 +596,7 @@ TEST_CASE("buffer slice-conv-slice") {
 
 	auto check = { 0xfcu, 0xfdu, 0xfcu, 0xfcu };
 	auto res = download_buffer(buf).get(*test_context.allocator, test_context.compiler);
-	auto schpen = std::span((uint32_t*)res->mapped_ptr, check.size());
+	auto schpen = res->to_span().subspan(0, check.size());
 	CHECK(schpen == std::span(check));
 }
 
@@ -607,12 +606,12 @@ TEST_CASE("buffer two range") {
 
 	auto range1 = buf.subrange(1 * sizeof(uint32_t), sizeof(uint32_t));
 	auto range2 = buf.subrange(2 * sizeof(uint32_t), sizeof(uint32_t));
-	auto fill1 = make_pass("fill some 1", [](CommandBuffer& cbuf, VUK_ARG(Buffer, Access::eTransferWrite) dst) {
-		cbuf.fill_buffer(dst, 0xfd);
+	auto fill1 = make_pass("fill some 1", [](CommandBuffer& cbuf, VUK_ARG(Buffer<uint32_t>, Access::eTransferWrite) dst) {
+		cbuf.fill_buffer(dst->to_byte_view(), 0xfd);
 		return dst;
 	});
-	auto fill2 = make_pass("fill some 2", [](CommandBuffer& cbuf, VUK_ARG(Buffer, Access::eTransferWrite) dst) {
-		cbuf.fill_buffer(dst, 0xfc);
+	auto fill2 = make_pass("fill some 2", [](CommandBuffer& cbuf, VUK_ARG(Buffer<uint32_t>, Access::eTransferWrite) dst) {
+		cbuf.fill_buffer(dst->to_byte_view(), 0xfc);
 		return dst;
 	});
 	auto res = download_buffer(buf).get(*test_context.allocator, test_context.compiler);
@@ -621,7 +620,7 @@ TEST_CASE("buffer two range") {
 
 	auto check = { 0xfeu, 0xfdu, 0xfcu, 0xfeu };
 	res = download_buffer(buf).get(*test_context.allocator, test_context.compiler);
-	auto schpen = std::span((uint32_t*)res->mapped_ptr, check.size());
+	auto schpen = res->to_span().subspan(0, check.size());
 	CHECK(schpen == std::span(check));
 }
 /*
@@ -640,14 +639,14 @@ TEST_CASE("alienated subresource") {
 
   auto mip0 = fut.mip(0);
   auto mip1 = fut.mip(1);
-  auto dst_buf = discard_buf("dst", *dst);
+  auto dst_buf = discard("dst", *dst);
   auto res = download_buffer(copy(fut, std::move(dst_buf))).get(*test_context.allocator, test_context.compiler);
 
   {
     auto futc = clear_image(mip0, vuk::ClearColor(5u, 5u, 5u, 5u));
     auto futc2 = clear_image(mip1, vuk::ClearColor(6u, 6u, 6u, 6u));
     frw_pass(mip1);
-    auto dst_buf = discard_buf("dst", *dst);
+    auto dst_buf = discard("dst", *dst);
     auto res = download_buffer(copy(mip1, std::move(dst_buf))).get(*test_context.allocator, test_context.compiler);
     auto updata = std::span((uint32_t*)res->mapped_ptr, 1);
     CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 6; }));
@@ -655,7 +654,7 @@ TEST_CASE("alienated subresource") {
 
   {
     frw_pass(fut);
-    auto dst_buf = discard_buf("dst", *dst);
+    auto dst_buf = discard("dst", *dst);
     auto res = download_buffer(copy(fut.mip(0), std::move(dst_buf))).get(*test_context.allocator, test_context.compiler);
     auto updata = std::span((uint32_t*)res->mapped_ptr, 1);
     CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 5; }));

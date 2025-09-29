@@ -23,7 +23,7 @@ namespace vuk::extra {
 		PipelineBaseCreateInfo spd_pci;
 		spd_pci.add_static_spirv((uint32_t*)spd_cs_hlsl_spv_shader, sizeof(spd_cs_hlsl_spv_shader) / 4, "spd.cs.hlsl");
 
-		auto pass = vuk::make_pass("SPD", [type](CommandBuffer& command_buffer, VUK_IA(eComputeRW | eComputeSampled) src, VUK_ARG(PipelineBaseInfo*, eNone) pipeline) {
+		auto pass = vuk::make_pass("SPD", [type](CommandBuffer& command_buffer, VUK_IA(eComputeRW | eComputeSampled) src, PipelineBaseInfo* pipeline) {
 			// Collect details about the image
 			auto extent = src->extent;
 			auto mips = src->level_count;

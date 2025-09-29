@@ -21,7 +21,7 @@ TEST_CASE("SPD") {
 	size_t size = compute_image_size(fut->format, fut->extent);
 
 	auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
-	auto dst_buf = discard_buf("dst", *dst);
+	auto dst_buf = discard("dst", *dst);
 	extra::generate_mips_spd(fut);
 	copy(fut, dst_buf);
 	auto res = download_buffer(dst_buf).get(*test_context.allocator, test_context.compiler);

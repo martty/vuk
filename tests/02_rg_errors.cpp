@@ -26,8 +26,8 @@ TEST_CASE("error: can't construct incomplete") {
 	auto copy =
 	    make_pass("cpy", [](CommandBuffer& cbuf, VUK_ARG(Buffer<uint32_t>, Access::eTransferWrite) src, VUK_ARG(Buffer<uint32_t>, Access::eTransferWrite) dst) {
 		    cbuf.copy_buffer(src->to_byte_view(), dst->to_byte_view());
-		return dst;
-	});
+		    return dst;
+	    });
 
 	REQUIRE_THROWS(download_buffer(copy(std::move(buf0), std::move(buf3))).get(*test_context.allocator, test_context.compiler));
 }
@@ -74,7 +74,7 @@ namespace {
 TEST_CASE("error: read without write") {
 	{
 		auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, 100, 1 });
-		auto buf = vuk::discard_buf("a", *dst);
+		auto buf = discard("a", *dst);
 
 		auto rd_buf = vuk::make_pass("rd", [](CommandBuffer&, VUK_BA(vuk::eTransferRead) buf) { return buf; });
 
@@ -86,8 +86,8 @@ TEST_CASE("error: read without write") {
 TEST_CASE("error: attaching something twice decl/decl") {
 	{
 		auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, 100, 1 });
-		auto buf_a = vuk::discard_buf("a", *dst);
-		auto buf_b = vuk::discard_buf("a again", *dst);
+		auto buf_a = discard("a", *dst);
+		auto buf_b = discard("a again", *dst);
 
 		auto wr_buf = vuk::make_pass("wr", [](CommandBuffer&, VUK_BA(vuk::eTransferWrite) buf, VUK_BA(vuk::eTransferWrite) bufb) { return buf; });
 
@@ -96,10 +96,10 @@ TEST_CASE("error: attaching something twice decl/decl") {
 }
 /*
 TEST_CASE("not an error: attaching something twice acq/acq") {
-	{
-		auto dst = *allocate_memory(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, 100, 1 });
-		auto buf_a = vuk::acquire_buf("a", *dst, vuk::Access::eNone);
-		auto buf_b = vuk::acquire_buf("a again", *dst, vuk::Access::eNone);
+  {
+    auto dst = *allocate_memory(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, 100, 1 });
+    auto buf_a = vuk::acquire_buf("a", *dst, vuk::Access::eNone);
+    auto buf_b = vuk::acquire_buf("a again", *dst, vuk::Access::eNone);
 
     auto wr_buf = vuk::make_pass("wr", [](CommandBuffer&, VUK_BA(vuk::eTransferWrite) buf, VUK_BA(vuk::eTransferWrite) bufb) { return buf; });
 
@@ -110,8 +110,8 @@ TEST_CASE("not an error: attaching something twice acq/acq") {
 TEST_CASE("error: attaching something twice decl/acq") {
 	{
 		auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, 100, 1 });
-		auto buf_a = vuk::discard_buf("a", *dst);
-		auto buf_b = vuk::acquire_buf("a again", *dst, vuk::Access::eNone);
+		auto buf_a = discard("a", *dst);
+		auto buf_b = vuk::acquire("a again", *dst, vuk::Access::eNone);
 
 		auto wr_buf = vuk::make_pass("wr", [](CommandBuffer&, VUK_BA(vuk::eTransferWrite) buf, VUK_BA(vuk::eTransferWrite) bufb) { return buf; });
 
@@ -122,7 +122,7 @@ TEST_CASE("error: attaching something twice decl/acq") {
 TEST_CASE("error: passing same things with different access") {
 	{
 		auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, 100, 1 });
-		auto buf_a = vuk::acquire_buf("a", *dst, vuk::Access::eNone);
+		auto buf_a = vuk::acquire("a", *dst, vuk::Access::eNone);
 
 		auto wr_buf = vuk::make_pass("wr", [](CommandBuffer&, VUK_BA(vuk::eTransferWrite) buf, VUK_BA(vuk::eTransferRead) bufb) { return buf; });
 

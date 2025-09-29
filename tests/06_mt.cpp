@@ -43,11 +43,11 @@ TEST_CASE("MT") {
 	size_t size = compute_image_size(fut->format, fut->extent);
 
 	auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
-	auto dst_buf = discard_buf("dst", *dst);
+	auto dst_buf = discard("dst", *dst);
 	std::jthread worker([&]() { dst_buf = copy(fut, std::move(dst_buf)); });
 	worker.join();
 	auto res = download_buffer(dst_buf).get(*test_context.allocator, test_context.compiler);
-	auto updata = std::span((uint32_t*)res->mapped_ptr, 4);
+	auto updata = res->to_span<uint32_t>();
 	CHECK(updata == std::span(data));
 }
 
@@ -70,9 +70,9 @@ TEST_CASE("MT reconvergence") {
 		});
 		worker.join();
 
-		auto dst_buf = discard_buf("dst", *dst);
+		auto dst_buf = discard("dst", *dst);
 		auto res = download_buffer(copy(futp.mip(1), std::move(dst_buf))).get(*test_context.allocator, test_context.compiler);
-		auto updata = std::span((uint32_t*)res->mapped_ptr, 1);
+		auto updata = res->to_span<uint32_t>();
 		CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 7; }));
 	}
 }

@@ -291,12 +291,18 @@ namespace vuk {
 			return { ptr + offset, new_count };
 		}
 
-		[[nodiscard]] std::span<Type> to_span() noexcept {
-			return std::span{ &*ptr, count() };
+		template<class U = Type>
+		[[nodiscard]] std::span<U> to_span() noexcept
+		  requires(std::is_same_v<Type, byte> || std::is_same_v<Type, U>)
+		{
+			return std::span{ reinterpret_cast<U*>(&*ptr), count() };
 		}
 
-		[[nodiscard]] std::span<const Type> to_span() const noexcept {
-			return std::span{ &*ptr, count() };
+		template<class U = Type>
+		[[nodiscard]] std::span<const U> to_span() const noexcept
+		  requires(std::is_same_v<Type, byte> || std::is_same_v<Type, U>)
+		{
+			return std::span{ reinterpret_cast<const U*>(&*ptr), count() };
 		}
 		std::strong_ordering operator<=>(const view<BufferLike<Type>, dynamic_extent>&) const noexcept = default;
 	};
@@ -310,6 +316,9 @@ namespace vuk {
 	struct is_bufferlike_view_type<view<BufferLike<T>>> {
 		static constexpr bool value = true;
 	};
+
+	template<class T, size_t Extent = dynamic_extent>
+	using Unique_view = Unique<view<T, Extent>>;
 
 	struct BufferViewCreateInfo {
 		size_t elem_size;

@@ -1,11 +1,11 @@
 #pragma once
 
-#include "vuk/runtime/vk/Allocator.hpp"
 #include "vuk/Exception.hpp"
 #include "vuk/ImageAttachment.hpp"
+#include "vuk/runtime/vk/Allocation.hpp"
+#include "vuk/runtime/vk/Allocator.hpp"
 #include "vuk/runtime/vk/Descriptor.hpp"
 #include "vuk/runtime/vk/Query.hpp"
-#include "vuk/runtime/vk/Allocation.hpp"
 #include "vuk/SourceLocation.hpp"
 
 namespace vuk {
@@ -89,13 +89,14 @@ namespace vuk {
 	}
 
 	template<class T>
-	inline Result<Unique<ptr<BufferLike<T>>>, AllocateException>
+	inline Result<Unique<view<BufferLike<T>>>, AllocateException>
 	allocate_array(Allocator& allocator, size_t count, MemoryUsage memory_usage, SourceLocationAtFrame loc = VUK_HERE_AND_NOW()) {
-		Unique<ptr<BufferLike<T>>> buf(allocator);
 		BufferCreateInfo bci{ .memory_usage = memory_usage, .size = sizeof(T) * count, .alignment = alignof(T) };
-		if (auto res = allocator.allocate_memory(std::span{ static_cast<ptr_base*>(&buf.get()), 1 }, std::span{ &bci, 1 }, loc); !res) {
+		Unique<view<BufferLike<T>>> buf(allocator);
+		if (auto res = allocator.allocate_memory(std::span{ static_cast<ptr_base*>(&buf->ptr), 1 }, std::span{ &bci, 1 }, loc); !res) {
 			return { expected_error, res.error() };
 		}
+		buf->sz_bytes = bci.size;
 		return { expected_value, std::move(buf) };
 	}
 
