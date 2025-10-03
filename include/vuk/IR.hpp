@@ -23,6 +23,11 @@
 // #define VUK_GARBAGE_SAN
 
 namespace vuk {
+	struct IRModule;
+
+	[[nodiscard]] std::shared_ptr<IRModule>& get_current_module();
+	void set_current_module(std::shared_ptr<IRModule> module);
+
 	struct TypeDebugInfo {
 		std::string name;
 	};
@@ -1406,11 +1411,6 @@ namespace vuk {
 		void collect_garbage();
 		void collect_garbage(std::pmr::polymorphic_allocator<std::byte> allocator);
 	};
-
-	inline std::shared_ptr<IRModule>& get_current_module() {
-		thread_local static std::shared_ptr<IRModule> get_current_module = std::make_shared<IRModule>();
-		return get_current_module;
-	}
 
 	struct ExtNode {
 		ExtNode(Node* node) : node(node) {

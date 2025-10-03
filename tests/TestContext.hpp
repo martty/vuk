@@ -1,19 +1,20 @@
 #pragma once
 #include "renderdoc_app.h"
+#include "vuk/Config.hpp"
+#include "vuk/RenderGraph.hpp"
+#include "vuk/runtime/CommandBuffer.hpp"
+#include "vuk/runtime/ThisThreadExecutor.hpp"
 #include "vuk/runtime/vk/Allocator.hpp"
 #include "vuk/runtime/vk/AllocatorHelpers.hpp"
-#include "vuk/runtime/CommandBuffer.hpp"
-#include "vuk/Config.hpp"
-#include "vuk/runtime/vk/VkRuntime.hpp"
-#include "vuk/RenderGraph.hpp"
 #include "vuk/runtime/vk/DeviceFrameResource.hpp"
-#include "vuk/runtime/ThisThreadExecutor.hpp"
+#include "vuk/runtime/vk/VkRuntime.hpp"
+#include <vuk/IR.hpp>
 #ifdef WIN32
 #include <Windows.h>
 #endif
 #include <VkBootstrap.h>
-#include <mutex>
 #include <fmt/format.h>
+#include <mutex>
 
 namespace vuk {
 	struct TestContext {
@@ -147,7 +148,7 @@ namespace vuk {
 			const unsigned num_inflight_frames = 3;
 			sfa_resource.emplace(*runtime, num_inflight_frames);
 			allocator.emplace(*sfa_resource);
-			vuk::current_module = std::make_shared<IRModule>();
+			set_current_module(std::make_shared<IRModule>());
 
 			if (rdoc_api) {
 				rdoc_api->StartFrameCapture(NULL, NULL);
@@ -211,7 +212,6 @@ constexpr bool operator==(const std::span<float>& lhs, const std::span<const flo
 constexpr bool operator==(const std::span<const float>& lhs, const std::span<const float>& rhs) {
 	return std::equal(begin(lhs), end(lhs), begin(rhs), end(rhs));
 }
-
 
 template<vuk::Access acc>
 auto image_use = vuk::make_pass("image use", [](vuk::CommandBuffer& cbuf, VUK_IA(acc) img) { return img; });

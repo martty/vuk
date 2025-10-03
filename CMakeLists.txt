@@ -340,7 +340,7 @@ target_compile_features(vuk PUBLIC cxx_std_20)
 target_sources(vuk PRIVATE
 	src/Format.cpp
 	src/Name.cpp
-
+  src/IR.cpp
 	src/IRPasses.cpp
 	src/GraphDumper.cpp
 
