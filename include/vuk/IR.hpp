@@ -1407,21 +1407,24 @@ namespace vuk {
 		void collect_garbage(std::pmr::polymorphic_allocator<std::byte> allocator);
 	};
 
-	inline thread_local std::shared_ptr<IRModule> current_module = std::make_shared<IRModule>();
+	inline std::shared_ptr<IRModule>& get_current_module() {
+		thread_local static std::shared_ptr<IRModule> get_current_module = std::make_shared<IRModule>();
+		return get_current_module;
+	}
 
 	struct ExtNode {
 		ExtNode(Node* node) : node(node) {
 			acqrel = new AcquireRelease;
 			node->rel_acq = acqrel;
 			this->node->held = true;
-			source_module = current_module;
+			source_module = get_current_module();
 		}
 
 		ExtNode(Node* node, std::vector<std::shared_ptr<ExtNode>> deps) : node(node), deps(std::move(deps)) {
 			acqrel = new AcquireRelease;
 			node->rel_acq = acqrel;
 			this->node->held = true;
-			source_module = current_module;
+			source_module = get_current_module();
 		}
 
 		ExtNode(Node* node, std::shared_ptr<ExtNode> dep) : node(node) {
@@ -1430,17 +1433,17 @@ namespace vuk {
 			this->node->held = true;
 			deps.push_back(std::move(dep));
 
-			source_module = current_module;
+			source_module = get_current_module();
 		}
 
 		ExtNode(Ref ref, std::shared_ptr<ExtNode> dep, Access access = Access::eNone, DomainFlagBits domain = DomainFlagBits::eAny) {
 			acqrel = new AcquireRelease;
-			this->node = current_module->make_release(ref, access, domain).node;
+			this->node = get_current_module()->make_release(ref, access, domain).node;
 			node->rel_acq = acqrel;
 			this->node->held = true;
 			deps.push_back(std::move(dep));
 
-			source_module = current_module;
+			source_module = get_current_module();
 		}
 
 		// for acquires - adopt the node
@@ -1452,7 +1455,7 @@ namespace vuk {
 
 			node->rel_acq = acqrel;
 			this->node->held = true;
-			source_module = current_module;
+			source_module = get_current_module();
 		}
 
 		~ExtNode() {

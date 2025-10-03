@@ -351,7 +351,7 @@ namespace vuk {
 			}
 			memcpy(dst, res->value, ref.type()->size);
 			if (ref.node->kind != Node::CONSTANT) {
-				ref = current_module->make_constant(ref.type(), res->value);
+				ref = get_current_module()->make_constant(ref.type(), res->value);
 			}
 		}
 	}
@@ -374,7 +374,7 @@ namespace vuk {
 			return;
 		}
 		memcpy(dst, composite_v, t->size);
-		if (t->hash_value == current_module->types.builtin_image) {
+		if (t->hash_value == get_current_module()->types.builtin_image) {
 			if (axis == Node::NamedAxis::MIP) {
 				auto& sliced = *static_cast<ImageAttachment*>(dst);
 				sliced.base_level += start;
@@ -390,7 +390,7 @@ namespace vuk {
 			} else {
 				assert(0);
 			}
-		} else if (t->hash_value == current_module->types.builtin_buffer) {
+		} else if (t->hash_value == get_current_module()->types.builtin_buffer) {
 			if (axis == 0) {
 				auto& sliced = *static_cast<Buffer*>(dst);
 				sliced.offset += start;
@@ -500,11 +500,11 @@ namespace vuk {
 			return { expected_value, RefOrValue::from_value(ref.node->constant.value) };
 		}
 		case Node::CONSTRUCT: {
-			if (ref.type()->hash_value == current_module->types.builtin_buffer) {
+			if (ref.type()->hash_value == get_current_module()->types.builtin_buffer) {
 				auto& bound = constant<Buffer>(ref.node->construct.args[0]);
 				set_if_available(&bound.size, ref.node->construct.args[1]);
 				return { expected_value, RefOrValue::from_value(&bound, ref) };
-			} else if (ref.type()->hash_value == current_module->types.builtin_image) {
+			} else if (ref.type()->hash_value == get_current_module()->types.builtin_image) {
 				auto& attachment = constant<ImageAttachment>(ref.node->construct.args[0]);
 				set_if_available(&attachment.extent.width, ref.node->construct.args[1]);
 				set_if_available(&attachment.extent.height, ref.node->construct.args[2]);
