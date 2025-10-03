@@ -47,6 +47,7 @@ jobs:
           -DCMAKE_CXX_COMPILER=${{matrix.config.cxx}} \
           -DCMAKE_C_COMPILER=${{matrix.config.cc}} \
           -DVUK_BUILD_EXAMPLES=ON \
+          -DVUK_BUILD_TESTS=ON \
           -DVUK_USE_DXC=OFF
 
     - name: Build
@@ -72,6 +73,7 @@ jobs:
         cmake -B ${{github.workspace}}/build `
           -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} `
           -DVUK_BUILD_EXAMPLES=ON `
+          -DVUK_BUILD_TESTS=ON `
           -DVUK_USE_DXC=OFF
 
     - name: Build
@@ -97,6 +99,7 @@ jobs:
         cmake -B ${{github.workspace}}/build \
           -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} \
           -DVUK_BUILD_EXAMPLES=ON \
+          -DVUK_BUILD_TESTS=ON \
           -DVUK_USE_DXC=OFF
 
     - name: Build
