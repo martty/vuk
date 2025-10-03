@@ -293,7 +293,7 @@ public:
 	template<size_t N, typename... T>
 	static auto fill_ret_ty(std::array<size_t, sizeof...(T)> idxs, const std::tuple<T...>& args, fixed_vector<std::shared_ptr<Type>, N>& ret_types) {
 		size_t i = 0;
-		(ret_types.emplace_back(current_module->types.make_aliased_ty(Type::stripped(std::get<T>(args).src.type()), idxs[i++] + 1)), ...);
+		(ret_types.emplace_back(get_current_module()->types.make_aliased_ty(Type::stripped(std::get<T>(args).src.type()), idxs[i++] + 1)), ...);
 	}
 
 	inline auto First = [](auto& first, auto&...) -> auto& {
@@ -338,7 +338,7 @@ public:
 
 				size_t hash_code = typeid(untyped_cb).hash_code();
 				if (!opaque_fn_ty) {
-					std::array<std::shared_ptr<Type>, arg_count> arg_types = { current_module->types.make_imbued_ty(T{ nullptr, args.get_head() }.src.type(),
+					std::array<std::shared_ptr<Type>, arg_count> arg_types = { get_current_module()->types.make_imbued_ty(T{ nullptr, args.get_head() }.src.type(),
 						                                                                                              T::access)... };
 
 					fixed_vector<std::shared_ptr<Type>, arg_count> ret_types;
@@ -361,7 +361,7 @@ public:
 					for (size_t i = 0; i < arg_types.size(); i++) {
 						if (!existing_maps[i]) {
 							maps_to_add.push_back(i);
-							ret_types.push_back(current_module->types.make_aliased_ty(Type::stripped(arg_types[i]), i + 1));
+							ret_types.push_back(get_current_module()->types.make_aliased_ty(Type::stripped(arg_types[i]), i + 1));
 						}
 					}
 
@@ -376,17 +376,17 @@ public:
 							}
 						};
 						opaque_fn_ty =
-						    current_module->types.make_opaque_fn_ty(arg_types, ret_types, vuk::DomainFlagBits::eAny, hash_code, std::move(wrapped_cb), name.c_str());
+						    get_current_module()->types.make_opaque_fn_ty(arg_types, ret_types, vuk::DomainFlagBits::eAny, hash_code, std::move(wrapped_cb), name.c_str());
 					} else {
 						opaque_fn_ty =
-						    current_module->types.make_opaque_fn_ty(arg_types, ret_types, vuk::DomainFlagBits::eAny, hash_code, std::move(untyped_cb), name.c_str());
+						    get_current_module()->types.make_opaque_fn_ty(arg_types, ret_types, vuk::DomainFlagBits::eAny, hash_code, std::move(untyped_cb), name.c_str());
 					}
 				}
-				auto opaque_fn = current_module->make_declare_fn(opaque_fn_ty);
-				Node* node = current_module->make_call(opaque_fn, args.get_head()...);
+				auto opaque_fn = get_current_module()->make_declare_fn(opaque_fn_ty);
+				Node* node = get_current_module()->make_call(opaque_fn, args.get_head()...);
 				node->scheduling_info = new SchedulingInfo(scheduling_info);
 				inner_scope.parent = &_scope;
-				current_module->set_source_location(node, inner_scope);
+				get_current_module()->set_source_location(node, inner_scope);
 
 				std::vector<std::shared_ptr<ExtNode>> dependent_nodes;
 				[reuse_node, &dependent_nodes](auto& first, auto&... rest) {
@@ -404,7 +404,7 @@ public:
 					extnode->deps.insert(extnode->deps.end(), std::make_move_iterator(dependent_nodes.begin()), std::make_move_iterator(dependent_nodes.end()));
 				}
 
-				current_module->set_source_location(extnode->get_node(), inner_scope);
+				get_current_module()->set_source_location(extnode->get_node(), inner_scope);
 
 				if constexpr (is_tuple<Ret>::value) {
 					auto [idxs, ret_tuple] = intersect_tuples<std::tuple<T...>, Ret>(arg_tuple_as_a);
@@ -427,12 +427,12 @@ public:
 
 	inline auto lift_compute(PipelineBaseCreateInfo pbci, VUK_CALLSTACK) {
 		return [pbci, inner_scope = VUK_CALL]<class... T>(size_t size_x, size_t size_y, size_t size_z, Value<T>... args) mutable { // no callstack for these :/
-			Node* node = current_module->make_call(current_module->make_constant(pbci),
-			                                       current_module->make_constant(size_x),
-			                                       current_module->make_constant(size_y),
-			                                       current_module->make_constant(size_z),
+			Node* node = get_current_module()->make_call(get_current_module()->make_constant(pbci),
+			                                       get_current_module()->make_constant(size_x),
+			                                       get_current_module()->make_constant(size_y),
+			                                       get_current_module()->make_constant(size_z),
 			                                       args.get_head()...);
-			current_module->set_source_location(node, inner_scope);
+			get_current_module()->set_source_location(node, inner_scope);
 			auto extnode = std::make_shared<ExtNode>(node);
 			(args.node->deps.push_back(extnode), ...);
 		};
@@ -450,31 +450,31 @@ public:
 			switch (b->type) {
 			case DescriptorType::eSampledImage:
 				acc = Access::eComputeSampled;
-				base_ty = current_module->types.get_builtin_image();
+				base_ty = get_current_module()->types.get_builtin_image();
 				break;
 			case DescriptorType::eCombinedImageSampler:
 				acc = Access::eComputeSampled;
-				base_ty = current_module->types.get_builtin_sampled_image();
+				base_ty = get_current_module()->types.get_builtin_sampled_image();
 				break;
 			case DescriptorType::eStorageImage:
 				acc = b->non_writable ? Access::eComputeRead : (b->non_readable ? Access::eComputeWrite : Access::eComputeRW);
-				base_ty = current_module->types.get_builtin_image();
+				base_ty = get_current_module()->types.get_builtin_image();
 				break;
 			case DescriptorType::eUniformBuffer:
 			case DescriptorType::eStorageBuffer:
 				acc = b->non_writable ? Access::eComputeRead : (b->non_readable ? Access::eComputeWrite : Access::eComputeRW);
-				base_ty = current_module->types.get_builtin_buffer();
+				base_ty = get_current_module()->types.get_builtin_buffer();
 				break;
 			case DescriptorType::eSampler:
 				acc = Access::eNone;
-				base_ty = current_module->types.get_builtin_sampler();
+				base_ty = get_current_module()->types.get_builtin_sampler();
 				break;
 			default:
 				assert(0);
 			}
 
-			arg_types.push_back(current_module->types.make_imbued_ty(base_ty, acc));
-			ret_types.emplace_back(current_module->types.make_aliased_ty(base_ty, i + 4));
+			arg_types.push_back(get_current_module()->types.make_imbued_ty(base_ty, acc));
+			ret_types.emplace_back(get_current_module()->types.make_aliased_ty(base_ty, i + 4));
 			i++;
 		}
 
@@ -483,11 +483,11 @@ public:
 			assert(sizeof...(args) == arg_types.size());
 
 			auto shader_fn_ty =
-			    current_module->types.make_shader_fn_ty(arg_types, ret_types, vuk::DomainFlagBits::eAny, compute_pipeline, compute_pipeline->pipeline_name.c_str());
-			auto fn = current_module->make_declare_fn(shader_fn_ty);
-			Node* node = current_module->make_call(
-			    fn, current_module->make_constant(size_x), current_module->make_constant(size_y), current_module->make_constant(size_z), args.get_head()...);
-			current_module->set_source_location(node, inner_scope);
+			    get_current_module()->types.make_shader_fn_ty(arg_types, ret_types, vuk::DomainFlagBits::eAny, compute_pipeline, compute_pipeline->pipeline_name.c_str());
+			auto fn = get_current_module()->make_declare_fn(shader_fn_ty);
+			Node* node = get_current_module()->make_call(
+			    fn, get_current_module()->make_constant(size_x), get_current_module()->make_constant(size_y), get_current_module()->make_constant(size_z), args.get_head()...);
+			get_current_module()->set_source_location(node, inner_scope);
 			auto extnode = std::make_shared<ExtNode>(node);
 			(args.node->deps.push_back(extnode), ...);
 		};
@@ -498,29 +498,29 @@ public:
 	}
 
 	[[nodiscard]] inline Value<PipelineBaseInfo*> compile_pipeline(Value<PipelineBaseCreateInfo> pbci, VUK_CALLSTACK) {
-		Ref ref = current_module->make_compile_pipeline(pbci.get_head());
-		current_module->set_source_location(ref.node, VUK_CALL);
+		Ref ref = get_current_module()->make_compile_pipeline(pbci.get_head());
+		get_current_module()->set_source_location(ref.node, VUK_CALL);
 		return { make_ext_ref(ref) };
 	}
 
 	[[nodiscard]] inline Value<PipelineBaseInfo*> compile_pipeline(PipelineBaseCreateInfo pbci, VUK_CALLSTACK) {
-		Ref ref = current_module->make_compile_pipeline(current_module->make_constant(pbci));
-		current_module->set_source_location(ref.node, VUK_CALL);
+		Ref ref = get_current_module()->make_compile_pipeline(get_current_module()->make_constant(pbci));
+		get_current_module()->set_source_location(ref.node, VUK_CALL);
 		return { make_ext_ref(ref) };
 	}
 
 	[[nodiscard]] inline Value<ImageAttachment> declare_ia(Name name, ImageAttachment ia = {}, VUK_CALLSTACK) {
-		Ref ref = current_module->make_declare_image(ia);
-		current_module->name_output(ref, name.c_str());
-		current_module->set_source_location(ref.node, VUK_CALL);
+		Ref ref = get_current_module()->make_declare_image(ia);
+		get_current_module()->name_output(ref, name.c_str());
+		get_current_module()->set_source_location(ref.node, VUK_CALL);
 		return { make_ext_ref(ref) };
 	}
 
 	[[nodiscard]] inline Value<ImageAttachment> discard_ia(Name name, ImageAttachment ia, VUK_CALLSTACK) {
 		assert(ia.image_view != ImageView{});
-		Ref ref = current_module->make_declare_image(ia);
-		current_module->name_output(ref, name.c_str());
-		current_module->set_source_location(ref.node, VUK_CALL);
+		Ref ref = get_current_module()->make_declare_image(ia);
+		get_current_module()->name_output(ref, name.c_str());
+		get_current_module()->set_source_location(ref.node, VUK_CALL);
 		return { make_ext_ref(ref) };
 	}
 
@@ -530,34 +530,34 @@ public:
 	/// @param previous_access
 	[[nodiscard]] inline Value<ImageAttachment> acquire_ia(Name name, ImageAttachment ia, Access previous_access, VUK_CALLSTACK) {
 		assert(ia.image_view != ImageView{});
-		Ref ref = current_module->acquire(current_module->types.get_builtin_image(), nullptr, ia);
+		Ref ref = get_current_module()->acquire(get_current_module()->types.get_builtin_image(), nullptr, ia);
 		auto ext_ref = ExtRef(std::make_shared<ExtNode>(ref.node, to_use(previous_access)), ref);
-		current_module->name_output(ref, name.c_str());
-		current_module->set_source_location(ref.node, VUK_CALL);
+		get_current_module()->name_output(ref, name.c_str());
+		get_current_module()->set_source_location(ref.node, VUK_CALL);
 		return { std::move(ext_ref) };
 	}
 
 	[[nodiscard]] inline Value<Buffer> declare_buf(Name name, Buffer buf = {}, VUK_CALLSTACK) {
-		Ref ref = current_module->make_declare_buffer(buf);
-		current_module->name_output(ref, name.c_str());
-		current_module->set_source_location(ref.node, VUK_CALL);
+		Ref ref = get_current_module()->make_declare_buffer(buf);
+		get_current_module()->name_output(ref, name.c_str());
+		get_current_module()->set_source_location(ref.node, VUK_CALL);
 		return { make_ext_ref(ref) };
 	}
 
 	[[nodiscard]] inline Value<Buffer> discard_buf(Name name, Buffer buf, VUK_CALLSTACK) {
 		assert(buf.buffer != VK_NULL_HANDLE);
-		Ref ref = current_module->make_declare_buffer(buf);
-		current_module->name_output(ref, name.c_str());
-		current_module->set_source_location(ref.node, VUK_CALL);
+		Ref ref = get_current_module()->make_declare_buffer(buf);
+		get_current_module()->name_output(ref, name.c_str());
+		get_current_module()->set_source_location(ref.node, VUK_CALL);
 		return { make_ext_ref(ref) };
 	}
 
 	[[nodiscard]] inline Value<Buffer> acquire_buf(Name name, Buffer buf, Access access, VUK_CALLSTACK) {
 		assert(buf.buffer != VK_NULL_HANDLE);
-		Ref ref = current_module->acquire(current_module->types.get_builtin_buffer(), nullptr, buf);
+		Ref ref = get_current_module()->acquire(get_current_module()->types.get_builtin_buffer(), nullptr, buf);
 		auto ext_ref = ExtRef(std::make_shared<ExtNode>(ref.node, to_use(access)), ref);
-		current_module->name_output(ref, name.c_str());
-		current_module->set_source_location(ref.node, VUK_CALL);
+		get_current_module()->name_output(ref, name.c_str());
+		get_current_module()->set_source_location(ref.node, VUK_CALL);
 		return { std::move(ext_ref) };
 	}
 
@@ -567,8 +567,8 @@ public:
 		std::vector<std::shared_ptr<ExtNode>> deps;
 		std::array refs = { arg.get_head(), args.get_head()... };
 		deps = { arg.node, args.node... };
-		Ref ref = current_module->make_declare_array(Type::stripped(refs[0].type()), refs);
-		current_module->name_output(ref, name.c_str());
+		Ref ref = get_current_module()->make_declare_array(Type::stripped(refs[0].type()), refs);
+		get_current_module()->name_output(ref, name.c_str());
 		return { make_ext_ref(ref, deps) };
 	}
 
@@ -583,17 +583,17 @@ public:
 		}
 		std::shared_ptr<Type> t;
 		if constexpr (std::is_same_v<T, vuk::ImageAttachment>) {
-			t = current_module->types.get_builtin_image();
+			t = get_current_module()->types.get_builtin_image();
 		} else if constexpr (std::is_same_v<T, vuk::Buffer>) {
-			t = current_module->types.get_builtin_buffer();
+			t = get_current_module()->types.get_builtin_buffer();
 		} else if constexpr (std::is_same_v<T, vuk::Sampler>) {
-			t = current_module->types.get_builtin_sampler();
+			t = get_current_module()->types.get_builtin_sampler();
 		} else if constexpr (std::is_same_v<T, vuk::SampledImage>) {
-			t = current_module->types.get_builtin_sampled_image();
+			t = get_current_module()->types.get_builtin_sampled_image();
 		}
-		Ref ref = current_module->make_declare_array(t, refs);
-		current_module->name_output(ref, name.c_str());
-		current_module->set_source_location(ref.node, VUK_CALL);
+		Ref ref = get_current_module()->make_declare_array(t, refs);
+		get_current_module()->name_output(ref, name.c_str());
+		get_current_module()->set_source_location(ref.node, VUK_CALL);
 		return { make_ext_ref(ref, std::move(deps)) };
 	}
 
@@ -608,53 +608,53 @@ public:
 		}
 		std::shared_ptr<Type> t;
 		if constexpr (std::is_same_v<T, vuk::ImageAttachment>) {
-			t = current_module->types.get_builtin_image();
+			t = get_current_module()->types.get_builtin_image();
 		} else if constexpr (std::is_same_v<T, vuk::Buffer>) {
-			t = current_module->types.get_builtin_buffer();
+			t = get_current_module()->types.get_builtin_buffer();
 		} else if constexpr (std::is_same_v<T, vuk::Sampler>) {
-			t = current_module->types.get_builtin_sampler();
+			t = get_current_module()->types.get_builtin_sampler();
 		} else if constexpr (std::is_same_v<T, vuk::SampledImage>) {
-			t = current_module->types.get_builtin_sampled_image();
+			t = get_current_module()->types.get_builtin_sampled_image();
 		}
-		Ref ref = current_module->make_declare_array(t, refs);
-		current_module->name_output(ref, name.c_str());
-		current_module->set_source_location(ref.node, VUK_CALL);
+		Ref ref = get_current_module()->make_declare_array(t, refs);
+		get_current_module()->name_output(ref, name.c_str());
+		get_current_module()->set_source_location(ref.node, VUK_CALL);
 		return { make_ext_ref(ref, std::move(deps)) };
 	}
 
 	[[nodiscard]] inline Value<Swapchain> acquire_swapchain(Swapchain& bundle, VUK_CALLSTACK) {
-		Ref ref = current_module->make_declare_swapchain(bundle);
-		current_module->set_source_location(ref.node, VUK_CALL);
+		Ref ref = get_current_module()->make_declare_swapchain(bundle);
+		get_current_module()->set_source_location(ref.node, VUK_CALL);
 		return { make_ext_ref(ref) };
 	}
 
 	[[nodiscard]] inline Value<Sampler> acquire_sampler(Name name, SamplerCreateInfo sci, VUK_CALLSTACK) {
-		Ref ref = current_module->acquire(current_module->types.get_builtin_sampler(), nullptr, sci);
+		Ref ref = get_current_module()->acquire(get_current_module()->types.get_builtin_sampler(), nullptr, sci);
 		auto ext_ref = ExtRef(std::make_shared<ExtNode>(ref.node, to_use(Access::eNone)), ref);
-		current_module->name_output(ref, name.c_str());
-		current_module->set_source_location(ref.node, VUK_CALL);
+		get_current_module()->name_output(ref, name.c_str());
+		get_current_module()->set_source_location(ref.node, VUK_CALL);
 		return { std::move(ext_ref) };
 	}
 
 	[[nodiscard]] inline Value<SampledImage> combine_image_sampler(Name name, Value<ImageAttachment> ia, Value<Sampler> sampler, VUK_CALLSTACK) {
-		Ref ref = current_module->make_sampled_image(ia.get_head(), sampler.get_head());
-		current_module->name_output(ref, name.c_str());
-		current_module->set_source_location(ref.node, VUK_CALL);
+		Ref ref = get_current_module()->make_sampled_image(ia.get_head(), sampler.get_head());
+		get_current_module()->name_output(ref, name.c_str());
+		get_current_module()->set_source_location(ref.node, VUK_CALL);
 		return { make_ext_ref(ref, { ia.node, sampler.node }) };
 	}
 
 	[[nodiscard]] inline Value<ImageAttachment> acquire_next_image(Name name, Value<Swapchain> in, VUK_CALLSTACK) {
-		Ref ref = current_module->make_acquire_next_image(in.get_head());
-		current_module->name_output(ref, name.c_str());
-		current_module->set_source_location(ref.node, VUK_CALL);
+		Ref ref = get_current_module()->make_acquire_next_image(in.get_head());
+		get_current_module()->name_output(ref, name.c_str());
+		get_current_module()->set_source_location(ref.node, VUK_CALL);
 		return std::move(in).transmute<ImageAttachment>(ref);
 	}
 
 	template<class T>
 	[[nodiscard]] inline Value<T> make_constant(Name name, T in, VUK_CALLSTACK) {
-		Ref ref = current_module->make_constant(in);
-		current_module->name_output(ref, name.c_str());
-		current_module->set_source_location(ref.node, VUK_CALL);
+		Ref ref = get_current_module()->make_constant(in);
+		get_current_module()->name_output(ref, name.c_str());
+		get_current_module()->set_source_location(ref.node, VUK_CALL);
 		return { make_ext_ref(ref) };
 	}
 

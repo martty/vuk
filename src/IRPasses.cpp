@@ -338,8 +338,8 @@ namespace vuk {
 								node->type = std::span(node->type.data(), 1);
 								return walk_writes(node, nth(slice_node, 0));
 							} else {
-								node->slice.start = current_module->make_constant<uint64_t>(new_start);
-								node->slice.count = current_module->make_constant<uint64_t>(scope_Sp.range.count);
+								node->slice.start = get_current_module()->make_constant<uint64_t>(new_start);
+								node->slice.count = get_current_module()->make_constant<uint64_t>(scope_Sp.range.count);
 								return walk_writes(node, nth(slice_node, 0));
 							}
 						} else if (!scope_Sp.intersects(scope_S)) { // case 3, we can elide the convergence
@@ -497,7 +497,7 @@ namespace vuk {
 					}
 				}
 
-				if (node->type[0]->kind == Type::ARRAY_TY || node->type[0]->hash_value == current_module->types.builtin_sampled_image) {
+				if (node->type[0]->kind == Type::ARRAY_TY || node->type[0]->hash_value == get_current_module()->types.builtin_sampled_image) {
 					for (size_t i = 1; i < node->construct.args.size(); i++) {
 						auto& parm = node->construct.args[i];
 						auto& st_parm = parm;
@@ -529,7 +529,7 @@ namespace vuk {
 							add_read(node, parm, i);
 						}
 						auto& base = *arg_ty->imbued.T;
-						if (do_ssa && base->hash_value == current_module->types.builtin_image) {
+						if (do_ssa && base->hash_value == get_current_module()->types.builtin_image) {
 							auto def = eval(parm);
 							if (def.holds_value() && def->is_ref) {
 								if (def->ref.node->kind == Node::CONSTRUCT) {
@@ -579,7 +579,7 @@ namespace vuk {
 			case Node::ACQUIRE:
 				for (size_t out = 0; out < node->type.size(); out++) {
 					add_breaking_result(node, out);
-					if (do_ssa && node->type[out]->hash_value == current_module->types.builtin_buffer) {
+					if (do_ssa && node->type[out]->hash_value == get_current_module()->types.builtin_buffer) {
 						auto& buf = *reinterpret_cast<Buffer*>(node->acquire.values[out]);
 						assert(buf.buffer != VK_NULL_HANDLE);
 						bool found = false;
@@ -684,7 +684,7 @@ namespace vuk {
 		}
 
 		std::pmr::vector<Node*> new_nodes;
-		NodeContext nc{ current_module.get(), pass_reads, child_chains, new_nodes, allocator, bufs, false };
+		NodeContext nc{ get_current_module().get(), pass_reads, child_chains, new_nodes, allocator, bufs, false };
 
 		for (auto& node : working_set) {
 			nc.process_node_links(node);
@@ -712,7 +712,7 @@ namespace vuk {
 		for (auto it = start; it != end; ++it) {
 			allocate_node_links(*it, allocator);
 		}
-		NodeContext nc{ current_module.get(), pass_reads, child_chains, new_nodes, allocator, bufs, true };
+		NodeContext nc{ get_current_module().get(), pass_reads, child_chains, new_nodes, allocator, bufs, true };
 
 		for (auto it = start; it != end; ++it) {
 			nc.process_node_links(*it);
@@ -752,7 +752,7 @@ namespace vuk {
 			switch (node->kind) {
 			case Node::CONSTRUCT: {
 				auto args_ptr = node->construct.args.data();
-				if (node->type[0]->hash_value == current_module->types.builtin_image) {
+				if (node->type[0]->hash_value == get_current_module()->types.builtin_image) {
 					auto ptr = &constant<ImageAttachment>(args_ptr[0]);
 					auto& value = constant<ImageAttachment>(args_ptr[0]);
 					if (value.extent.width > 0) {
@@ -782,7 +782,7 @@ namespace vuk {
 					if (value.level_count != VK_REMAINING_MIP_LEVELS) {
 						placeholder_to_ptr(args_ptr[9], &ptr->level_count);
 					}
-				} else if (node->type[0]->hash_value == current_module->types.builtin_buffer) {
+				} else if (node->type[0]->hash_value == get_current_module()->types.builtin_buffer) {
 					auto ptr = &constant<Buffer>(args_ptr[0]);
 					auto& value = constant<Buffer>(args_ptr[0]);
 					if (value.size != ~(0ULL)) {
@@ -860,7 +860,7 @@ namespace vuk {
 				}
 				case Node::CONSTRUCT: {
 					auto& args = node->construct.args;
-					if (node->type[0]->hash_value == current_module->types.builtin_image) {
+					if (node->type[0]->hash_value == get_current_module()->types.builtin_image) {
 						if (constant<ImageAttachment>(args[0]).image.image == VK_NULL_HANDLE) { // if there is no image, we will use base layer 0 and base mip 0
 							placeholder_to_constant(args[6], 0U);
 							placeholder_to_constant(args[8], 0U);
@@ -1009,7 +1009,7 @@ namespace vuk {
 				if (parm.type()->kind == Type::ARRAY_TY) {
 					type = (*parm.type()->array.T)->hash_value;
 				}
-				if (type != current_module->types.builtin_buffer && type != current_module->types.builtin_image) {
+				if (type != get_current_module()->types.builtin_buffer && type != get_current_module()->types.builtin_image) {
 					break;
 				}
 				auto& link = parm.link();
@@ -1181,7 +1181,7 @@ namespace vuk {
 			case Node::CONSTRUCT: { // CONSTRUCT discards -
 				// TODO: arrays!
 				if (node->type[0]->kind != Type::ARRAY_TY && node->links->reads.size() > 0 &&
-				    node->type[0]->hash_value != current_module->types.builtin_sampled_image) { // we are trying to read from it :(
+				    node->type[0]->hash_value != get_current_module()->types.builtin_sampled_image) { // we are trying to read from it :(
 					auto reads = node->links->reads.to_span(impl->pass_reads);
 					for (auto offender : reads) {
 						auto message0 = format_graph_message(Level::eError, offender.node, "tried to read something that was never written:\n");
@@ -1260,7 +1260,7 @@ namespace vuk {
 			if (type->kind == Type::ARRAY_TY || type->kind == Type::UNION_TY) {
 				return {};
 			}
-			if (type->hash_value == current_module->types.builtin_image) {
+			if (type->hash_value == get_current_module()->types.builtin_image) {
 				auto ia = reinterpret_cast<ImageAttachment*>(value);
 				if (ia->image) {
 					auto [_, succ] = ias.emplace(*ia, node);
@@ -1268,7 +1268,7 @@ namespace vuk {
 						return ias.at(*ia);
 					}
 				}
-			} else if (type->hash_value == current_module->types.builtin_buffer) {
+			} else if (type->hash_value == get_current_module()->types.builtin_buffer) {
 				auto buf = reinterpret_cast<Buffer*>(value);
 				if (buf->buffer != VK_NULL_HANDLE) {
 					auto [_, succ] = bufs.emplace(*buf, node);
@@ -1276,7 +1276,7 @@ namespace vuk {
 						return bufs.at(*buf);
 					}
 				}
-			} else if (type->hash_value == current_module->types.builtin_swapchain) {
+			} else if (type->hash_value == get_current_module()->types.builtin_swapchain) {
 				auto swp = reinterpret_cast<Swapchain*>(value);
 				auto [_, succ] = swps.emplace();
 				if (!succ) {
@@ -1301,7 +1301,7 @@ namespace vuk {
 						continue;
 					}
 					fail = add_one(node->type[i].get(), node, node->acquire.values[i]);
-					if (fail && node->type[i].get()->hash_value == current_module->types.builtin_buffer &&
+					if (fail && node->type[i].get()->hash_value == get_current_module()->types.builtin_buffer &&
 					    fail.value()->kind == Node::ACQUIRE) { // an acq-acq for buffers, this is allowed
 						fail = {};
 					}
@@ -1344,35 +1344,35 @@ namespace vuk {
 					switch (b->type) {
 					case DescriptorType::eSampledImage:
 						acc = Access::eComputeSampled;
-						base_ty = current_module->types.get_builtin_image();
+						base_ty = get_current_module()->types.get_builtin_image();
 						break;
 					case DescriptorType::eCombinedImageSampler:
 						acc = Access::eComputeSampled;
-						base_ty = current_module->types.get_builtin_sampled_image();
+						base_ty = get_current_module()->types.get_builtin_sampled_image();
 						break;
 					case DescriptorType::eStorageImage:
 						acc = b->non_writable ? Access::eComputeRead : (b->non_readable ? Access::eComputeWrite : Access::eComputeRW);
-						base_ty = current_module->types.get_builtin_image();
+						base_ty = get_current_module()->types.get_builtin_image();
 						break;
 					case DescriptorType::eUniformBuffer:
 					case DescriptorType::eStorageBuffer:
 						acc = b->non_writable ? Access::eComputeRead : (b->non_readable ? Access::eComputeWrite : Access::eComputeRW);
-						base_ty = current_module->types.get_builtin_buffer();
+						base_ty = get_current_module()->types.get_builtin_buffer();
 						break;
 					case DescriptorType::eSampler:
 						acc = Access::eNone;
-						base_ty = current_module->types.get_builtin_sampler();
+						base_ty = get_current_module()->types.get_builtin_sampler();
 						break;
 					default:
 						assert(0);
 					}
 
-					arg_types.push_back(current_module->types.make_imbued_ty(base_ty, acc));
-					ret_types.emplace_back(current_module->types.make_aliased_ty(base_ty, i + 4));
+					arg_types.push_back(get_current_module()->types.make_imbued_ty(base_ty, acc));
+					ret_types.emplace_back(get_current_module()->types.make_aliased_ty(base_ty, i + 4));
 					i++;
 				}
-				auto shader_fn_ty = current_module->types.make_shader_fn_ty(arg_types, ret_types, vuk::DomainFlagBits::eAny, pipeline, pipeline->pipeline_name.c_str());
-				node.call.args[0] = current_module->make_declare_fn(shader_fn_ty);
+				auto shader_fn_ty = get_current_module()->types.make_shader_fn_ty(arg_types, ret_types, vuk::DomainFlagBits::eAny, pipeline, pipeline->pipeline_name.c_str());
+				node.call.args[0] = get_current_module()->make_declare_fn(shader_fn_ty);
 				delete[] node.type.data();
 				node.type = { new std::shared_ptr<Type>[ret_types.size()], ret_types.size() };
 				std::copy(ret_types.begin(), ret_types.end(), node.type.data());
@@ -1617,7 +1617,7 @@ namespace vuk {
 		extnode_work_queue.assign(nodes.begin(), nodes.end());
 
 		std::unordered_set<IRModule*> modules;
-		modules.emplace(current_module.get());
+		modules.emplace(get_current_module().get());
 
 		while (!extnode_work_queue.empty()) {
 			auto enode = extnode_work_queue.back();
@@ -1727,7 +1727,7 @@ namespace vuk {
 
 		// do forced convergence here
 		std::pmr::vector<Node*> new_nodes;
-		NodeContext nc{ current_module.get(), impl->pass_reads, impl->child_chains, new_nodes, allocator, impl->bufs, true };
+		NodeContext nc{ get_current_module().get(), impl->pass_reads, impl->child_chains, new_nodes, allocator, impl->bufs, true };
 		for (auto& [def, lr] : impl->live_ranges) {
 			if (lr.def_link->def.node->kind == Node::SLICE) { // subchains - not important
 				continue;
