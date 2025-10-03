@@ -31,7 +31,7 @@ namespace hash {
 	using fnv1a = fnv1a_tpl<uint32_t>;
 } // namespace hash
 
-inline constexpr uint32_t operator"" _fnv1a(const char* aString, const size_t aStrlen) {
+inline constexpr uint32_t operator""_fnv1a(const char* aString, const size_t aStrlen) {
 	typedef hash::fnv1a_tpl<uint32_t> hash_type;
 	return hash_type::hash(aString, aStrlen, hash_type::default_offset_basis);
 }
