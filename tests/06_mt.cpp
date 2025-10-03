@@ -7,7 +7,7 @@
 
 using namespace vuk;
 
-auto blit_down = make_pass("blit down", [](CommandBuffer& cbuf, VUK_IA(Access::eTransferRead | Access::eTransferWrite) img) {
+static auto blit_down = make_pass("blit down", [](CommandBuffer& cbuf, VUK_IA(Access::eTransferRead | Access::eTransferWrite) img) {
 	ImageBlit region = {};
 	region.srcOffsets[0] = Offset3D{};
 	region.srcOffsets[1] = Offset3D{ 2, 2, 1 };

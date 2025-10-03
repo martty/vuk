@@ -198,7 +198,7 @@ namespace vuk {
 				f(node->fixed_node.args[i]);
 			}
 		} else {
-			for (int i = 0; i < node->variable_node.args.size(); i++) {
+			for (size_t i = 0; i < node->variable_node.args.size(); i++) {
 				f(node->variable_node.args[i]);
 			}
 		}

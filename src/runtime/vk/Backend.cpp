@@ -1405,7 +1405,7 @@ namespace vuk {
 					assert(node->construct.args[0].type()->kind == Type::MEMORY_TY);
 
 					char* arr_mem = static_cast<char*>(sched.arena.ensure_space(elem_ty->size * array_size));
-					for (auto i = 0; i < array_size; i++) {
+					for (size_t i = 0; i < array_size; i++) {
 						auto& elem = node->construct.args[i + 1];
 						assert(Type::stripped(elem.type())->hash_value == elem_ty->hash_value);
 
@@ -1437,7 +1437,7 @@ namespace vuk {
 
 					char* arr_mem = static_cast<char*>(sched.arena.ensure_space(node->type[0]->size));
 					size_t offset = 0;
-					for (auto i = 0; i < node->construct.args.size() - 1; i++) {
+					for (size_t i = 0; i < node->construct.args.size() - 1; i++) {
 						auto sz = node->type[0]->composite.types[i]->size;
 						auto& elem = node->construct.args[i + 1];
 						memcpy(arr_mem + offset, sched.get_value(elem), sz);

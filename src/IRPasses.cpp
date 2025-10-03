@@ -85,16 +85,11 @@ namespace vuk {
 			++it;
 		}
 
-		int outer_loops = 0;
-		int inner_loops = 0;
-		int steps = 0;
 		// compute live set
 		bool change = false;
 		do {
-			outer_loops++;
 			change = false;
 			for (auto it = op_arena.begin(), end = op_arena.end(); it != end; ++it) {
-				inner_loops++;
 				auto orig_node = &*it;
 				if (orig_node->flag != ALIVE) {
 					continue;
@@ -113,7 +108,6 @@ namespace vuk {
 									node->flag = ALIVE;
 									step = true;
 									change = true;
-									steps++;
 									break;
 								}
 							}
@@ -121,14 +115,13 @@ namespace vuk {
 								continue;
 							}
 						} else {
-							for (int i = 0; i < node->variable_node.args.size(); i++) {
+							for (size_t i = 0; i < node->variable_node.args.size(); i++) {
 								auto snode = node->variable_node.args[i].node;
 								if (snode->flag == DEAD) { // turn it ALIVE and start from there
 									node = snode;
 									node->flag = ALIVE;
 									step = true;
 									change = true;
-									steps++;
 									break;
 								}
 							}
@@ -200,7 +193,7 @@ namespace vuk {
 					}
 				}
 			} else {
-				for (int i = 0; i < node->variable_node.args.size(); i++) {
+				for (size_t i = 0; i < node->variable_node.args.size(); i++) {
 					auto arg = node->variable_node.args[i].node;
 					if (arg->flag == 0) {
 						arg->flag = 1;
@@ -250,7 +243,7 @@ namespace vuk {
 					}
 				}
 			} else {
-				for (int i = 0; i < node->variable_node.args.size(); i++) {
+				for (size_t i = 0; i < node->variable_node.args.size(); i++) {
 					auto arg = node->variable_node.args[i].node;
 					if (arg->flag == 0) {
 						arg->flag = 1;
@@ -883,7 +876,7 @@ namespace vuk {
 		// collect chains by looking at links without a prev
 		for (auto& node : nodes) {
 			size_t result_count = node->type.size();
-			for (auto i = 0; i < result_count; i++) {
+			for (size_t i = 0; i < result_count; i++) {
 				auto link = &node->links[i];
 				if (!link->prev) { // head, add to chains
 					chains.push_back(link);
@@ -932,7 +925,7 @@ namespace vuk {
 							bool need_general = false;
 
 							dst_use.layout = ImageLayout::eReadOnlyOptimalKHR;
-							for (int read_idx = 0; read_idx < reads.size(); read_idx++) {
+							for (size_t read_idx = 0; read_idx < reads.size(); read_idx++) {
 								auto& r = reads[read_idx];
 								if (r.node->kind == Node::CALL) {
 									if (r.node->call.args[0].type()->kind == Type::OPAQUE_FN_TY) {
@@ -1467,7 +1460,7 @@ namespace vuk {
 					args.push_back(arg);
 				}
 			} else {
-				for (int i = 0; i < node->variable_node.args.size(); i++) {
+				for (size_t i = 0; i < node->variable_node.args.size(); i++) {
 					auto arg = &(*(Ref**)&node->variable_node.args)[i];
 					args.push_back(arg);
 				}
@@ -1497,7 +1490,7 @@ namespace vuk {
 		impl->naming_index_counter = 0;
 		impl->scheduled.clear();
 		impl->item_list.clear();
-		std::vector<ScheduledItem> initial_set(impl->scheduled_execables.begin(), impl->scheduled_execables.end()); 
+		std::vector<ScheduledItem> initial_set(impl->scheduled_execables.begin(), impl->scheduled_execables.end());
 
 		// these are the items that were determined to run
 		for (auto& i : initial_set) {
@@ -1768,7 +1761,7 @@ namespace vuk {
 		new_nodes.clear();
 
 		VUK_DO_OR_RETURN(impl->collect_chains());
-		
+
 		impl->scheduled_execables.clear();
 
 		for (auto& node : impl->ref_nodes) {

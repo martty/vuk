@@ -63,7 +63,7 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	void DeviceLinearResource::deallocate_semaphores(std::span<const VkSemaphore> src) {} // noop
+	void DeviceLinearResource::deallocate_semaphores([[maybe_unused]] std::span<const VkSemaphore> src) {} // noop
 
 	Result<void, AllocateException> DeviceLinearResource::allocate_fences(std::span<VkFence> dst, SourceLocationAtFrame loc) {
 		VUK_DO_OR_RETURN(upstream->allocate_fences(dst, loc));
@@ -72,7 +72,7 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	void DeviceLinearResource::deallocate_fences(std::span<const VkFence> src) {} // noop
+	void DeviceLinearResource::deallocate_fences([[maybe_unused]] std::span<const VkFence> src) {} // noop
 
 	Result<void, AllocateException> DeviceLinearResource::allocate_command_buffers(std::span<CommandBufferAllocation> dst,
 	                                                                               std::span<const CommandBufferAllocationCreateInfo> cis,
@@ -83,7 +83,7 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	void DeviceLinearResource::deallocate_command_buffers(std::span<const CommandBufferAllocation> src) {} // no-op, deallocated with pools
+	void DeviceLinearResource::deallocate_command_buffers([[maybe_unused]] std::span<const CommandBufferAllocation> src) {} // no-op, deallocated with pools
 
 	Result<void, AllocateException>
 	DeviceLinearResource::allocate_command_pools(std::span<CommandPool> dst, std::span<const VkCommandPoolCreateInfo> cis, SourceLocationAtFrame loc) {
@@ -93,7 +93,7 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	void DeviceLinearResource::deallocate_command_pools(std::span<const CommandPool> dst) {} // no-op
+	void DeviceLinearResource::deallocate_command_pools([[maybe_unused]] std::span<const CommandPool> dst) {} // no-op
 
 	Result<void, AllocateException>
 	DeviceLinearResource::allocate_buffers(std::span<Buffer> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) {
@@ -121,7 +121,7 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	void DeviceLinearResource::deallocate_buffers(std::span<const Buffer> src) {} // no-op, linear
+	void DeviceLinearResource::deallocate_buffers([[maybe_unused]] std::span<const Buffer> src) {} // no-op, linear
 
 	Result<void, AllocateException>
 	DeviceLinearResource::allocate_framebuffers(std::span<VkFramebuffer> dst, std::span<const FramebufferCreateInfo> cis, SourceLocationAtFrame loc) {
@@ -131,7 +131,7 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	void DeviceLinearResource::deallocate_framebuffers(std::span<const VkFramebuffer> src) {} // noop
+	void DeviceLinearResource::deallocate_framebuffers([[maybe_unused]] std::span<const VkFramebuffer> src) {} // noop
 
 	Result<void, AllocateException> DeviceLinearResource::allocate_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc) {
 		VUK_DO_OR_RETURN(upstream->allocate_images(dst, cis, loc));
@@ -140,7 +140,7 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	void DeviceLinearResource::deallocate_images(std::span<const Image> src) {} // noop
+	void DeviceLinearResource::deallocate_images([[maybe_unused]] std::span<const Image> src) {} // noop
 
 	Result<void, AllocateException>
 	DeviceLinearResource::allocate_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc) {
@@ -150,7 +150,7 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	void DeviceLinearResource::deallocate_image_views(std::span<const ImageView> src) {} // noop
+	void DeviceLinearResource::deallocate_image_views([[maybe_unused]] std::span<const ImageView> src) {} // noop
 
 	Result<void, AllocateException> DeviceLinearResource::allocate_persistent_descriptor_sets(std::span<PersistentDescriptorSet> dst,
 	                                                                                          std::span<const PersistentDescriptorSetCreateInfo> cis,
@@ -161,7 +161,7 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	void DeviceLinearResource::deallocate_persistent_descriptor_sets(std::span<const PersistentDescriptorSet> src) {} // noop
+	void DeviceLinearResource::deallocate_persistent_descriptor_sets([[maybe_unused]] std::span<const PersistentDescriptorSet> src) {} // noop
 
 	Result<void, AllocateException>
 	DeviceLinearResource::allocate_descriptor_sets_with_value(std::span<DescriptorSet> dst, std::span<const SetBinding> cis, SourceLocationAtFrame loc) {
@@ -171,7 +171,7 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	void DeviceLinearResource::deallocate_descriptor_sets(std::span<const DescriptorSet> src) {} // noop
+	void DeviceLinearResource::deallocate_descriptor_sets([[maybe_unused]] std::span<const DescriptorSet> src) {} // noop
 
 	Result<void, AllocateException>
 	DeviceLinearResource::allocate_descriptor_sets(std::span<DescriptorSet> dst, std::span<const DescriptorSetLayoutAllocInfo> cis, SourceLocationAtFrame loc) {
@@ -231,7 +231,7 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	void DeviceLinearResource::deallocate_timestamp_query_pools(std::span<const TimestampQueryPool> src) {} // noop
+	void DeviceLinearResource::deallocate_timestamp_query_pools([[maybe_unused]] std::span<const TimestampQueryPool> src) {} // noop
 
 	Result<void, AllocateException>
 	DeviceLinearResource::allocate_timestamp_queries(std::span<TimestampQuery> dst, std::span<const TimestampQueryCreateInfo> cis, SourceLocationAtFrame loc) {
@@ -269,7 +269,7 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	void DeviceLinearResource::deallocate_timestamp_queries(std::span<const TimestampQuery> src) {} // noop
+	void DeviceLinearResource::deallocate_timestamp_queries([[maybe_unused]] std::span<const TimestampQuery> src) {} // noop
 
 	void DeviceLinearResource::wait_sync_points(std::span<const SyncPoint> src) {
 		auto& vec = impl->syncpoints;
@@ -279,7 +279,7 @@ namespace vuk {
 	void DeviceLinearResource::wait() {
 		if (impl->fences.size() > 0) {
 			if (impl->fences.size() > 64) {
-				int i = 0;
+				size_t i = 0;
 				for (; i < impl->fences.size() - 64; i += 64) {
 					impl->ctx->vkWaitForFences(impl->device, 64, impl->fences.data() + i, true, UINT64_MAX);
 				}

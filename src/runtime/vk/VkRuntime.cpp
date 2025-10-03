@@ -381,7 +381,7 @@ namespace vuk {
 		// accumulate descriptors from all stages
 		Program accumulated_reflection;
 		std::string pipe_name = "Pipeline:";
-		for (auto i = 0; i < cinfo.shaders.size(); i++) {
+		for (size_t i = 0; i < cinfo.shaders.size(); i++) {
 			auto& source = cinfo.shaders[i];
 			if (source.data_ptr == nullptr) {
 				continue;
@@ -758,7 +758,6 @@ namespace vuk {
 		auto& [executor, v] = sp;
 		assert(executor->type == Executor::Type::eVulkanDeviceQueue);
 		auto vkq = static_cast<QueueExecutor*>(executor);
-		auto idx = vkq->get_queue_family_index();
 		auto val = vkq->get_sync_value();
 		if (!val) {
 			return val;
@@ -784,7 +783,7 @@ namespace vuk {
 	    surface(surface) {
 		semaphores.resize(image_count);
 		allocator.allocate_semaphores(std::span(semaphores));
-		for (auto i = 0; i < images.size(); i++) {
+		for (size_t i = 0; i < images.size(); i++) {
 			ImageAttachment ia;
 			ia.extent = { extent.width, extent.height, 1 };
 			ia.format = (Format)format;

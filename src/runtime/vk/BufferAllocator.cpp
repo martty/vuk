@@ -45,7 +45,7 @@ namespace vuk {
 			if (!result) {
 				return result;
 			}
-			for (auto i = 0; i < num_blocks; i++) {
+			for (size_t i = 0; i < num_blocks; i++) {
 				used_allocations[used_allocation_count + i] = { alloc, i > 0 ? 0 : num_blocks, 0 };
 			}
 			current_buffer += (int)num_blocks;
@@ -55,7 +55,7 @@ namespace vuk {
 			available_allocation_count--;
 
 			auto& alloc = used_allocations[used_allocation_count];
-			for (auto i = 1; i < alloc.num_blocks; i++) {
+			for (size_t i = 1; i < alloc.num_blocks; i++) {
 				// create 1 entry per block in used_allocations
 				used_allocations[used_allocation_count + i] = { alloc.buffer, 0, 0 };
 			}
@@ -63,7 +63,7 @@ namespace vuk {
 			actual_blocks = used_allocations[used_allocation_count].num_blocks;
 		}
 		used_allocations[0].base_address = 0;
-		for (auto i = 0; i < actual_blocks; i++) {
+		for (size_t i = 0; i < actual_blocks; i++) {
 			if (used_allocation_count + i == 0) {
 				continue;
 			}
