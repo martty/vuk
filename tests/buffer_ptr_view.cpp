@@ -295,7 +295,7 @@ void main() {
 }*/
 /*
 TEST_CASE("allocate view in IR") {
-  auto buf0 = vuk::declare_buf<float>("jacob", { .memory_usage = MemoryUsage::eCPUonly, .size = 16 });
+  auto buf0 = vuk::allocate<float>("jacob", { .memory_usage = MemoryUsage::eCPUonly, .size = 16 });
 
   clear(buf0, 0.f);
 

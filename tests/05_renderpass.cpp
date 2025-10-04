@@ -74,81 +74,81 @@ TEST_CASE("renderpass framebuffer inference") {
 TEST_CASE("buffer size inference") {
 	auto data = { 1u, 2u, 3u };
 	auto [b0, buf0] = create_buffer(*test_context.allocator, MemoryUsage::eGPUonly, DomainFlagBits::eAny, std::span(data));
-	auto buf1 = declare_buf("b1");
-	buf1->memory_usage = MemoryUsage::eGPUonly;
+	auto buf1 = allocate("b1");
 	buf1.same_size(buf0);
-	auto buf2 = declare_buf("b2");
-	buf2->memory_usage = MemoryUsage::eGPUonly;
+	auto buf2 = allocate("b2");
 	buf2.same_size(buf1);
-	auto buf3 = declare_buf("b3");
+	auto buf3 = allocate<uint32_t>("b3");
 	buf3.same_size(buf2);
-	buf3->memory_usage = MemoryUsage::eGPUonly;
 
 	auto res = download_buffer(copy(std::move(buf0), std::move(buf3))).get(*test_context.allocator, test_context.compiler);
-	CHECK(std::span((uint32_t*)res->mapped_ptr, 3) == std::span(data));
+	CHECK(res->to_span<uint32_t>() == std::span(data));
 }
 
 TEST_CASE("buffer size with inference with math") {
 	auto data = { 1u, 2u, 3u };
 	auto [b0, buf0] = create_buffer(*test_context.allocator, MemoryUsage::eGPUonly, DomainFlagBits::eAny, std::span(data));
-	auto buf1 = declare_buf("b1");
-	buf1->memory_usage = MemoryUsage::eGPUonly;
+	auto buf1 = allocate("b1");
+	buf1.set_memory_usage(MemoryUsage::eGPUonly);
 	buf1.same_size(buf0);
-	auto buf2 = declare_buf("b2");
-	buf2->memory_usage = MemoryUsage::eGPUonly;
+	auto buf2 = allocate("b2");
+	buf2.set_memory_usage(MemoryUsage::eGPUonly);
 	buf2.same_size(buf1);
-	auto buf3 = declare_buf("b3");
-	buf3.set_size(buf2.get_size() * 2);
-	buf3->memory_usage = MemoryUsage::eGPUonly;
+	auto buf3 = allocate("b3");
+	buf3.set_memory_usage(MemoryUsage::eGPUonly);
+	buf3.set_size(buf2.size() * 2);
+	buf3.set_memory_usage(MemoryUsage::eGPUonly);
 
 	auto data2 = { 1u, 2u, 3u, 4u, 5u, 6u };
 	auto [b4, buf4] = create_buffer(*test_context.allocator, MemoryUsage::eGPUonly, DomainFlagBits::eAny, std::span(data2));
 
-	auto res = download_buffer(copy(std::move(buf4), std::move(buf3))).get(*test_context.allocator, test_context.compiler);
-	CHECK(std::span((uint32_t*)res->mapped_ptr, 3) == std::span(data));
+	auto res = download_buffer(copy(std::move(buf4), std::move(buf3.cast<uint32_t>()))).get(*test_context.allocator, test_context.compiler);
+	CHECK(res->to_span() == std::span(data));
 }
 
 TEST_CASE("extract-convergence use") {
 	auto data = { 1u, 2u, 3u };
 	auto [b0, buf0] = create_buffer(*test_context.allocator, MemoryUsage::eGPUonly, DomainFlagBits::eAny, std::span(data));
-	auto buf1 = declare_buf("b1");
-	buf1->memory_usage = MemoryUsage::eGPUonly;
+	auto buf1 = allocate("b1");
+	buf1.set_memory_usage(MemoryUsage::eGPUonly);
 	buf1.same_size(buf0);
-	auto buf2 = declare_buf("b2");
-	buf2->memory_usage = MemoryUsage::eGPUonly;
-	auto size = buf2.get_size();
+	auto buf2 = allocate("b2");
+	buf2.set_memory_usage(MemoryUsage::eGPUonly);
+	auto size = buf2.size();
 	buf2.same_size(buf1);
-	auto buf3 = declare_buf("b3");
+	auto buf3 = allocate("b3");
 	copy(buf2, buf1);
 	buf3.set_size(size * 2);
-	buf3->memory_usage = MemoryUsage::eGPUonly;
+	buf3.set_memory_usage(MemoryUsage::eGPUonly);
 
 	auto data2 = { 1u, 2u, 3u, 4u, 5u, 6u };
 	auto [b4, buf4] = create_buffer(*test_context.allocator, MemoryUsage::eGPUonly, DomainFlagBits::eAny, std::span(data2));
 
-	auto res = download_buffer(copy(std::move(buf4), std::move(buf3))).get(*test_context.allocator, test_context.compiler);
-	CHECK(std::span((uint32_t*)res->mapped_ptr, 3) == std::span(data));
+	auto res = download_buffer(copy(std::move(buf4), std::move(buf3.cast<uint32_t>()))).get(*test_context.allocator, test_context.compiler);
+	CHECK(res->to_span() == std::span(data));
 }
 
-auto use_all = make_pass("use 3", [](CommandBuffer& cbuf, VUK_BA(Access::eTransferWrite), VUK_BA(Access::eTransferWrite), VUK_BA(Access::eTransferWrite)) {});
+auto use_all =
+    make_pass("use 3",
+              [](CommandBuffer& cbuf, vuk::Arg<Buffer<uint32_t>, Access::eTransferWrite>, VUK_BA(Access::eTransferWrite), VUK_BA(Access::eTransferWrite)) {});
 
 TEST_CASE("extract-extract") {
 	auto data = { 1u, 2u, 3u };
 	auto [b0, buf0] = create_buffer(*test_context.allocator, MemoryUsage::eGPUonly, DomainFlagBits::eAny, std::span(data));
-	auto buf1 = declare_buf("b1");
-	buf1->memory_usage = MemoryUsage::eGPUonly;
+	auto buf1 = allocate("b1");
+	buf1.set_memory_usage(MemoryUsage::eGPUonly);
 	auto sz = buf0->sz_bytes;
 	buf1.set_size(sz);
-	auto buf2 = declare_buf("b2");
-	buf2->memory_usage = MemoryUsage::eGPUonly;
-	buf2.set_size(buf0.get_size());
+	auto buf2 = allocate("b2");
+	buf2.set_memory_usage(MemoryUsage::eGPUonly);
+	buf2.set_size(buf0.size());
 
 	auto data2 = { 1u, 2u, 3u };
 	auto [b4, buf4] = create_buffer(*test_context.allocator, MemoryUsage::eGPUonly, DomainFlagBits::eAny, std::span(data2));
 
 	use_all(buf0, buf1, buf2);
-	auto res = download_buffer(copy(std::move(buf4), std::move(buf2))).get(*test_context.allocator, test_context.compiler);
-	CHECK(std::span((uint32_t*)res->mapped_ptr, 3) == std::span(data));
+	auto res = download_buffer(copy(std::move(buf4), std::move(buf2.cast<uint32_t>()))).get(*test_context.allocator, test_context.compiler);
+	CHECK(res->to_span() == std::span(data));
 }
 
 TEST_CASE("lift compute") {
@@ -365,9 +365,9 @@ void main() {
 }
 )",
 	              "<>");
-	auto pass = make_pass("IR shader", [](CommandBuffer& cbuf, PipelineBaseInfo* pipe, VUK_BA(Access::eComputeRW) buf) {
+	auto pass = make_pass("IR shader", [](CommandBuffer& cbuf, PipelineBaseInfo* pipe, Arg<Buffer<uint32_t>, Access::eComputeRW> buf) {
 		cbuf.bind_compute_pipeline(pipe);
-		cbuf.bind_buffer(0, 0, buf);
+		cbuf.bind_buffer(0, 0, buf->to_byte_view());
 		cbuf.dispatch(3, 1, 1);
 	});
 	auto shader = compile_pipeline(pbci);
