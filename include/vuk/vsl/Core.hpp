@@ -24,14 +24,14 @@ namespace vuk {
 			return { acquire("_dst", dst, Access::eNone, VUK_CALL) };
 		}
 
-		auto src = *allocate_memory<T>(allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, 1 });
-		::memcpy(&*src.get(), src_data, size);
+		auto src = *allocate_buffer(allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, 1 });
+		::memcpy(&src[0], src_data, size);
 
-		auto src_buf = acquire("_src", Buffer<T>{ src.get(), size }, Access::eNone, VUK_CALL);
+		auto src_buf = acquire("_src", src.get(), Access::eNone, VUK_CALL);
 		auto dst_buf = discard("_dst", dst, VUK_CALL);
 		auto pass = make_pass("upload buffer",
-		                      [](CommandBuffer& command_buffer, VUK_ARG(Buffer<T>, Access::eTransferRead) src, VUK_ARG(Buffer<T>, Access::eTransferWrite) dst) {
-			                      command_buffer.copy_buffer(src->to_byte_view(), dst->to_byte_view());
+		                      [](CommandBuffer& command_buffer, VUK_ARG(Buffer<>, Access::eTransferRead) src, VUK_ARG(Buffer<T>, Access::eTransferWrite) dst) {
+			                      command_buffer.copy_buffer(src, dst->to_byte_view());
 			                      return dst;
 		                      });
 		return pass(std::move(src_buf), std::move(dst_buf), VUK_CALL);
@@ -61,7 +61,7 @@ namespace vuk {
 	/// @param buffer_src Buffer to download
 	template<class T>
 	inline Value<Buffer<T>> download_buffer(Value<Buffer<T>> buffer_src, VUK_CALLSTACK) {
-		auto dst = declare_buf<T>("dst", { .memory_usage = MemoryUsage::eGPUtoCPU }, VUK_CALL);
+		auto dst = allocate<T>("dst", BufferCreateInfo{ .memory_usage = MemoryUsage::eGPUtoCPU }, VUK_CALL);
 		dst.same_size(buffer_src);
 		auto download = make_pass("download buffer",
 		                          [](CommandBuffer& command_buffer, VUK_ARG(Buffer<T>, Access::eTransferRead) src, VUK_ARG(Buffer<T>, Access::eTransferWrite) dst) {
@@ -115,7 +115,7 @@ namespace vuk {
 		BufferCreateInfo bci{ memory_usage, sizeof(T) * data.size(), alignment };
 		ptr_base ptr_;
 		auto ret = allocator.allocate_memory(std::span{ &ptr_, 1 }, std::span{ &bci, 1 }); // TODO: dropping error
-		buf->ptr = static_cast<ptr<std::remove_const_t<T>>&>(ptr_);
+		buf->ptr = static_cast<ptr<BufferLike<std::remove_const_t<T>>>&>(ptr_);
 		buf->sz_bytes = data.size_bytes();
 		return { std::move(buf), host_data_to_buffer(allocator, domain, buf.get(), data, VUK_CALL) };
 	}
@@ -215,7 +215,7 @@ namespace vuk {
 	inline Value<Buffer<T>> copy(Value<Buffer<T>> src, Value<Buffer<T>> dst, VUK_CALLSTACK) {
 		auto buf2buf = vuk::make_pass("copy buffer to buffer",
 		                              [](vuk::CommandBuffer& command_buffer, VUK_ARG(Buffer<T>, vuk::eCopyRead) src, VUK_ARG(Buffer<T>, vuk::eCopyWrite) dst) {
-			                              command_buffer.copy_buffer(src, dst);
+			                              command_buffer.copy_buffer(src->to_byte_view(), dst->to_byte_view());
 			                              return dst;
 		                              });
 		return buf2buf(src, dst, VUK_CALL);
@@ -228,7 +228,7 @@ namespace vuk {
 		memcpy(&value_as_uint, &value, sizeof(T));
 		auto buf2buf = vuk::make_pass(
 		    "fill buffer", [value_as_uint](vuk::CommandBuffer& command_buffer, VUK_BA(vuk::eClear) dst) { command_buffer.fill_buffer(dst, value_as_uint); });
-		buf2buf(dst, VUK_CALL);
+		buf2buf(dst.cast<byte>(), VUK_CALL);
 	}
 
 	template<class T>

@@ -154,7 +154,7 @@ TEST_CASE("buffers in same allocation") {
 	auto bufb = buf->subview(2 * sizeof(uint32_t), 2 * sizeof(uint32_t));
 	auto fut_a = discard("a", bufa);
 	auto fut_b = discard("b", bufb);
-	fill(fut_a, 5u);
+	fill(fut_a.cast<uint32_t>(), 5u);
 	copy(fut_a, fut_b);
 	auto res = download_buffer(fut_b).get(*test_context.allocator, test_context.compiler);
 	CHECK(res->to_span<uint32_t>() == std::span(data));

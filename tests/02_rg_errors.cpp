@@ -17,11 +17,11 @@ using namespace vuk;
 TEST_CASE("error: can't construct incomplete") {
 	auto data = { 1u, 2u, 3u };
 	auto [b0, buf0] = create_buffer(*test_context.allocator, MemoryUsage::eGPUonly, DomainFlagBits::eAny, std::span(data));
-	auto buf1 = declare_buf<uint32_t>("b1", { .memory_usage = MemoryUsage::eGPUonly });
+	auto buf1 = allocate<uint32_t>("b1", BufferCreateInfo{ .memory_usage = MemoryUsage::eGPUonly });
 	buf1.same_size(buf0);
-	auto buf2 = declare_buf<uint32_t>("b2", { .memory_usage = MemoryUsage::eGPUonly });
+	auto buf2 = allocate<uint32_t>("b2", BufferCreateInfo{ .memory_usage = MemoryUsage::eGPUonly });
 	buf2.same_size(buf1);
-	auto buf3 = declare_buf<uint32_t>("b3", { .memory_usage = MemoryUsage::eGPUonly });
+	auto buf3 = allocate<uint32_t>("b3", BufferCreateInfo{ .memory_usage = MemoryUsage::eGPUonly });
 
 	auto copy =
 	    make_pass("cpy", [](CommandBuffer& cbuf, VUK_ARG(Buffer<uint32_t>, Access::eTransferWrite) src, VUK_ARG(Buffer<uint32_t>, Access::eTransferWrite) dst) {

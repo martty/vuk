@@ -135,7 +135,7 @@ namespace {
 		          },
 		          vuk::DomainFlagBits::eTransferQueue);
 
-		      auto scramble_temp = vuk::declare_buf("scramble temporary");
+		      auto scramble_temp = vuk::allocate("scramble temporary");
 		      scramble_temp->memory_usage = vuk::MemoryUsage::eGPUonly;
 		      scramble_temp.same_size(scramble_buf_fut);
 		      auto sorted = sort_pass(scramble_buf_fut);

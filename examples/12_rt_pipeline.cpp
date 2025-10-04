@@ -279,7 +279,7 @@ namespace {
 			          return tlas_buf;
 		          });
 
-		      auto tlas_buf = vuk::declare_buf("tlas_buf", *tlas_buf_alloc);
+		      auto tlas_buf = vuk::allocate("tlas_buf", *tlas_buf_alloc);
 		      auto updated_tlas = update_tlas(std::move(tlas_buf));
 		      // We use a eR8G8B8A8Unorm, as the swapchain is in sRGB which does not support storage use
 		      auto rt_target = vuk::declare_ia(

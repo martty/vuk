@@ -197,7 +197,7 @@ int main(int argc, char** argv) {
 	};
 
 	auto particles_buf = allocate_buffer(*superframe_allocator, { .memory_usage = MemoryUsage::eGPUonly, .size = sizeof(Particle) * particle_count });
-	auto particles = clear_buffer(declare_buf("particles", **particles_buf));
+	auto particles = clear_buffer(allocate("particles", **particles_buf));
 	particles.wait(*superframe_allocator, compiler, {});
 
 	// our main loop
@@ -296,7 +296,7 @@ int main(int argc, char** argv) {
 		auto sim_step = sim(particles);
 		sim_step.wait(frame_allocator, compiler, {});
 		wait_for_values_explicit(frame_allocator, compiler, futs);
-		particles = declare_buf("particles", **particles_buf);
+		particles = allocate("particles", **particles_buf);
 	}
 
 	runtime->wait_idle();

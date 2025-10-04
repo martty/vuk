@@ -66,18 +66,18 @@ namespace vuk {
 	};
 
 	template<class T>
-	struct erased_tuple_adaptor;
+	class Value;
 
 	/// @brief Represents a GPU resource that will be available after some work completes
 	/// @tparam T Type of the resource (Buffer, ImageAttachment, etc.)
 	template<class T>
-	class Value : public UntypedValue {
+	class ValueBase : public UntypedValue {
 	public:
 		using UntypedValue::UntypedValue;
 
 		/// @brief Create a Value from a unsynchronized type (eg. int)
 		template<class U = T>
-		Value(U s)
+		ValueBase(U s)
 		  requires(Unsynchronized<U> && std::is_convertible_v<U, T>)
 		{
 			Ref ref = current_module->make_constant(to_IR_type<U>(), &s);
@@ -146,6 +146,16 @@ namespace vuk {
 			return *reinterpret_cast<Value<U>*>(this); // TODO: not cool
 		}
 
+		void set_with_extract(Ref construct, Ref src_composite, uint64_t index) {
+			current_module->set_value(construct, index, current_module->make_extract(src_composite, index));
+		}
+	};
+
+	template<class T>
+	class Value : public ValueBase<T> {
+	public:
+		using ValueBase<T>::ValueBase;
+
 		// Image inferences
 
 		/// @brief Infer extent (width, height, depth) from another image
@@ -153,10 +163,10 @@ namespace vuk {
 		void same_extent_as(const Value<ImageAttachment>& src)
 		  requires std::is_same_v<T, ImageAttachment>
 		{
-			node->deps.push_back(src.node);
-			set_with_extract(get_head(), src.get_head(), 0);
-			set_with_extract(get_head(), src.get_head(), 1);
-			set_with_extract(get_head(), src.get_head(), 2);
+			this->node->deps.push_back(src.node);
+			this->set_with_extract(this->get_head(), src.get_head(), 0);
+			this->set_with_extract(this->get_head(), src.get_head(), 1);
+			this->set_with_extract(this->get_head(), src.get_head(), 2);
 		}
 
 		/// @brief Infer 2D extent (width, height) from another image
@@ -164,9 +174,9 @@ namespace vuk {
 		void same_2D_extent_as(const Value<ImageAttachment>& src)
 		  requires std::is_same_v<T, ImageAttachment>
 		{
-			node->deps.push_back(src.node);
-			set_with_extract(get_head(), src.get_head(), 0);
-			set_with_extract(get_head(), src.get_head(), 1);
+			this->node->deps.push_back(src.node);
+			this->set_with_extract(this->get_head(), src.get_head(), 0);
+			this->set_with_extract(this->get_head(), src.get_head(), 1);
 		}
 
 		/// @brief Infer format from another image
@@ -174,8 +184,8 @@ namespace vuk {
 		void same_format_as(const Value<ImageAttachment>& src)
 		  requires std::is_same_v<T, ImageAttachment>
 		{
-			node->deps.push_back(src.node);
-			set_with_extract(get_head(), src.get_head(), 3);
+			this->node->deps.push_back(src.node);
+			this->set_with_extract(this->get_head(), src.get_head(), 3);
 		}
 
 		/// @brief Infer shape (extent, layers, mip levels) from another image
@@ -186,7 +196,7 @@ namespace vuk {
 			same_extent_as(src);
 
 			for (auto i = 6; i < 10; i++) { /* 6 - 9 : layers, levels */
-				set_with_extract(get_head(), src.get_head(), i - 1);
+				this->set_with_extract(this->get_head(), src.get_head(), i - 1);
 			}
 		}
 
@@ -197,31 +207,7 @@ namespace vuk {
 		{
 			same_shape_as(src);
 			same_format_as(src);
-			set_with_extract(get_head(), src.get_head(), 4);
-		}
-
-		// Buffer inferences
-		// TODO: PAV: operate on Ts, not bytes
-
-		/// @brief Create a subrange view of this buffer
-		/// @param new_offset Offset in bytes from the start of the buffer
-		/// @param new_size Size of the subrange in bytes
-		/// @return Value representing the buffer subrange
-		Value<T> subrange(uint64_t new_offset, uint64_t new_size)
-		  requires is_bufferlike_view<T>
-		{
-			Ref item =
-			    current_module->make_slice(get_head(), 0, current_module->make_constant<uint64_t>(new_offset), current_module->make_constant<uint64_t>(new_size));
-			return Value(ExtRef(std::make_shared<ExtNode>(item.node, node), item));
-		}
-
-		/// @brief Infer buffer size from another buffer
-		/// @param src Source buffer to copy size from
-		void same_size(const Value<T>& src)
-		  requires is_bufferlike_view<T>
-		{
-			node->deps.push_back(src.node);
-			set_with_extract(get_head(), src.get_head(), 0);
+			this->set_with_extract(this->get_head(), src.get_head(), 4);
 		}
 
 		/// @brief Array subscript operator for array-typed Values
@@ -230,9 +216,9 @@ namespace vuk {
 		auto operator[](size_t index)
 		  requires std::is_array_v<T>
 		{
-			assert(Type::stripped(get_head().type())->kind == Type::ARRAY_TY);
-			Ref item = current_module->make_extract(get_head(), current_module->make_constant(index));
-			return Value<std::remove_reference_t<decltype(std::declval<T>()[0])>>(ExtRef(std::make_shared<ExtNode>(item.node, node), item));
+			assert(Type::stripped(this->get_head().type())->kind == Type::ARRAY_TY);
+			Ref item = current_module->make_extract(this->get_head(), current_module->make_constant(index));
+			return Value<std::remove_reference_t<decltype(std::declval<T>()[0])>>(ExtRef(std::make_shared<ExtNode>(item.node, this->node), item));
 		}
 
 		/// @brief Get a specific mip level of this image
@@ -242,8 +228,8 @@ namespace vuk {
 		  requires std::is_same_v<T, ImageAttachment>
 		{
 			Ref item = current_module->make_slice(
-			    get_head(), Node::NamedAxis::MIP, current_module->make_constant<uint64_t>(mip), current_module->make_constant<uint64_t>(1u));
-			return Value(ExtRef(std::make_shared<ExtNode>(item.node, node), item));
+			    this->get_head(), Node::NamedAxis::MIP, current_module->make_constant<uint64_t>(mip), current_module->make_constant<uint64_t>(1u));
+			return Value(ExtRef(std::make_shared<ExtNode>(item.node, this->node), item));
 		}
 
 		/// @brief Get a specific array layer of this image
@@ -253,12 +239,8 @@ namespace vuk {
 		  requires std::is_same_v<T, ImageAttachment>
 		{
 			Ref item = current_module->make_slice(
-			    get_head(), Node::NamedAxis::LAYER, current_module->make_constant<uint64_t>(layer), current_module->make_constant<uint64_t>(1u));
-			return Value(ExtRef(std::make_shared<ExtNode>(item.node, node), item));
-		}
-
-		void set_with_extract(Ref construct, Ref src_composite, uint64_t index) {
-			current_module->set_value(construct, index, current_module->make_extract(src_composite, index));
+			    this->get_head(), Node::NamedAxis::LAYER, current_module->make_constant<uint64_t>(layer), current_module->make_constant<uint64_t>(1u));
+			return Value(ExtRef(std::make_shared<ExtNode>(item.node, this->node), item));
 		}
 	};
 
@@ -267,6 +249,88 @@ namespace vuk {
 
 	template<class T = void>
 	using val_ptr = Value<ptr<T>>;
+
+	template<class Type>
+	struct Value<view<BufferLike<Type>, dynamic_extent>> : ValueBase<view<BufferLike<Type>, dynamic_extent>> {
+		Value<ptr<BufferLike<Type>>> ptr;
+		Value<size_t> sz_bytes;
+
+		using ValueBase<view<BufferLike<Type>, dynamic_extent>>::ValueBase;
+
+		Value<view<BufferLike<Type>, dynamic_extent>>(Value<vuk::ptr<BufferLike<Type>>> ptr, Value<size_t> count)
+		  requires(!std::is_array_v<Type>)
+		    : ptr(ptr), sz_bytes(count * sizeof(Type)) {}
+
+		auto& operator[](Value<size_t> index)
+		  requires(!std::is_same_v<Type, void>)
+		{
+			// assert(index < (sz_bytes / sizeof(Type)));
+			// TODO: IR assert
+			return ptr[index];
+		}
+
+		const auto& operator[](Value<size_t> index) const
+		  requires(!std::is_same_v<Type, void>)
+		{
+			// assert(index < (sz_bytes / sizeof(Type)));
+			return ptr[index];
+		}
+
+		explicit operator Value<bool>() const noexcept {
+			return !!ptr;
+		}
+
+		[[nodiscard]] Value<vuk::ptr<BufferLike<Type>>> data() noexcept {
+			return ptr;
+		}
+
+		[[nodiscard]] Value<size_t> size_bytes() const noexcept {
+			return sz_bytes;
+		}
+
+		[[nodiscard]] Value<size_t> size() const noexcept {
+			return sz_bytes / sizeof(Type);
+		}
+
+		template<class new_T>
+		[[nodiscard]] Value<view<BufferLike<new_T>>> cast() noexcept {
+			return { ptr.template transmute<vuk::ptr<BufferLike<new_T>>>(this->get_head()), sz_bytes };
+		}
+
+		[[nodiscard]] view<BufferLike<byte>> to_byte_view() const noexcept {
+			return cast<byte>();
+		}
+
+		// TODO: PAV: operate on Ts, not bytes
+		/// @brief Create a new view that is a subset of the original
+		[[nodiscard]] Value<view<BufferLike<Type>>> subview(Value<uint64_t> offset, Value<uint64_t> new_count = ~(0ULL)) const {
+			// TODO: IR assert
+			// 	assert(offset + new_count <= count());
+			Ref item = current_module->make_slice(this->get_head(), 0, offset.get_head(), new_count.get_head());
+			return Value(ExtRef(std::make_shared<ExtNode>(item.node, this->node), item));
+		}
+
+		template<class U = Type>
+		void same_size(const Value<view<BufferLike<U>>>& src) {
+			this->node->deps.push_back(src.node);
+			this->set_with_extract(this->get_head(), src.get_head(), 1);
+		}
+
+		void set_memory_usage(MemoryUsage mu) {
+			// TODO: this needs to be a bit more tricky
+			current_module->set_value(this->get_head(), 0, mu);
+		}
+
+		void set_size(Value<uint64_t> size) {
+			// TODO: this needs to be a bit more tricky
+			current_module->set_value(this->get_head(), 1, size.get_head());
+		}
+
+		void set_alignment(Value<uint64_t> alignment) {
+			// TODO: this needs to be a bit more tricky
+			current_module->set_value(this->get_head(), 2, alignment.get_head());
+		}
+	};
 
 	template<class T = void>
 	using val_view = Value<view<T>>;
