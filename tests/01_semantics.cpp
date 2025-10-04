@@ -33,7 +33,7 @@ auto make_binary_computation(std::string name, std::string& trace) {
 
 TEST_CASE("conversion to SSA") {
 	std::string trace = "";
-	[[maybe_unused]] auto& oa = get_current_module();
+	[[maybe_unused]] auto& oa = current_module;
 
 	auto decl = declare_buf("_a", { .size = sizeof(uint32_t) * 4, .memory_usage = MemoryUsage::eGPUonly });
 	make_unary_void("a", trace)(decl);
@@ -46,10 +46,10 @@ TEST_CASE("conversion to SSA") {
 }
 
 TEST_CASE("minimal graph is submitted") {
-	[[maybe_unused]] auto& oa = get_current_module();
+	[[maybe_unused]] auto& oa = current_module;
 
 	for (int i = 0; i < 32; i++) {
-		fmt::println("{}\n", get_current_module()->op_arena.size());
+		fmt::println("{}\n", current_module->op_arena.size());
 		std::string trace = "";
 
 		auto a = make_unary_computation("a", trace)(declare_buf("_a", { .size = sizeof(uint32_t) * 4, .memory_usage = MemoryUsage::eGPUonly }));
@@ -66,8 +66,8 @@ TEST_CASE("minimal graph is submitted") {
 
 TEST_CASE("graph is cleaned up after submit") {
 	std::string trace = "";
-	[[maybe_unused]] auto& oa = get_current_module()->op_arena;
-	CHECK(get_current_module()->op_arena.size() == 0);
+	[[maybe_unused]] auto& oa = current_module->op_arena;
+	CHECK(current_module->op_arena.size() == 0);
 
 	auto a = make_unary_computation("a", trace)(declare_buf("_a", { .size = sizeof(uint32_t) * 4, .memory_usage = MemoryUsage::eGPUonly }));
 	// auto b = make_unary_computation("b", trace)(declare_buf("_b", { .size = sizeof(uint32_t) * 4, .memory_usage = MemoryUsage::eGPUonly }));
@@ -76,12 +76,12 @@ TEST_CASE("graph is cleaned up after submit") {
 	auto e = make_unary_computation("e", trace)(a); // e->a
 	e.submit(*test_context.allocator, test_context.compiler);
 
-	get_current_module()->collect_garbage();
-	for (auto& op : get_current_module()->op_arena) {
+	current_module->collect_garbage();
+	for (auto& op : current_module->op_arena) {
 		fmt::println("{}, held: {}", Node::kind_to_sv(op.kind), op.held);
 	}
 #ifndef VUK_GARBAGE_SAN
-	CHECK(get_current_module()->op_arena.size() == 2);
+	CHECK(current_module->op_arena.size() == 2);
 #endif
 }
 
@@ -347,7 +347,7 @@ TEST_CASE("multi-queue buffers") {
 	    DomainFlagBits::eGraphicsQueue);
 
 	{
-		CHECK(get_current_module()->op_arena.size() == 0);
+		CHECK(current_module->op_arena.size() == 0);
 		auto written = write(discard_buf("src0", **buf0));
 		written.wait(*test_context.allocator, test_context.compiler);
 		read(written).wait(*test_context.allocator, test_context.compiler);
@@ -356,8 +356,8 @@ TEST_CASE("multi-queue buffers") {
 	}
 	{
 #ifndef VUK_GARBAGE_SAN
-		get_current_module()->collect_garbage();
-		CHECK(get_current_module()->op_arena.size() == 0);
+		current_module->collect_garbage();
+		CHECK(current_module->op_arena.size() == 0);
 #endif
 		auto written = write(discard_buf("src0", **buf0));
 		written.wait(*test_context.allocator, test_context.compiler);
@@ -367,8 +367,8 @@ TEST_CASE("multi-queue buffers") {
 	}
 	{
 #ifndef VUK_GARBAGE_SAN
-		get_current_module()->collect_garbage();
-		CHECK(get_current_module()->op_arena.size() == 0);
+		current_module->collect_garbage();
+		CHECK(current_module->op_arena.size() == 0);
 #endif
 		auto written = write(discard_buf("src0", **buf0));
 		written.wait(*test_context.allocator, test_context.compiler);
@@ -378,8 +378,8 @@ TEST_CASE("multi-queue buffers") {
 	}
 	{
 #ifndef VUK_GARBAGE_SAN
-		get_current_module()->collect_garbage();
-		CHECK(get_current_module()->op_arena.size() == 0);
+		current_module->collect_garbage();
+		CHECK(current_module->op_arena.size() == 0);
 #endif
 		auto written = write(discard_buf("src0", **buf0));
 		read(written).wait(*test_context.allocator, test_context.compiler);
@@ -388,8 +388,8 @@ TEST_CASE("multi-queue buffers") {
 	}
 	{
 #ifndef VUK_GARBAGE_SAN
-		get_current_module()->collect_garbage();
-		CHECK(get_current_module()->op_arena.size() == 0);
+		current_module->collect_garbage();
+		CHECK(current_module->op_arena.size() == 0);
 #endif
 		auto written = write(discard_buf("src0", **buf0));
 		read(std::move(written)).wait(*test_context.allocator, test_context.compiler);
@@ -398,8 +398,8 @@ TEST_CASE("multi-queue buffers") {
 	}
 	{
 #ifndef VUK_GARBAGE_SAN
-		get_current_module()->collect_garbage();
-		CHECK(get_current_module()->op_arena.size() == 0);
+		current_module->collect_garbage();
+		CHECK(current_module->op_arena.size() == 0);
 #endif
 		auto written = write(discard_buf("src0", **buf0));
 		write2(read(std::move(written))).wait(*test_context.allocator, test_context.compiler);
@@ -442,7 +442,7 @@ TEST_CASE("queue inference") {
 	    DomainFlagBits::eGraphicsQueue);
 
 	{
-		CHECK(get_current_module()->op_arena.size() == 0);
+		CHECK(current_module->op_arena.size() == 0);
 		auto written = gfx(neutral(transfer(discard_buf("src0", **buf0))));
 		written.wait(*test_context.allocator, test_context.compiler);
 		CHECK(execution == "tng");

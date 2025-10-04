@@ -148,7 +148,7 @@ namespace vuk {
 			const unsigned num_inflight_frames = 3;
 			sfa_resource.emplace(*runtime, num_inflight_frames);
 			allocator.emplace(*sfa_resource);
-			set_current_module(std::make_shared<IRModule>());
+			vuk::current_module = std::make_shared<IRModule>();
 
 			if (rdoc_api) {
 				rdoc_api->StartFrameCapture(NULL, NULL);

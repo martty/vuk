@@ -4,11 +4,11 @@
 #include "vuk/ImageAttachment.hpp"
 #include "vuk/RelSpan.hpp"
 #include "vuk/ResourceUse.hpp"
+#include "vuk/runtime/vk/VkSwapchain.hpp" //TODO: leaking vk
 #include "vuk/ShortAlloc.hpp"
 #include "vuk/SourceLocation.hpp"
 #include "vuk/SyncPoint.hpp"
 #include "vuk/Types.hpp"
-#include "vuk/runtime/vk/VkSwapchain.hpp" //TODO: leaking vk
 
 #include <atomic>
 #include <deque>
@@ -24,9 +24,6 @@
 
 namespace vuk {
 	struct IRModule;
-
-	[[nodiscard]] std::shared_ptr<IRModule>& get_current_module();
-	void set_current_module(std::shared_ptr<IRModule> module);
 
 	struct TypeDebugInfo {
 		std::string name;
@@ -1412,19 +1409,21 @@ namespace vuk {
 		void collect_garbage(std::pmr::polymorphic_allocator<std::byte> allocator);
 	};
 
+	extern thread_local std::shared_ptr<IRModule> current_module;
+
 	struct ExtNode {
 		ExtNode(Node* node) : node(node) {
 			acqrel = new AcquireRelease;
 			node->rel_acq = acqrel;
 			this->node->held = true;
-			source_module = get_current_module();
+			source_module = current_module;
 		}
 
 		ExtNode(Node* node, std::vector<std::shared_ptr<ExtNode>> deps) : node(node), deps(std::move(deps)) {
 			acqrel = new AcquireRelease;
 			node->rel_acq = acqrel;
 			this->node->held = true;
-			source_module = get_current_module();
+			source_module = current_module;
 		}
 
 		ExtNode(Node* node, std::shared_ptr<ExtNode> dep) : node(node) {
@@ -1433,17 +1432,17 @@ namespace vuk {
 			this->node->held = true;
 			deps.push_back(std::move(dep));
 
-			source_module = get_current_module();
+			source_module = current_module;
 		}
 
 		ExtNode(Ref ref, std::shared_ptr<ExtNode> dep, Access access = Access::eNone, DomainFlagBits domain = DomainFlagBits::eAny) {
 			acqrel = new AcquireRelease;
-			this->node = get_current_module()->make_release(ref, access, domain).node;
+			this->node = current_module->make_release(ref, access, domain).node;
 			node->rel_acq = acqrel;
 			this->node->held = true;
 			deps.push_back(std::move(dep));
 
-			source_module = get_current_module();
+			source_module = current_module;
 		}
 
 		// for acquires - adopt the node
@@ -1455,7 +1454,7 @@ namespace vuk {
 
 			node->rel_acq = acqrel;
 			this->node->held = true;
-			source_module = get_current_module();
+			source_module = current_module;
 		}
 
 		~ExtNode() {
