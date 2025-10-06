@@ -3,14 +3,14 @@
 
 #if VUK_OS_WINDOWS
 #include <Windows.h>
-#include <shellapi.h>
 #include <fstream>
+#include <shellapi.h>
 #endif
 
-#include "vuk/IR.hpp"
+#include "vuk/ir/IR.hpp"
 #include <fmt/format.h>
 
-#include "GraphDumper.hpp"
+#include "vuk/ir/GraphDumper.hpp"
 
 namespace vuk {
 	struct GraphDumperImpl {
@@ -54,7 +54,7 @@ namespace vuk {
 					return;
 				}
 			}
-			if (node->kind == Node::PLACEHOLDER ||  (bridge_slices && node->kind == Node::SLICE)) {
+			if (node->kind == Node::PLACEHOLDER || (bridge_slices && node->kind == Node::SLICE)) {
 				return;
 			}
 
@@ -143,7 +143,7 @@ namespace vuk {
 					ss << current_cluster << uintptr_t(bridged_arg.node) << " :r" << bridged_arg.index << " -> " << current_cluster << uintptr_t(node) << " :a" << i
 					   << " :n [color=green, label=\"";
 					/* if (r.base_level > 0 || r.level_count != VK_REMAINING_MIP_LEVELS) {
-						ss << fmt::format("[m{}:{}]", r.base_level, r.base_level + r.level_count - 1);
+					  ss << fmt::format("[m{}:{}]", r.base_level, r.base_level + r.level_count - 1);
 					}*/
 					ss << "\"]\n";
 				} else {

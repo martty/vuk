@@ -1,5 +1,6 @@
 #include "vuk/Hash.hpp" // for create
-#include "vuk/IRProcess.hpp"
+#include "vuk/ir/IRPass.hpp"
+#include "vuk/ir/IRProcess.hpp"
 #include "vuk/RenderGraph.hpp"
 #include "vuk/runtime/CommandBuffer.hpp"
 #include "vuk/runtime/Stream.hpp"
@@ -16,305 +17,6 @@
 #define VUK_DUMP_EXEC
 // #define VUK_DEBUG_IMBAR
 // #define VUK_DEBUG_MEMBAR
-
-#define CONCAT(a, b)       CONCAT_INNER(a, b)
-#define CONCAT_INNER(a, b) a##b
-
-#define UNIQUE_NAME(base) CONCAT(base, __LINE__)
-
-namespace vuk {
-	std::string_view domain_to_string(DomainFlagBits domain) {
-		domain = (DomainFlagBits)(domain & DomainFlagBits::eDomainMask).m_mask;
-
-		switch (domain) {
-		case DomainFlagBits::eNone:
-			return "None";
-		case DomainFlagBits::eHost:
-			return "Host";
-		case DomainFlagBits::ePE:
-			return "PE";
-		case DomainFlagBits::eGraphicsQueue:
-			return "Graphics";
-		case DomainFlagBits::eComputeQueue:
-			return "Compute";
-		case DomainFlagBits::eTransferQueue:
-			return "Transfer";
-		default:
-			assert(0);
-			return "";
-		}
-	}
-
-	std::string format_source_location(SourceLocationAtFrame& source) {
-		return fmt::format("{}({}): ", source.location.file_name(), source.location.line());
-	}
-
-	std::string format_source_location(Node* node) {
-		if (node->debug_info) {
-			std::string msg = "";
-			for (int i = 0; i < node->debug_info->trace.size(); i++) {
-				auto& source = node->debug_info->trace[i];
-				msg += fmt::format("{}({}): ", source.file_name(), source.line());
-				if (i < (node->debug_info->trace.size() - 1)) {
-					msg += "\n";
-				}
-			}
-			return msg;
-		} else {
-			return "?: ";
-		}
-	}
-
-	void parm_to_string(Ref parm, std::string& msg) {
-		if (parm.node->debug_info && parm.node->debug_info->result_names.size() > parm.index) {
-			fmt::format_to(std::back_inserter(msg), "%{}", parm.node->debug_info->result_names[parm.index]);
-		} else if (parm.node->kind == Node::CONSTANT) {
-			Type* ty = parm.node->type[0].get();
-			if (ty->kind == Type::INTEGER_TY) {
-				switch (ty->scalar.width) {
-				case 32:
-					fmt::format_to(std::back_inserter(msg), "{}", constant<uint32_t>(parm));
-					break;
-				case 64:
-					fmt::format_to(std::back_inserter(msg), "{}", constant<uint64_t>(parm));
-					break;
-				}
-			} else if (ty->kind == Type::MEMORY_TY) {
-				fmt::format_to(std::back_inserter(msg), "<mem>");
-			}
-		} else if (parm.node->kind == Node::PLACEHOLDER) {
-			fmt::format_to(std::back_inserter(msg), "?");
-		} else if (parm.node->execution_info) {
-			fmt::format_to(
-			    std::back_inserter(msg), "%{}_{}", Node::kind_to_sv(parm.node->execution_info->kind), parm.node->execution_info->naming_index + parm.index);
-		} else {
-			fmt::format_to(std::back_inserter(msg), "%{}_{}", Node::kind_to_sv(parm.node->kind), parm.node->scheduled_item->naming_index + parm.index);
-		}
-	};
-
-	void print_args_to_string(std::span<Ref> args, std::string& msg) {
-		for (size_t i = 0; i < args.size(); i++) {
-			if (i > 0) {
-				fmt::format_to(std::back_inserter(msg), ", ");
-			}
-			auto& parm = args[i];
-
-			parm_to_string(parm, msg);
-		}
-	};
-
-	void print_args(std::span<Ref> args) {
-		std::string msg;
-		print_args_to_string(args, msg);
-		fmt::print("{}", msg);
-	};
-
-	std::string print_args_to_string_with_arg_names(std::span<const std::string_view> arg_names, std::span<Ref> args) {
-		std::string msg = "";
-		for (size_t i = 0; i < args.size(); i++) {
-			if (i > 0) {
-				msg += fmt::format(", ");
-			}
-			auto& parm = args[i];
-
-			msg += fmt::format("{}:", arg_names[i]);
-			parm_to_string(parm, msg);
-		}
-		return msg;
-	};
-
-	std::string node_to_string(Node* node) {
-		if (node->kind == Node::CONSTRUCT) {
-			return fmt::format("construct<{}> ", Type::to_string(node->type[0].get()));
-		} else {
-			return fmt::format("{} ", Node::kind_to_sv(node->kind));
-		}
-	};
-
-	using namespace std::literals;
-	std::vector<std::string_view> arg_names(Type* t) { // TODO: decommission
-		if (t->hash_value == current_module->types.builtin_image) {
-			return { "width"sv, "height"sv, "depth"sv, "format"sv, "samples"sv, "base_layer"sv, "layer_count"sv, "base_level"sv, "level_count"sv };
-		} else {
-			assert(0);
-			return {};
-		}
-	};
-
-	std::string format_graph_message(Level level, Node* node, std::string err) {
-		std::string msg = "";
-		msg += format_source_location(node);
-		msg += fmt::format("{}: {}", level == Level::eError ? "error" : "other", node_to_string(node));
-		msg += err;
-		return msg;
-	};
-
-	void print_results_to_string(ScheduledItem& item, std::string& msg) {
-		auto& node = item.execable;
-		for (size_t i = 0; i < node->type.size(); i++) {
-			if (i > 0) {
-				fmt::format_to(std::back_inserter(msg), ", ");
-			}
-			if (node->debug_info && !node->debug_info->result_names.empty() && node->debug_info->result_names.size() > i) {
-				fmt::format_to(std::back_inserter(msg), "%{}", node->debug_info->result_names[i]);
-			} else {
-				fmt::format_to(std::back_inserter(msg), "%{}_{}", Node::kind_to_sv(node->kind), item.naming_index + i);
-			}
-		}
-	};
-
-	void print_results(ScheduledItem& item) {
-		std::string msg = "";
-		print_results_to_string(item, msg);
-		fmt::print("{}", msg);
-	};
-
-	void format_args(ScheduledItem& item, std::string& line) {
-		Node* node = item.execable;
-		switch (node->kind) {
-		case Node::GARBAGE:
-		case Node::PLACEHOLDER:
-		case Node::CONSTANT:
-		case Node::IMPORT:
-		case Node::CLEAR:
-		case Node::SET:
-		case Node::CAST:
-		case Node::MATH_BINARY: {
-			assert(0);
-		}
-		case Node::CONSTRUCT: {
-			if (node->type[0]->is_bufferlike_view()) {
-				fmt::format_to(std::back_inserter(line), "construct<buffer> ");
-			} else if (node->type[0]->hash_value == current_module->types.builtin_image) {
-				fmt::format_to(std::back_inserter(line), "construct<image> ");
-			} else if (node->type[0]->hash_value == current_module->types.builtin_swapchain) {
-				fmt::format_to(std::back_inserter(line), "construct<swapchain> ");
-			} else if (node->type[0]->kind == Type::ARRAY_TY) {
-				auto array_size = node->type[0]->array.count;
-				auto elem_ty = *node->type[0]->array.T;
-				fmt::format_to(std::back_inserter(line), "construct<{}[{}]> ", elem_ty->debug_info.name, array_size);
-			} else if (node->type[0]->hash_value == current_module->types.builtin_sampled_image) {
-				fmt::format_to(std::back_inserter(line), "construct<sampled_image> ");
-			} else if (node->type[0]->kind == Type::UNION_TY) {
-				fmt::format_to(std::back_inserter(line), "construct<union> ");
-			} else {
-				assert(0);
-			}
-			print_args_to_string(node->construct.args.subspan(1), line);
-		} break;
-		case Node::CALL: {
-			auto fn_type = node->call.args[0].type();
-			fmt::format_to(std::back_inserter(line), "call ${} ", domain_to_string(item.scheduled_domain));
-			if (!fn_type->debug_info.name.empty()) {
-				fmt::format_to(std::back_inserter(line), "<{}> ", fn_type->debug_info.name);
-			}
-			print_args_to_string(node->call.args.subspan(1), line);
-		} break;
-		case Node::RELEASE: {
-			DomainFlagBits dst_domain = node->release.dst_domain;
-			if (node->release.dst_domain == DomainFlagBits::eDevice) {
-				dst_domain = item.scheduled_domain;
-			}
-			DomainFlagBits sched_domain = item.scheduled_domain;
-
-			fmt::format_to(std::back_inserter(line), "release ${} -> ${} ", domain_to_string(sched_domain), domain_to_string(dst_domain));
-			print_args_to_string(node->release.src, line);
-		} break;
-		case Node::ACQUIRE: {
-			fmt::format_to(std::back_inserter(line), "acquire<");
-			for (size_t i = 0; i < node->acquire.values.size(); i++) {
-				if (node->type[i]->is_bufferlike_view()) {
-					fmt::format_to(std::back_inserter(line), "buffer");
-				} else if (node->type[i]->hash_value == current_module->types.builtin_image) {
-					fmt::format_to(std::back_inserter(line), "image");
-				} else if (node->type[0]->kind == Type::ARRAY_TY) {
-					fmt::format_to(std::back_inserter(line), "{}[]", (*node->type[0]->array.T)->is_bufferlike_view() ? "buffer" : "image");
-				}
-				if (i + 1 < node->acquire.values.size()) {
-					fmt::format_to(std::back_inserter(line), ", ");
-				}
-			}
-			fmt::format_to(std::back_inserter(line), ">");
-		} break;
-		case Node::ACQUIRE_NEXT_IMAGE: {
-			fmt::format_to(std::back_inserter(line), "acquire_next_image ");
-			print_args_to_string(std::span{ &node->acquire_next_image.swapchain, 1 }, line);
-		} break;
-		case Node::SLICE: {
-			auto axis = node->slice.axis;
-			// these must have run by now, so we can just eval
-			auto start = *eval<uint64_t>(node->slice.start);
-			auto count = *eval<uint64_t>(node->slice.count);
-
-			print_args_to_string(std::span{ &node->slice.src, 1 }, line);
-			if (start > 0 || count != Range::REMAINING) {
-				if (node->slice.axis != 0) {
-					if (count > 1) {
-						fmt::format_to(std::back_inserter(line), "[{}->{}:{}]", node->slice.axis, start, start + count - 1);
-					} else if (axis == Node::NamedAxis::FIELD) {
-						fmt::format_to(std::back_inserter(line), ".{}", start);
-					} else {
-						fmt::format_to(std::back_inserter(line), "[{}->{}]", node->slice.axis, start);
-					}
-				} else {
-					if (count > 1) {
-						fmt::format_to(std::back_inserter(line), "[{}:{}]", start, start + count - 1);
-					} else {
-						fmt::format_to(std::back_inserter(line), "[{}]", start);
-					}
-				}
-			}
-		} break;
-		case Node::CONVERGE: {
-			print_args_to_string(node->converge.diverged.subspan(0, 1), line);
-			fmt::format_to(std::back_inserter(line), "{{");
-			print_args_to_string(node->converge.diverged.subspan(1), line);
-			fmt::format_to(std::back_inserter(line), "}}");
-		} break;
-		case Node::USE: {
-			print_args_to_string(std::span(&node->use.src, 1), line);
-			fmt::format_to(std::back_inserter(line), ": {}", Type::to_sv(node->use.access));
-		} break;
-		case Node::LOGICAL_COPY: {
-			print_args_to_string(std::span(&node->logical_copy.src, 1), line);
-		} break;
-		case Node::COMPILE_PIPELINE: {
-			print_args_to_string(std::span(&node->compile_pipeline.src, 1), line);
-		} break;
-		case Node::ALLOCATE: {
-			print_args_to_string(std::span(&node->allocate.src, 1), line);
-		} break;
-		case Node::GET_ALLOCATION_SIZE: {
-			print_args_to_string({ &node->get_allocation_size.ptr, 1 }, line);
-		} break;
-		}
-	}
-
-	std::string format_message(Level level, ScheduledItem& item, std::string err) {
-		Node* node = item.execable;
-		std::string msg = "";
-		fmt::format_to(std::back_inserter(msg), "{}{}: '", format_source_location(node), level == Level::eError ? "error" : "other");
-		print_results_to_string(item, msg);
-		fmt::format_to(std::back_inserter(msg), " = ");
-		if (node->kind == Node::CONSTRUCT) {
-			msg += node_to_string(node);
-			auto names = arg_names(node->type[0].get());
-			msg += print_args_to_string_with_arg_names(names, item.execable->construct.args.subspan(1));
-		} else {
-			format_args(item, msg);
-		}
-		msg += err;
-		return msg;
-	};
-
-	std::string exec_to_string(ScheduledItem& item) {
-		std::string line;
-		print_results_to_string(item, line);
-		fmt::format_to(std::back_inserter(line), " = ");
-		format_args(item, line);
-		return line;
-	}
-} // namespace vuk
 
 namespace vuk {
 	struct RenderPassInfo {
@@ -333,26 +35,6 @@ namespace vuk {
 		rbi.clearValueCount = 0;
 
 		ctx.vkCmdBeginRenderPass(cbuf, &rbi, use_secondary_command_buffers ? VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS : VK_SUBPASS_CONTENTS_INLINE);
-	}
-
-	void Compiler::fill_render_pass_info(RenderPassInfo& rpass, const size_t& i, CommandBuffer& cobuf) {
-		if (rpass.handle == VK_NULL_HANDLE) {
-			cobuf.ongoing_render_pass = {};
-			return;
-		}
-		CommandBuffer::RenderPassInfo rpi;
-		rpi.render_pass = rpass.handle;
-		rpi.subpass = (uint32_t)i;
-		rpi.extent = Extent2D{ rpass.fbci.width, rpass.fbci.height };
-		auto& spdesc = rpass.rpci.subpass_descriptions[i];
-		rpi.color_attachments = std::span<const VkAttachmentReference>(spdesc.pColorAttachments, spdesc.colorAttachmentCount);
-		rpi.samples = rpass.fbci.sample_count.count;
-		rpi.depth_stencil_attachment = spdesc.pDepthStencilAttachment;
-		for (uint32_t i = 0; i < spdesc.colorAttachmentCount; i++) {
-			rpi.color_attachment_ivs[i] = rpass.fbci.attachments[i];
-		}
-		cobuf.color_blend_attachments.resize(spdesc.colorAttachmentCount);
-		cobuf.ongoing_render_pass = rpi;
 	}
 
 	struct VkQueueStream : public Stream {
@@ -888,8 +570,7 @@ namespace vuk {
 			return nullptr;
 		}
 
-		
-	uint64_t value_identity(Type* base_ty, void* value) {
+		uint64_t value_identity(Type* base_ty, void* value) {
 			uint64_t key = 0;
 			if (base_ty->hash_value == current_module->types.builtin_image) {
 				auto& img_att = *reinterpret_cast<ImageAttachment*>(value);
@@ -1124,7 +805,7 @@ namespace vuk {
 		}
 	};
 
-	struct Scheduler {
+	struct Scheduler : IREvalContext {
 		Scheduler(Allocator all, RGCImpl* impl, Recorder& recorder) :
 		    allocator(all),
 		    recorder(recorder),
@@ -1143,6 +824,10 @@ namespace vuk {
 
 		size_t naming_index_counter = 0;
 		size_t instr_counter = 0;
+
+		void* allocate_host_memory(size_t size) override {
+			return arena.ensure_space(size);
+		}
 
 		void node_to_acq(Node* node, std::span<void*> values) {
 			assert(node->execution_info);
@@ -1214,19 +899,24 @@ namespace vuk {
 			node->execution_info->kind = Node::ACQUIRE;
 		}
 
-		template<class T>
-		T& get_value(Ref parm) {
-			return *reinterpret_cast<T*>(get_value(parm));
-		};
-
-		void* get_value(Ref parm) {
-			auto v = impl->get_value(parm);
-			return v;
-		}
-
-		std::span<void*> get_values(Node* node) {
-			auto v = impl->get_values(node);
-			return v;
+		void fill_render_pass_info(RenderPassInfo& rpass, const size_t& i, CommandBuffer& cobuf) {
+			if (rpass.handle == VK_NULL_HANDLE) {
+				cobuf.ongoing_render_pass = {};
+				return;
+			}
+			CommandBuffer::RenderPassInfo rpi;
+			rpi.render_pass = rpass.handle;
+			rpi.subpass = (uint32_t)i;
+			rpi.extent = Extent2D{ rpass.fbci.width, rpass.fbci.height };
+			auto& spdesc = rpass.rpci.subpass_descriptions[i];
+			rpi.color_attachments = std::span<const VkAttachmentReference>(spdesc.pColorAttachments, spdesc.colorAttachmentCount);
+			rpi.samples = rpass.fbci.sample_count.count;
+			rpi.depth_stencil_attachment = spdesc.pDepthStencilAttachment;
+			for (uint32_t i = 0; i < spdesc.colorAttachmentCount; i++) {
+				rpi.color_attachment_ivs[i] = rpass.fbci.attachments[i];
+			}
+			cobuf.color_blend_attachments.resize(spdesc.colorAttachmentCount);
+			cobuf.ongoing_render_pass = rpi;
 		}
 
 		std::shared_ptr<Type> base_type(Ref parm) {
@@ -1250,6 +940,600 @@ namespace vuk {
 				return {};
 			}
 		}
+
+		Result<void> run() {
+			Runtime& ctx = allocator.get_context();
+			auto host_stream = recorder.streams.at(DomainFlagBits::eHost).get();
+
+			std::deque<VkPEStream> pe_streams;
+			std::unordered_map<uint64_t, Swapchain*> image_to_swapchain;
+
+			Result<void> submit_result = { expected_value };
+
+			for (auto& pitem : impl->item_list) {
+				auto& item = *pitem;
+				auto node = item.execable;
+				instr_counter++;
+#ifdef VUK_DUMP_EXEC
+				fmt::println("[{:#06x}] {}", instr_counter, exec_to_string(item));
+#endif
+				// we run nodes twice - first time we reenqueue at the front and then put all deps before it
+				// second time we see it, we know that all deps have run, so we can run the node itself
+				switch (node->kind) {
+				case Node::CONSTANT: {
+					done(node, host_stream, node->constant.value);
+					break;
+				}
+				case Node::MATH_BINARY: {
+					auto do_op = [&]<class T>(T, Node* node) -> T {
+						T& a = *get_value<T>(node->math_binary.a);
+						T& b = *get_value<T>(node->math_binary.b);
+						switch (node->math_binary.op) {
+						case Node::BinOp::ADD:
+							return a + b;
+						case Node::BinOp::SUB:
+							return a - b;
+						case Node::BinOp::MUL:
+							return a * b;
+						case Node::BinOp::DIV:
+							return a / b;
+						case Node::BinOp::MOD:
+							return a % b;
+						}
+						assert(0);
+						return a;
+					};
+					switch (node->type[0]->kind) {
+					case Type::INTEGER_TY: {
+						switch (node->type[0]->scalar.width) {
+						case 32:
+							done(node, host_stream, do_op(uint32_t{}, node));
+							break;
+						case 64:
+							done(node, host_stream, do_op(uint64_t{}, node));
+							break;
+						default:
+							assert(0);
+						}
+						break;
+					}
+					default:
+						assert(0);
+					}
+				} break;
+
+				case Node::CONSTRUCT: { // when encountering a CONSTRUCT, construct the thing if needed
+					for (auto& arg : node->construct.args) {
+						if (arg.node->kind == Node::PLACEHOLDER) {
+							return { expected_error, RenderGraphException(format_message(Level::eError, item, "': argument not set or inferrable\n")) };
+						}
+					}
+					// TODO: PAV: use evaluate_construct instead
+					assert(node->type[0]->kind != Type::POINTER_TY);
+					if (node->type[0]->hash_value == current_module->types.builtin_swapchain) {
+						/* no-op */
+						done(node, host_stream, get_value(node->construct.args[0]));
+						recorder.init_sync(node->type[0].get(), { to_use(eNone), host_stream }, get_value(first(node)));
+					} else if (node->type[0]->kind == Type::ARRAY_TY) {
+						for (size_t i = 1; i < node->construct.args.size(); i++) {
+							auto arg_ty = node->construct.args[i].type();
+							auto& parm = node->construct.args[i];
+
+							recorder.add_sync(base_type(parm).get(), get_dependency_info(parm, arg_ty.get(), RW::eWrite, nullptr), get_value(parm));
+						}
+
+						auto array_size = node->type[0]->array.count;
+						auto elem_ty = *node->type[0]->array.T;
+						assert(node->construct.args[0].type()->kind == Type::MEMORY_TY);
+
+						char* arr_mem = static_cast<char*>(arena.ensure_space(elem_ty->size * array_size));
+						for (auto i = 0; i < array_size; i++) {
+							auto& elem = node->construct.args[i + 1];
+							assert(Type::stripped(elem.type())->hash_value == elem_ty->hash_value);
+
+							memcpy(arr_mem + i * elem_ty->size, get_value(elem), elem_ty->size);
+						}
+						if (array_size == 0) { // zero-len arrays
+							arr_mem = nullptr;
+						}
+						node->construct.args[0].node->constant.value = arr_mem;
+						done(node, host_stream, (void*)arr_mem);
+					} else if (node->type[0]->hash_value == current_module->types.builtin_sampled_image) {
+						for (size_t i = 1; i < node->construct.args.size(); i++) {
+							auto arg_ty = node->construct.args[i].type();
+							auto& parm = node->construct.args[i];
+
+							recorder.add_sync(base_type(parm).get(), get_dependency_info(parm, arg_ty.get(), RW::eWrite, nullptr), get_value(parm));
+						}
+						auto image = *get_value<ImageAttachment>(node->construct.args[1]);
+						auto samp = *get_value<SamplerCreateInfo>(node->construct.args[2]);
+						done(node, host_stream, SampledImage{ image, samp });
+					} else if (node->type[0]->kind == Type::UNION_TY) {
+						for (size_t i = 1; i < node->construct.args.size(); i++) {
+							auto arg_ty = node->construct.args[i].type();
+							auto& parm = node->construct.args[i];
+
+							recorder.add_sync(base_type(parm).get(), get_dependency_info(parm, arg_ty.get(), RW::eWrite, nullptr), get_value(parm));
+						}
+						assert(node->construct.args[0].type()->kind == Type::MEMORY_TY);
+
+						char* arr_mem = static_cast<char*>(arena.ensure_space(node->type[0]->size));
+						size_t offset = 0;
+						for (auto i = 0; i < node->construct.args.size() - 1; i++) {
+							auto sz = node->type[0]->composite.types[i]->size;
+							auto& elem = node->construct.args[i + 1];
+							memcpy(arr_mem + offset, get_value(elem), sz);
+							offset += sz;
+						}
+
+						node->construct.args[0].node->constant.value = arr_mem;
+						done(node, host_stream, (void*)arr_mem);
+					} else {
+						for (size_t i = 1; i < node->construct.args.size(); i++) {
+							auto arg_ty = node->construct.args[i].type();
+							auto& parm = node->construct.args[i];
+
+							recorder.add_sync(base_type(parm).get(), get_dependency_info(parm, arg_ty.get(), RW::eWrite, nullptr), get_value(parm));
+						}
+
+						auto result_ty = node->type[0].get();
+						// allocate type
+						void* result = new char[result_ty->size];
+						// loop args and resolve them
+						std::vector<void*> argvals;
+						for (size_t i = 1; i < node->construct.args.size(); i++) {
+							auto& parm = node->construct.args[i];
+							argvals.push_back(get_value(parm));
+						}
+
+						result_ty->composite.construct(result, argvals);
+						// TODO: PAV: user type sync
+						recorder.init_sync(node->type[0].get(), { to_use(eNone), host_stream }, result,
+						                   false); // TODO: can we figure out when it is safe known aliasing?
+						done(node, host_stream, result);
+					}
+
+					break;
+				}
+
+				// we can allocate ptrs and generic views
+				// TODO: image ptrs and generic views
+				case Node::ALLOCATE: {
+					auto allocator = node->allocate.allocator ? *node->allocate.allocator : this->allocator;
+
+					if (node->type[0]->kind == Type::POINTER_TY) {
+						auto pointed_ty = *node->type[0]->pointer.T;
+
+						ptr_base buf;
+						auto bci = *get_value<BufferCreateInfo>(node->allocate.src);
+						if (auto res = allocator.allocate_memory(std::span{ static_cast<ptr_base*>(&buf), 1 }, std::span{ &bci, 1 }); !res) {
+							return res;
+						}
+						allocator.deallocate(std::span{ static_cast<ptr_base*>(&buf), 1 });
+						done(node, host_stream, buf);
+					} else if (node->type[0]->hash_value == current_module->types.builtin_image) {
+						auto& attachment = constant<ImageAttachment>(node->construct.args[0]);
+						// set iv type
+						if (attachment.image_view == ImageView{}) {
+							if (attachment.view_type == ImageViewType::eInfer && attachment.layer_count != VK_REMAINING_ARRAY_LAYERS) {
+								if (attachment.image_type == ImageType::e1D) {
+									if (attachment.layer_count == 1) {
+										attachment.view_type = ImageViewType::e1D;
+									} else {
+										attachment.view_type = ImageViewType::e1DArray;
+									}
+								} else if (attachment.image_type == ImageType::e2D) {
+									if (attachment.layer_count == 1) {
+										attachment.view_type = ImageViewType::e2D;
+									} else {
+										attachment.view_type = ImageViewType::e2DArray;
+									}
+								} else if (attachment.image_type == ImageType::e3D) {
+									if (attachment.layer_count == 1) {
+										attachment.view_type = ImageViewType::e3D;
+									} else {
+										attachment.view_type = ImageViewType::e2DArray;
+									}
+								}
+							}
+						}
+						if (!attachment.image) {
+							attachment.usage |= impl->compute_usage(&first(node).link());
+							assert(attachment.usage != ImageUsageFlags{});
+							auto img = allocate_image(allocator, attachment);
+							if (!img) {
+								return img;
+							}
+							attachment.image = **img;
+							if (node->debug_info && node->debug_info->result_names.size() > 0 && !node->debug_info->result_names[0].empty()) {
+								ctx.set_name(attachment.image.image, node->debug_info->result_names[0].c_str());
+							}
+						}
+						done(node, host_stream, attachment);
+					} else {
+						assert(false); // nothing else can be allocated
+					}
+					recorder.init_sync(node->type[0].get(), { to_use(eNone), host_stream }, get_value(first(node)));
+
+					break;
+				}
+
+				case Node::CALL: {
+					auto fn_type = node->call.args[0].type();
+					size_t first_parm = fn_type->kind == Type::OPAQUE_FN_TY ? 1 : 4;
+					auto& args = fn_type->kind == Type::OPAQUE_FN_TY ? fn_type->opaque_fn.args : fn_type->shader_fn.args;
+
+					Stream* dst_stream = item.scheduled_stream; // the domain this call will execute on
+
+					auto vk_rec = dynamic_cast<VkQueueStream*>(dst_stream); // TODO: change this into dynamic dispatch on the Stream
+					assert(vk_rec);
+					// run all the barriers here!
+
+					for (size_t i = first_parm; i < node->call.args.size(); i++) {
+						auto& arg_ty = args[i - first_parm];
+						auto& parm = node->call.args[i];
+						auto& link = parm.link();
+
+						if (arg_ty->kind == Type::IMBUED_TY) {
+							auto access = arg_ty->imbued.access;
+
+							// here: figuring out which allocator to use to make image views for the RP and then making them
+							if (is_framebuffer_attachment(access)) {
+								auto& img_att = *get_value<ImageAttachment>(parm);
+								if (img_att.view_type == ImageViewType::eInfer || img_att.view_type == ImageViewType::eCube) { // framebuffers need 2D or 2DArray views
+									if (img_att.layer_count > 1) {
+										img_att.view_type = ImageViewType::e2DArray;
+									} else {
+										img_att.view_type = ImageViewType::e2D;
+									}
+								}
+								if (img_att.image_view.payload == VK_NULL_HANDLE) {
+									auto iv = allocate_image_view(allocator, img_att); // TODO: dropping error
+									img_att.image_view = **iv;
+
+									auto name = std::string("ImageView: RenderTarget ");
+									allocator.get_context().set_name(img_att.image_view.payload, Name(name));
+								}
+							}
+
+							// Write and ReadWrite
+							RW sync_access = (is_write_access(access)) ? RW::eWrite : RW::eRead;
+							recorder.add_sync(base_type(parm).get(), get_dependency_info(parm, arg_ty.get(), sync_access, dst_stream), get_value(parm));
+
+							if (is_framebuffer_attachment(access)) {
+								auto& img_att = *get_value<ImageAttachment>(parm);
+								vk_rec->prepare_render_pass_attachment(allocator, img_att);
+							}
+						} else {
+							assert(0);
+						}
+					}
+
+					// make the renderpass if needed!
+					recorder.synchronize_stream(dst_stream);
+					// run the user cb!
+					std::vector<void*, short_alloc<void*>> opaque_rets(*impl->arena_);
+					if (fn_type->kind == Type::OPAQUE_FN_TY) {
+						CommandBuffer cobuf(*dst_stream, ctx, allocator, vk_rec->cbuf);
+						if (!fn_type->debug_info.name.empty()) {
+							auto name_hash = static_cast<uint32_t>(std::hash<std::string>{}(fn_type->debug_info.name));
+							auto name_color = std::array<float, 4>{
+								static_cast<float>(name_hash & 255) / 255.0f,
+								static_cast<float>((name_hash >> 8) & 255) / 255.0f,
+								static_cast<float>((name_hash >> 16) & 255) / 255.0f,
+								1.0,
+							};
+							ctx.begin_region(vk_rec->cbuf, fn_type->debug_info.name.c_str(), name_color);
+						}
+
+						void* rpass_profile_data = nullptr;
+						if (vk_rec->callbacks->on_begin_pass)
+							rpass_profile_data = vk_rec->callbacks->on_begin_pass(vk_rec->callbacks->user_data, fn_type->debug_info.name.c_str(), cobuf, vk_rec->domain);
+
+						if (vk_rec->rp.rpci.attachments.size() > 0) {
+							vk_rec->prepare_render_pass();
+							fill_render_pass_info(vk_rec->rp, 0, cobuf);
+						}
+
+						std::vector<void*, short_alloc<void*>> opaque_args(*impl->arena_);
+						std::vector<void*, short_alloc<void*>> opaque_meta(*impl->arena_);
+						for (size_t i = first_parm; i < node->call.args.size(); i++) {
+							auto& parm = node->call.args[i];
+							opaque_args.push_back(get_value(parm));
+							opaque_meta.push_back(&parm);
+						}
+						opaque_rets.resize(fn_type->opaque_fn.return_types.size());
+						(*fn_type->callback)(cobuf, opaque_args, opaque_meta, opaque_rets);
+						if (vk_rec->rp.handle) {
+							vk_rec->end_render_pass();
+						}
+						if (!fn_type->debug_info.name.empty()) {
+							ctx.end_region(vk_rec->cbuf);
+						}
+						if (vk_rec->callbacks->on_end_pass)
+							vk_rec->callbacks->on_end_pass(vk_rec->callbacks->user_data, rpass_profile_data, cobuf);
+					} else if (fn_type->kind == Type::SHADER_FN_TY) {
+						CommandBuffer cobuf(*dst_stream, ctx, allocator, vk_rec->cbuf);
+						if (!fn_type->debug_info.name.empty()) {
+							auto name_hash = static_cast<uint32_t>(std::hash<std::string>{}(fn_type->debug_info.name));
+							auto name_color = std::array<float, 4>{
+								static_cast<float>(name_hash & 255) / 255.0f,
+								static_cast<float>((name_hash >> 8) & 255) / 255.0f,
+								static_cast<float>((name_hash >> 16) & 255) / 255.0f,
+								1.0,
+							};
+							ctx.begin_region(vk_rec->cbuf, fn_type->debug_info.name.c_str(), name_color);
+						}
+
+						void* rpass_profile_data = nullptr;
+						if (vk_rec->callbacks->on_begin_pass)
+							rpass_profile_data = vk_rec->callbacks->on_begin_pass(vk_rec->callbacks->user_data, fn_type->debug_info.name.c_str(), cobuf, vk_rec->domain);
+
+						if (vk_rec->rp.rpci.attachments.size() > 0) {
+							vk_rec->prepare_render_pass();
+							fill_render_pass_info(vk_rec->rp, 0, cobuf);
+						}
+
+						// call the cbuf directly: bind everything, then dispatch shader
+						opaque_rets.resize(fn_type->shader_fn.return_types.size());
+						auto pbi = reinterpret_cast<PipelineBaseInfo*>(fn_type->shader_fn.shader);
+
+						cobuf.bind_compute_pipeline(pbi);
+
+						auto& flat_bindings = pbi->reflection_info.flat_bindings;
+						for (size_t i = first_parm; i < node->call.args.size(); i++) {
+							auto& parm = node->call.args[i];
+							if (parm.type()->kind != Type::POINTER_TY) {
+								auto binding_idx = i - first_parm;
+								auto& [set, binding] = flat_bindings[binding_idx];
+								auto val = get_value(parm);
+								switch (binding->type) {
+								case DescriptorType::eSampledImage:
+								case DescriptorType::eStorageImage:
+									cobuf.bind_image(set, binding->binding, *reinterpret_cast<ImageAttachment*>(val));
+									break;
+								case DescriptorType::eUniformBuffer:
+								case DescriptorType::eStorageBuffer: {
+									auto& v = *reinterpret_cast<Buffer<>*>(val);
+									cobuf.bind_buffer(set, binding->binding, v);
+									break;
+								}
+								case DescriptorType::eSampler:
+									cobuf.bind_sampler(set, binding->binding, *reinterpret_cast<SamplerCreateInfo*>(val));
+									break;
+								case DescriptorType::eCombinedImageSampler: {
+									auto& si = *reinterpret_cast<SampledImage*>(val);
+									cobuf.bind_image(set, binding->binding, si.ia);
+									cobuf.bind_sampler(set, binding->binding, si.sci);
+									break;
+								}
+								default:
+									assert(0);
+								}
+
+								opaque_rets[binding_idx] = val;
+							}
+						}
+						size_t pc_offset = 0;
+						if (pbi->reflection_info.push_constant_ranges.size() > 0) {
+							auto& pcr = pbi->reflection_info.push_constant_ranges[0];
+							auto base_ty = current_module->types.make_pointer_ty(current_module->types.u32());
+							for (auto parm_idx = 0; parm_idx < pcr.num_members; parm_idx++) {
+								auto& parm = node->call.args[parm_idx + first_parm];
+								auto val = get_value(parm);
+								auto ptr = *reinterpret_cast<ptr_base*>(val);
+								// TODO: check which args are pointers and dereference on host the once that are not
+								cobuf.push_constants(ShaderStageFlagBits::eCompute, pc_offset, ptr);
+								auto binding_idx = parm_idx;
+								opaque_rets[binding_idx] = val;
+								parm_idx++;
+								pc_offset += sizeof(uint64_t);
+							}
+						}
+
+						cobuf.dispatch(constant<uint32_t>(node->call.args[1]), constant<uint32_t>(node->call.args[2]), constant<uint32_t>(node->call.args[3]));
+
+						if (vk_rec->rp.handle) {
+							vk_rec->end_render_pass();
+						}
+						if (!fn_type->debug_info.name.empty()) {
+							ctx.end_region(vk_rec->cbuf);
+						}
+						if (vk_rec->callbacks->on_end_pass)
+							vk_rec->callbacks->on_end_pass(vk_rec->callbacks->user_data, rpass_profile_data, cobuf);
+					} else {
+						assert(0);
+					}
+
+					done(node, dst_stream, std::span(opaque_rets));
+
+					break;
+				}
+				case Node::RELEASE: {
+					auto acqrel = node->rel_acq;
+
+					assert(acqrel && acqrel->status == Signal::Status::eDisarmed);
+
+					Stream* dst_stream;
+					Swapchain* swp = nullptr;
+					if (node->release.dst_domain == DomainFlagBits::ePE) {
+						swp = reinterpret_cast<Swapchain*>(
+						    image_to_swapchain.at(recorder.value_identity(node->release.src[0].type().get(), get_value(node->release.src[0]))));
+						auto it = std::find_if(pe_streams.begin(), pe_streams.end(), [=](auto& pe_stream) { return pe_stream.swp == swp; });
+						assert(it != pe_streams.end());
+						dst_stream = &*it;
+					} else if (node->release.dst_domain == DomainFlagBits::eDevice) {
+						dst_stream = item.scheduled_stream;
+					} else {
+						dst_stream = recorder.stream_for_domain(node->release.dst_domain);
+					}
+					assert(dst_stream);
+
+					auto sched_stream = item.scheduled_stream;
+					DomainFlagBits sched_domain = sched_stream->domain;
+					DomainFlagBits dst_domain = dst_stream->domain;
+
+					node->rel_acq->last_use.resize(node->type.size());
+					auto values = new (arena.ensure_space(sizeof(void*) * node->type.size())) void*[node->type.size()];
+
+					for (size_t i = 0; i < node->release.src.size(); i++) {
+						auto parm = node->release.src[i];
+						auto arg_ty = node->type[i];
+						auto di = get_dependency_info(parm, arg_ty.get(), RW::eWrite, dst_stream);
+						auto value = get_value(parm);
+						values[i] = value;
+						recorder.add_sync(base_type(parm).get(), di, value);
+
+						auto last_use = recorder.last_use(base_type(parm).get(), value);
+						// SANITY: if we change streams, then we must've had sync
+						// TODO: remove host exception here
+						assert(di || last_use.stream->domain == DomainFlagBits::eHost || (last_use.stream == item.scheduled_stream));
+						acqrel->last_use.push_back(last_use);
+						if (i == 0) {
+							sched_stream->add_dependent_signal(acqrel);
+						}
+					}
+
+					if (acqrel && sched_domain == DomainFlagBits::eHost) {
+						acqrel->status = Signal::Status::eHostAvailable;
+					}
+
+					if (dst_domain == DomainFlagBits::ePE) {
+						assert(sched_stream->domain & DomainFlagBits::eDevice);
+						assert(swp);
+						auto present_result = dynamic_cast<VkQueueStream*>(sched_stream)->present(*swp);
+						if (!present_result) {
+							submit_result = std::move(present_result);
+						}
+						if (acqrel) {
+							acqrel->status = Signal::Status::eHostAvailable; // TODO: ???
+						}
+					} else {
+						sched_stream->submit();
+					}
+					host_stream->submit();
+
+					done(node, item.scheduled_stream, std::span(values, node->type.size()));
+					break;
+				}
+				case Node::ACQUIRE: {
+					auto acqrel = node->rel_acq;
+					assert(acqrel && acqrel->status != Signal::Status::eDisarmed);
+
+					auto src_stream = acqrel->source.executor ? recorder.stream_for_executor(acqrel->source.executor) : recorder.stream_for_domain(DomainFlagBits::eHost);
+					for (size_t i = 0; i < node->acquire.values.size(); i++) {
+						auto& link = node->links[i];
+
+						StreamResourceUse src_use = { acqrel->last_use[i], src_stream };
+						recorder.init_sync(node->type[i].get(), src_use, node->acquire.values[i], false);
+					}
+
+					done(node, src_stream);
+					break;
+				}
+
+				case Node::ACQUIRE_NEXT_IMAGE: {
+					auto& swp = **get_value<Swapchain*>(node->acquire_next_image.swapchain);
+					VkSemaphore acquire_sema;
+					allocator.allocate_semaphores(std::span{ &acquire_sema, 1 });
+					allocator.deallocate(std::span{ &acquire_sema, 1 });
+					swp.acquire_result = ctx.vkAcquireNextImageKHR(ctx.device, swp.swapchain, UINT64_MAX, acquire_sema, VK_NULL_HANDLE, &swp.image_index);
+					// VK_SUBOPTIMAL_KHR shouldn't stop presentation; it is handled at the end
+					if (swp.acquire_result != VK_SUCCESS && swp.acquire_result != VK_SUBOPTIMAL_KHR) {
+						return { expected_error, VkException{ swp.acquire_result } };
+					}
+
+					auto pe_stream = &pe_streams.emplace_back(allocator, swp, acquire_sema);
+					done(node, pe_stream, swp.images[swp.image_index]);
+					image_to_swapchain.emplace(recorder.value_identity(node->type[0].get(), &swp.images[swp.image_index]), &swp);
+					auto& lu = recorder.last_use(node->type[0].get(), &swp.images[swp.image_index]);
+					lu = StreamResourceUse{ { PipelineStageFlagBits::eAllCommands, AccessFlagBits::eNone, ImageLayout::eUndefined }, pe_stream };
+
+					break;
+				}
+				case Node::SLICE: {
+					// half sync
+					recorder.add_sync(base_type(node->slice.src).get(),
+					                  get_dependency_info(node->slice.src, node->slice.src.type().get(), RW::eRead, item.scheduled_stream),
+					                  get_value(node->slice.src));
+					auto composite = node->slice.src;
+					void* composite_v = get_value(composite);
+					auto axis = node->slice.axis;
+					auto start = *get_value<uint64_t>(node->slice.start);
+					auto count = *get_value<uint64_t>(node->slice.count);
+					auto t = Type::stripped(composite.type());
+
+					if (!(node->debug_info && node->debug_info->result_names.size() > 0 && !node->debug_info->result_names[0].empty())) {
+						/*std::string name = fmt::format("{}_{}[{}->{}:{}]",
+						                               Node::kind_to_sv(node->slice.src.node->execution_info->kind),
+						                               node->slice.src.node->execution_info->naming_index,
+						                               node->slice.axis,
+						                               start,
+						                               start + count - 1);
+						current_module->name_output(first(node), name);*/
+					}
+					std::vector<void*, short_alloc<void*>> rets(3, *impl->arena_);
+					rets[0] = impl->arena_->allocate(node->type[0]->size);
+					evaluate_slice(composite, axis, start, count, composite_v, rets[0]);
+					rets[1] = impl->arena_->allocate(node->slice.src.type()->size);
+					memcpy(rets[1], get_value(node->slice.src), node->slice.src.type()->size);
+					rets[2] = impl->arena_->allocate(node->slice.src.type()->size);
+					memcpy(rets[2], get_value(node->slice.src), node->slice.src.type()->size);
+					done(node, node->slice.src.node->execution_info->stream, std::span(rets));
+
+					break;
+				}
+				case Node::CONVERGE: {
+					auto base = node->converge.diverged[0];
+
+					// half sync
+					for (size_t i = 0; i < node->converge.diverged.size(); i++) {
+						auto& div = node->converge.diverged[i];
+						recorder.add_sync(base_type(div).get(), get_dependency_info(div, div.type().get(), RW::eWrite, base.node->execution_info->stream), get_value(div));
+					}
+
+					done(node, base.node->execution_info->stream, get_value(base));
+					break;
+				}
+				case Node::USE: {
+					// half sync
+					auto& div = node->use.src;
+					recorder.add_sync(base_type(div).get(), get_dependency_info(div, div.type().get(), RW::eWrite, div.node->execution_info->stream), get_value(div));
+
+					done(node, div.node->execution_info->stream, get_value(div));
+
+					break;
+				}
+				case Node::LOGICAL_COPY: {
+					// half sync
+					auto& div = node->logical_copy.src;
+					recorder.add_sync(base_type(div).get(), get_dependency_info(div, div.type().get(), RW::eWrite, div.node->execution_info->stream), get_value(div));
+
+					done(node, div.node->execution_info->stream, get_value(div));
+
+					break;
+				}
+				case Node::COMPILE_PIPELINE: {
+					auto& src = node->compile_pipeline.src;
+					auto& pbci = *get_value<PipelineBaseCreateInfo>(src);
+					auto pipeline = allocator.get_context().get_pipeline(pbci);
+
+					done(node, host_stream, pipeline);
+					break;
+				}
+				case Node::GET_ALLOCATION_SIZE: {
+					auto ptr = *get_value<ptr_base>(node->get_allocation_size.ptr);
+					auto size = allocator.get_context().resolve_ptr(ptr).buffer.size;
+
+					done(node, item.scheduled_stream, size);
+					break;
+				}
+				default:
+					assert(0);
+				}
+			}
+			return submit_result;
+		}
 	};
 
 	Result<void> Compiler::execute(Allocator& alloc) {
@@ -1270,9 +1554,6 @@ namespace vuk {
 		host_stream->executor = ctx.get_executor(DomainFlagBits::eHost);
 		recorder.last_modify.at(0)->stream = host_stream;
 
-		std::deque<VkPEStream> pe_streams;
-		std::unordered_map<uint64_t, Swapchain*> image_to_swapchain;
-
 		for (auto& item : impl->item_list) {
 			item->scheduled_stream = recorder.stream_for_domain(item->scheduled_domain);
 			if (!item->scheduled_stream && item->scheduled_domain != DomainFlagBits::eNone) {
@@ -1287,613 +1568,9 @@ namespace vuk {
 
 		Scheduler sched(alloc, impl, recorder);
 
-		// DYNAMO
-		// loop through scheduled items
-		// for each scheduled item, schedule deps
-		// generate barriers and batch breaks as needed by deps
-		// allocate images/buffers as declares are encountered
-		// start/end RPs as needed
-		// inference will still need to run in the beginning, as that is compiletime
-
-		Result<void> submit_result = { expected_value };
-
-		for (auto& pitem : impl->item_list) {
-			auto& item = *pitem;
-			auto node = item.execable;
-			sched.instr_counter++;
-#ifdef VUK_DUMP_EXEC
-			fmt::println("[{:#06x}] {}", sched.instr_counter, exec_to_string(item));
-#endif
-			// we run nodes twice - first time we reenqueue at the front and then put all deps before it
-			// second time we see it, we know that all deps have run, so we can run the node itself
-			switch (node->kind) {
-			case Node::CONSTANT: {
-				sched.done(node, host_stream, node->constant.value);
-				break;
-			}
-			case Node::MATH_BINARY: {
-				auto do_op = [&]<class T>(T, Node* node) -> T {
-					T& a = sched.get_value<T>(node->math_binary.a);
-					T& b = sched.get_value<T>(node->math_binary.b);
-					switch (node->math_binary.op) {
-					case Node::BinOp::ADD:
-						return a + b;
-					case Node::BinOp::SUB:
-						return a - b;
-					case Node::BinOp::MUL:
-						return a * b;
-					case Node::BinOp::DIV:
-						return a / b;
-					case Node::BinOp::MOD:
-						return a % b;
-					}
-					assert(0);
-					return a;
-				};
-				switch (node->type[0]->kind) {
-				case Type::INTEGER_TY: {
-					switch (node->type[0]->scalar.width) {
-					case 32:
-						sched.done(node, host_stream, do_op(uint32_t{}, node));
-						break;
-					case 64:
-						sched.done(node, host_stream, do_op(uint64_t{}, node));
-						break;
-					default:
-						assert(0);
-					}
-					break;
-				}
-				default:
-					assert(0);
-				}
-			} break;
-
-			case Node::CONSTRUCT: { // when encountering a CONSTRUCT, allocate the thing if needed
-				for (auto& arg : node->construct.args) {
-					if (arg.node->kind == Node::PLACEHOLDER) {
-						return { expected_error, RenderGraphException(format_message(Level::eError, item, "': argument not set or inferrable\n")) };
-					}
-					if (node->type[0]->is_bufferlike_view() || node->type[0]->hash_value == current_module->types.builtin_image) {
-						if (arg.node->kind != Node::CONSTANT) {
-							return { expected_error, RenderGraphException(format_message(Level::eError, item, "': argument(s) not constant evaluatable\n")) };
-						}
-					}
-				}
-				assert(node->type[0]->kind != Type::POINTER_TY);
-				if (node->type[0]->hash_value == current_module->types.builtin_swapchain) {
-					/* no-op */
-					sched.done(node, host_stream, sched.get_value(node->construct.args[0]));
-					recorder.init_sync(node->type[0].get(), { to_use(eNone), host_stream }, sched.get_value(first(node)));
-				} else if (node->type[0]->kind == Type::ARRAY_TY) {
-					for (size_t i = 1; i < node->construct.args.size(); i++) {
-						auto arg_ty = node->construct.args[i].type();
-						auto& parm = node->construct.args[i];
-
-						recorder.add_sync(sched.base_type(parm).get(), sched.get_dependency_info(parm, arg_ty.get(), RW::eWrite, nullptr), sched.get_value(parm));
-					}
-
-					auto array_size = node->type[0]->array.count;
-					auto elem_ty = *node->type[0]->array.T;
-					assert(node->construct.args[0].type()->kind == Type::MEMORY_TY);
-
-					char* arr_mem = static_cast<char*>(sched.arena.ensure_space(elem_ty->size * array_size));
-					for (auto i = 0; i < array_size; i++) {
-						auto& elem = node->construct.args[i + 1];
-						assert(Type::stripped(elem.type())->hash_value == elem_ty->hash_value);
-
-						memcpy(arr_mem + i * elem_ty->size, sched.get_value(elem), elem_ty->size);
-					}
-					if (array_size == 0) { // zero-len arrays
-						arr_mem = nullptr;
-					}
-					node->construct.args[0].node->constant.value = arr_mem;
-					sched.done(node, host_stream, (void*)arr_mem);
-				} else if (node->type[0]->hash_value == current_module->types.builtin_sampled_image) {
-					for (size_t i = 1; i < node->construct.args.size(); i++) {
-						auto arg_ty = node->construct.args[i].type();
-						auto& parm = node->construct.args[i];
-
-						recorder.add_sync(sched.base_type(parm).get(), sched.get_dependency_info(parm, arg_ty.get(), RW::eWrite, nullptr), sched.get_value(parm));
-					}
-					auto image = sched.get_value<ImageAttachment>(node->construct.args[1]);
-					auto samp = sched.get_value<SamplerCreateInfo>(node->construct.args[2]);
-					sched.done(node, host_stream, SampledImage{ image, samp });
-				} else if (node->type[0]->kind == Type::UNION_TY) {
-					for (size_t i = 1; i < node->construct.args.size(); i++) {
-						auto arg_ty = node->construct.args[i].type();
-						auto& parm = node->construct.args[i];
-
-						recorder.add_sync(sched.base_type(parm).get(), sched.get_dependency_info(parm, arg_ty.get(), RW::eWrite, nullptr), sched.get_value(parm));
-					}
-					assert(node->construct.args[0].type()->kind == Type::MEMORY_TY);
-
-					char* arr_mem = static_cast<char*>(sched.arena.ensure_space(node->type[0]->size));
-					size_t offset = 0;
-					for (auto i = 0; i < node->construct.args.size() - 1; i++) {
-						auto sz = node->type[0]->composite.types[i]->size;
-						auto& elem = node->construct.args[i + 1];
-						memcpy(arr_mem + offset, sched.get_value(elem), sz);
-						offset += sz;
-					}
-
-					node->construct.args[0].node->constant.value = arr_mem;
-					sched.done(node, host_stream, (void*)arr_mem);
-				} else {
-					for (size_t i = 1; i < node->construct.args.size(); i++) {
-						auto arg_ty = node->construct.args[i].type();
-						auto& parm = node->construct.args[i];
-
-						recorder.add_sync(sched.base_type(parm).get(), sched.get_dependency_info(parm, arg_ty.get(), RW::eWrite, nullptr), sched.get_value(parm));
-					}
-
-					auto result_ty = node->type[0].get();
-					// allocate type
-					void* result = new char[result_ty->size];
-					// loop args and resolve them
-					std::vector<void*> argvals;
-					for (size_t i = 1; i < node->construct.args.size(); i++) {
-						auto& parm = node->construct.args[i];
-						if (parm.node->execution_info) {
-							argvals.push_back(sched.get_value(parm));
-							continue;
-						}
-					}
-
-					result_ty->composite.construct(result, argvals);
-					sched.done(node, host_stream, result);
-					recorder.init_sync(node->type[0].get(),
-					                   { to_use(eNone), host_stream },
-					                   sched.get_value(first(node)),
-					                   false); // TODO: can we figure out when it is safe known aliasing?
-				}
-
-				break;
-			}
-
-			// we can allocate ptrs and generic views
-			// TODO: image ptrs and generic views
-			case Node::ALLOCATE: {
-				auto allocator = node->allocate.allocator ? *node->allocate.allocator : alloc;
-
-				if (node->type[0]->is_bufferlike_view()) {
-					assert(node->type[0]->kind == Type::POINTER_TY);
-					auto pointed_ty = *node->type[0]->pointer.T;
-
-					ptr_base buf;
-					auto bci = sched.get_value<BufferCreateInfo>(node->allocate.src);
-					if (auto res = allocator.allocate_memory(std::span{ static_cast<ptr_base*>(&buf), 1 }, std::span{ &bci, 1 }); !res) {
-						return res;
-					}
-					allocator.deallocate(std::span{ static_cast<ptr_base*>(&buf), 1 });
-					sched.done(node, host_stream, buf);
-				} else if (node->type[0]->hash_value == current_module->types.builtin_image) {
-					auto& attachment = constant<ImageAttachment>(node->construct.args[0]);
-					// set iv type
-					if (attachment.image_view == ImageView{}) {
-						if (attachment.view_type == ImageViewType::eInfer && attachment.layer_count != VK_REMAINING_ARRAY_LAYERS) {
-							if (attachment.image_type == ImageType::e1D) {
-								if (attachment.layer_count == 1) {
-									attachment.view_type = ImageViewType::e1D;
-								} else {
-									attachment.view_type = ImageViewType::e1DArray;
-								}
-							} else if (attachment.image_type == ImageType::e2D) {
-								if (attachment.layer_count == 1) {
-									attachment.view_type = ImageViewType::e2D;
-								} else {
-									attachment.view_type = ImageViewType::e2DArray;
-								}
-							} else if (attachment.image_type == ImageType::e3D) {
-								if (attachment.layer_count == 1) {
-									attachment.view_type = ImageViewType::e3D;
-								} else {
-									attachment.view_type = ImageViewType::e2DArray;
-								}
-							}
-						}
-					}
-					if (!attachment.image) {
-						attachment.usage |= impl->compute_usage(&first(node).link());
-						assert(attachment.usage != ImageUsageFlags{});
-						auto img = allocate_image(allocator, attachment);
-						if (!img) {
-							return img;
-						}
-						attachment.image = **img;
-						if (node->debug_info && node->debug_info->result_names.size() > 0 && !node->debug_info->result_names[0].empty()) {
-							ctx.set_name(attachment.image.image, node->debug_info->result_names[0].c_str());
-						}
-					}
-					sched.done(node, host_stream, attachment);
-				} else {
-					assert(false); // nothing else can be allocated
-				}
-				recorder.init_sync(node->type[0].get(), { to_use(eNone), host_stream }, sched.get_value(first(node)));
-
-				break;
-			}
-
-			case Node::CALL: {
-				auto fn_type = node->call.args[0].type();
-				size_t first_parm = fn_type->kind == Type::OPAQUE_FN_TY ? 1 : 4;
-				auto& args = fn_type->kind == Type::OPAQUE_FN_TY ? fn_type->opaque_fn.args : fn_type->shader_fn.args;
-
-				Stream* dst_stream = item.scheduled_stream; // the domain this call will execute on
-
-				auto vk_rec = dynamic_cast<VkQueueStream*>(dst_stream); // TODO: change this into dynamic dispatch on the Stream
-				assert(vk_rec);
-				// run all the barriers here!
-
-				for (size_t i = first_parm; i < node->call.args.size(); i++) {
-					auto& arg_ty = args[i - first_parm];
-					auto& parm = node->call.args[i];
-					auto& link = parm.link();
-
-					if (arg_ty->kind == Type::IMBUED_TY) {
-						auto access = arg_ty->imbued.access;
-
-						// here: figuring out which allocator to use to make image views for the RP and then making them
-						if (is_framebuffer_attachment(access)) {
-							auto def = eval(parm);
-							auto allocator = def.holds_value() && def->ref && def->ref.node->kind == Node::ALLOCATE && def->ref.node->allocate.allocator
-							                     ? *def->ref.node->allocate.allocator
-							                     : alloc;
-							auto& img_att = sched.get_value<ImageAttachment>(parm);
-							if (img_att.view_type == ImageViewType::eInfer || img_att.view_type == ImageViewType::eCube) { // framebuffers need 2D or 2DArray views
-								if (img_att.layer_count > 1) {
-									img_att.view_type = ImageViewType::e2DArray;
-								} else {
-									img_att.view_type = ImageViewType::e2D;
-								}
-							}
-							if (img_att.image_view.payload == VK_NULL_HANDLE) {
-								auto iv = allocate_image_view(allocator, img_att); // TODO: dropping error
-								img_att.image_view = **iv;
-
-								auto name = std::string("ImageView: RenderTarget ");
-								alloc.get_context().set_name(img_att.image_view.payload, Name(name));
-							}
-						}
-
-						// Write and ReadWrite
-						RW sync_access = (is_write_access(access)) ? RW::eWrite : RW::eRead;
-						recorder.add_sync(sched.base_type(parm).get(), sched.get_dependency_info(parm, arg_ty.get(), sync_access, dst_stream), sched.get_value(parm));
-
-						if (is_framebuffer_attachment(access)) {
-							auto& img_att = sched.get_value<ImageAttachment>(parm);
-							vk_rec->prepare_render_pass_attachment(alloc, img_att);
-						}
-					} else {
-						assert(0);
-					}
-				}
-
-				// make the renderpass if needed!
-				recorder.synchronize_stream(dst_stream);
-				// run the user cb!
-				std::vector<void*, short_alloc<void*>> opaque_rets(*impl->arena_);
-				if (fn_type->kind == Type::OPAQUE_FN_TY) {
-					CommandBuffer cobuf(*dst_stream, ctx, alloc, vk_rec->cbuf);
-					if (!fn_type->debug_info.name.empty()) {
-						auto name_hash = static_cast<uint32_t>(std::hash<std::string>{}(fn_type->debug_info.name));
-						auto name_color = std::array<float, 4>{
-							static_cast<float>(name_hash & 255) / 255.0f,
-							static_cast<float>((name_hash >> 8) & 255) / 255.0f,
-							static_cast<float>((name_hash >> 16) & 255) / 255.0f,
-							1.0,
-						};
-						ctx.begin_region(vk_rec->cbuf, fn_type->debug_info.name.c_str(), name_color);
-					}
-
-					void* rpass_profile_data = nullptr;
-					if (vk_rec->callbacks->on_begin_pass)
-						rpass_profile_data = vk_rec->callbacks->on_begin_pass(vk_rec->callbacks->user_data, fn_type->debug_info.name.c_str(), cobuf, vk_rec->domain);
-
-					if (vk_rec->rp.rpci.attachments.size() > 0) {
-						vk_rec->prepare_render_pass();
-						fill_render_pass_info(vk_rec->rp, 0, cobuf);
-					}
-
-					std::vector<void*, short_alloc<void*>> opaque_args(*impl->arena_);
-					std::vector<void*, short_alloc<void*>> opaque_meta(*impl->arena_);
-					for (size_t i = first_parm; i < node->call.args.size(); i++) {
-						auto& parm = node->call.args[i];
-						opaque_args.push_back(sched.get_value(parm));
-						opaque_meta.push_back(&parm);
-					}
-					opaque_rets.resize(fn_type->opaque_fn.return_types.size());
-					(*fn_type->callback)(cobuf, opaque_args, opaque_meta, opaque_rets);
-					if (cobuf.ongoing_render_pass) {
-						vk_rec->end_render_pass();
-					}
-					if (!fn_type->debug_info.name.empty()) {
-						ctx.end_region(vk_rec->cbuf);
-					}
-					if (vk_rec->callbacks->on_end_pass)
-						vk_rec->callbacks->on_end_pass(vk_rec->callbacks->user_data, rpass_profile_data, cobuf);
-				} else if (fn_type->kind == Type::SHADER_FN_TY) {
-					CommandBuffer cobuf(*dst_stream, ctx, alloc, vk_rec->cbuf);
-					if (!fn_type->debug_info.name.empty()) {
-						auto name_hash = static_cast<uint32_t>(std::hash<std::string>{}(fn_type->debug_info.name));
-						auto name_color = std::array<float, 4>{
-							static_cast<float>(name_hash & 255) / 255.0f,
-							static_cast<float>((name_hash >> 8) & 255) / 255.0f,
-							static_cast<float>((name_hash >> 16) & 255) / 255.0f,
-							1.0,
-						};
-						ctx.begin_region(vk_rec->cbuf, fn_type->debug_info.name.c_str(), name_color);
-					}
-
-					void* rpass_profile_data = nullptr;
-					if (vk_rec->callbacks->on_begin_pass)
-						rpass_profile_data = vk_rec->callbacks->on_begin_pass(vk_rec->callbacks->user_data, fn_type->debug_info.name.c_str(), cobuf, vk_rec->domain);
-
-					if (vk_rec->rp.rpci.attachments.size() > 0) {
-						vk_rec->prepare_render_pass();
-						fill_render_pass_info(vk_rec->rp, 0, cobuf);
-					}
-
-					// call the cbuf directly: bind everything, then dispatch shader
-					opaque_rets.resize(fn_type->shader_fn.return_types.size());
-					auto pbi = reinterpret_cast<PipelineBaseInfo*>(fn_type->shader_fn.shader);
-
-					cobuf.bind_compute_pipeline(pbi);
-
-					auto& flat_bindings = pbi->reflection_info.flat_bindings;
-					for (size_t i = first_parm; i < node->call.args.size(); i++) {
-						auto& parm = node->call.args[i];
-						if (parm.type()->kind != Type::POINTER_TY) {
-							auto binding_idx = i - first_parm;
-							auto& [set, binding] = flat_bindings[binding_idx];
-							auto val = sched.get_value(parm);
-							switch (binding->type) {
-							case DescriptorType::eSampledImage:
-							case DescriptorType::eStorageImage:
-								cobuf.bind_image(set, binding->binding, *reinterpret_cast<ImageAttachment*>(val));
-								break;
-							case DescriptorType::eUniformBuffer:
-							case DescriptorType::eStorageBuffer: {
-								auto& v = *reinterpret_cast<Buffer<>*>(val);
-								cobuf.bind_buffer(set, binding->binding, v);
-								break;
-							}
-							case DescriptorType::eSampler:
-								cobuf.bind_sampler(set, binding->binding, *reinterpret_cast<SamplerCreateInfo*>(val));
-								break;
-							case DescriptorType::eCombinedImageSampler: {
-								auto& si = *reinterpret_cast<SampledImage*>(val);
-								cobuf.bind_image(set, binding->binding, si.ia);
-								cobuf.bind_sampler(set, binding->binding, si.sci);
-								break;
-							}
-							default:
-								assert(0);
-							}
-
-							opaque_rets[binding_idx] = val;
-						}
-					}
-					size_t pc_offset = 0;
-					if (pbi->reflection_info.push_constant_ranges.size() > 0) {
-						auto& pcr = pbi->reflection_info.push_constant_ranges[0];
-						auto base_ty = current_module->types.make_pointer_ty(current_module->types.u32());
-						for (auto parm_idx = 0; parm_idx < pcr.num_members; parm_idx++) {
-							auto& parm = node->call.args[parm_idx + first_parm];
-							auto val = sched.get_value(parm);
-							auto ptr = *reinterpret_cast<ptr_base*>(val);
-							// TODO: check which args are pointers and dereference on host the once that are not
-							cobuf.push_constants(ShaderStageFlagBits::eCompute, pc_offset, ptr);
-							auto binding_idx = parm_idx;
-							opaque_rets[binding_idx] = val;
-							parm_idx++;
-							pc_offset += sizeof(uint64_t);
-						}
-					}
-
-					cobuf.dispatch(constant<uint32_t>(node->call.args[1]), constant<uint32_t>(node->call.args[2]), constant<uint32_t>(node->call.args[3]));
-
-					if (vk_rec->rp.handle) {
-						vk_rec->end_render_pass();
-					}
-					if (!fn_type->debug_info.name.empty()) {
-						ctx.end_region(vk_rec->cbuf);
-					}
-					if (vk_rec->callbacks->on_end_pass)
-						vk_rec->callbacks->on_end_pass(vk_rec->callbacks->user_data, rpass_profile_data, cobuf);
-				} else {
-					assert(0);
-				}
-
-				sched.done(node, dst_stream, std::span(opaque_rets));
-
-				break;
-			}
-			case Node::RELEASE: {
-				auto acqrel = node->rel_acq;
-
-				assert(acqrel && acqrel->status == Signal::Status::eDisarmed);
-
-				Stream* dst_stream;
-				Swapchain* swp = nullptr;
-				if (node->release.dst_domain == DomainFlagBits::ePE) {
-					swp = reinterpret_cast<Swapchain*>(image_to_swapchain.at(recorder.value_identity(node->release.src[0].type().get(), sched.get_value(node->release.src[0]))));
-					auto it = std::find_if(pe_streams.begin(), pe_streams.end(), [=](auto& pe_stream) { return pe_stream.swp == swp; });
-					assert(it != pe_streams.end());
-					dst_stream = &*it;
-				} else if (node->release.dst_domain == DomainFlagBits::eDevice) {
-					dst_stream = item.scheduled_stream;
-				} else {
-					dst_stream = recorder.stream_for_domain(node->release.dst_domain);
-				}
-				assert(dst_stream);
-
-				auto sched_stream = item.scheduled_stream;
-				DomainFlagBits sched_domain = sched_stream->domain;
-				DomainFlagBits dst_domain = dst_stream->domain;
-
-				node->rel_acq->last_use.resize(node->type.size());
-				auto values = new (sched.arena.ensure_space(sizeof(void*) * node->type.size())) void*[node->type.size()];
-
-				for (size_t i = 0; i < node->release.src.size(); i++) {
-					auto parm = node->release.src[i];
-					auto arg_ty = node->type[i];
-					auto di = sched.get_dependency_info(parm, arg_ty.get(), RW::eWrite, dst_stream);
-					auto value = sched.get_value(parm);
-					values[i] = value;
-					recorder.add_sync(sched.base_type(parm).get(), di, value);
-
-					auto last_use = recorder.last_use(sched.base_type(parm).get(), value);
-					// SANITY: if we change streams, then we must've had sync
-					// TODO: remove host exception here
-					assert(di || last_use.stream->domain == DomainFlagBits::eHost || (last_use.stream == item.scheduled_stream));
-					acqrel->last_use.push_back(last_use);
-					if (i == 0) {
-						sched_stream->add_dependent_signal(acqrel);
-					}
-				}
-
-				if (acqrel && sched_domain == DomainFlagBits::eHost) {
-					acqrel->status = Signal::Status::eHostAvailable;
-				}
-
-				if (dst_domain == DomainFlagBits::ePE) {
-					assert(sched_stream->domain & DomainFlagBits::eDevice);
-					assert(swp);
-					auto present_result = dynamic_cast<VkQueueStream*>(sched_stream)->present(*swp);
-					if (!present_result) {
-						submit_result = std::move(present_result);
-					}
-					if (acqrel) {
-						acqrel->status = Signal::Status::eHostAvailable; // TODO: ???
-					}
-				} else {
-					sched_stream->submit();
-				}
-				host_stream->submit();
-
-				sched.done(node, item.scheduled_stream, std::span(values, node->type.size()));
-				break;
-			}
-			case Node::ACQUIRE: {
-				auto acqrel = node->rel_acq;
-				assert(acqrel && acqrel->status != Signal::Status::eDisarmed);
-
-				auto src_stream = acqrel->source.executor ? recorder.stream_for_executor(acqrel->source.executor) : recorder.stream_for_domain(DomainFlagBits::eHost);
-				for (size_t i = 0; i < node->acquire.values.size(); i++) {
-					auto& link = node->links[i];
-
-					StreamResourceUse src_use = { acqrel->last_use[i], src_stream };
-					recorder.init_sync(node->type[i].get(), src_use, node->acquire.values[i], false);
-				}
-
-				sched.done(node, src_stream);
-				break;
-			}
-
-			case Node::ACQUIRE_NEXT_IMAGE: {
-				auto& swp = *sched.get_value<Swapchain*>(node->acquire_next_image.swapchain);
-				VkSemaphore acquire_sema;
-				alloc.allocate_semaphores(std::span{ &acquire_sema, 1 });
-				alloc.deallocate(std::span{ &acquire_sema, 1 });
-				swp.acquire_result = ctx.vkAcquireNextImageKHR(ctx.device, swp.swapchain, UINT64_MAX, acquire_sema, VK_NULL_HANDLE, &swp.image_index);
-				// VK_SUBOPTIMAL_KHR shouldn't stop presentation; it is handled at the end
-				if (swp.acquire_result != VK_SUCCESS && swp.acquire_result != VK_SUBOPTIMAL_KHR) {
-					return { expected_error, VkException{ swp.acquire_result } };
-				}
-
-				auto pe_stream = &pe_streams.emplace_back(alloc, swp, acquire_sema);
-				sched.done(node, pe_stream, swp.images[swp.image_index]);
-				image_to_swapchain.emplace(recorder.value_identity(node->type[0].get(), &swp.images[swp.image_index]), &swp);
-				auto& lu = recorder.last_use(node->type[0].get(), &swp.images[swp.image_index]);
-				lu = StreamResourceUse{ { PipelineStageFlagBits::eAllCommands, AccessFlagBits::eNone, ImageLayout::eUndefined }, pe_stream };
-
-				break;
-			}
-			case Node::SLICE: {
-				// half sync
-				recorder.add_sync(sched.base_type(node->slice.src).get(),
-				                  sched.get_dependency_info(node->slice.src, node->slice.src.type().get(), RW::eRead, item.scheduled_stream),
-				                  sched.get_value(node->slice.src));
-				auto composite = node->slice.src;
-				void* composite_v = sched.get_value(composite);
-				auto axis = node->slice.axis;
-				auto start = sched.get_value<uint64_t>(node->slice.start);
-				auto count = sched.get_value<uint64_t>(node->slice.count);
-				auto t = Type::stripped(composite.type());
-
-				if (!(node->debug_info && node->debug_info->result_names.size() > 0 && !node->debug_info->result_names[0].empty())) {
-					/*std::string name = fmt::format("{}_{}[{}->{}:{}]",
-					                               Node::kind_to_sv(node->slice.src.node->execution_info->kind),
-					                               node->slice.src.node->execution_info->naming_index,
-					                               node->slice.axis,
-					                               start,
-					                               start + count - 1);
-					current_module->name_output(first(node), name);*/
-				}
-				std::vector<void*, short_alloc<void*>> rets(3, *impl->arena_);
-				rets[0] = impl->arena_->allocate(node->type[0]->size);
-				evaluate_slice(composite, axis, start, count, composite_v, rets[0]);
-				rets[1] = impl->arena_->allocate(node->slice.src.type()->size);
-				memcpy(rets[1], sched.get_value(node->slice.src), node->slice.src.type()->size);
-				rets[2] = impl->arena_->allocate(node->slice.src.type()->size);
-				memcpy(rets[2], sched.get_value(node->slice.src), node->slice.src.type()->size);
-				sched.done(node, node->slice.src.node->execution_info->stream, std::span(rets));
-
-				break;
-			}
-			case Node::CONVERGE: {
-				auto base = node->converge.diverged[0];
-
-				// half sync
-				for (size_t i = 0; i < node->converge.diverged.size(); i++) {
-					auto& div = node->converge.diverged[i];
-					recorder.add_sync(sched.base_type(div).get(),
-					                  sched.get_dependency_info(div, div.type().get(), RW::eWrite, base.node->execution_info->stream),
-					                  sched.get_value(div));
-				}
-
-				sched.done(node, base.node->execution_info->stream, sched.get_value(base));
-				break;
-			}
-			case Node::USE: {
-				// half sync
-				auto& div = node->use.src;
-				recorder.add_sync(
-				    sched.base_type(div).get(), sched.get_dependency_info(div, div.type().get(), RW::eWrite, div.node->execution_info->stream), sched.get_value(div));
-
-				sched.done(node, div.node->execution_info->stream, sched.get_value(div));
-
-				break;
-			}
-			case Node::LOGICAL_COPY: {
-				// half sync
-				auto& div = node->logical_copy.src;
-				recorder.add_sync(
-				    sched.base_type(div).get(), sched.get_dependency_info(div, div.type().get(), RW::eWrite, div.node->execution_info->stream), sched.get_value(div));
-
-				sched.done(node, div.node->execution_info->stream, sched.get_value(div));
-
-				break;
-			}
-			case Node::COMPILE_PIPELINE: {
-				auto& src = node->compile_pipeline.src;
-				auto& pbci = sched.get_value<PipelineBaseCreateInfo>(src);
-				auto pipeline = alloc.get_context().get_pipeline(pbci);
-
-				sched.done(node, host_stream, pipeline);
-				break;
-			}
-			case Node::GET_ALLOCATION_SIZE: {
-				auto ptr = sched.get_value<ptr_base>(node->get_allocation_size.ptr);
-				auto size = alloc.get_context().resolve_ptr(ptr).buffer.size;
-
-				sched.done(node, item.scheduled_stream, size);
-				break;
-			}
-			default:
-				assert(0);
-			}
+		auto submit_result = sched.run();
+		if (!submit_result) {
+			return submit_result;
 		}
 
 		// post-run: checks and cleanup
@@ -1917,7 +1594,7 @@ namespace vuk {
 			// get final value
 			Ref final_use = lr.undef_link->def;
 			assert(!final_use.node->rel_acq || final_use.node->rel_acq->status != Signal::Status::eDisarmed);
-			lr.last_value = sched.get_value(final_use);
+			lr.last_value = get_value(final_use);
 			lr.last_use = recorder.last_use(Type::stripped(final_use.type()).get(), lr.last_value);
 
 			// get final signal

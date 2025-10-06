@@ -1,6 +1,7 @@
 #pragma once
 
 #include "vuk/runtime/vk/Image.hpp"
+#include <fmt/format.h>
 #include <span>
 
 namespace vuk {
@@ -150,6 +151,53 @@ namespace vuk {
 
 		std::strong_ordering operator<=>(const BufferCreateInfo&) const noexcept = default;
 	};
+
+	template<class T>
+	struct member_type_helper;
+
+	template<class C, class T>
+	struct member_type_helper<T C::*> {
+		using type = C;
+	};
+
+	template<class T>
+	struct member_type : member_type_helper<typename std::remove_cvref<T>::type> {};
+
+	// Helper type
+	template<class T>
+	using member_type_t = member_type<T>::type;
+
+	template<auto MemberPtr>
+	struct member_placeholder {
+		/// @brief Returns the placeholder value for this member.
+		static constexpr auto value = member_type_t<decltype(MemberPtr)>{}.*MemberPtr;
+	};
+
+	template<>
+	struct member_placeholder<&BufferCreateInfo::alignment> {
+		static constexpr VkDeviceSize value = 0;
+	};
+
+	inline std::string_view format_as(const MemoryUsage& foo) {
+		switch (foo) {
+		case MemoryUsage::eUnset:
+			return "?";
+		case MemoryUsage::eGPUonly:
+			return "GPU";
+		case MemoryUsage::eCPUonly:
+			return "CPU";
+		case MemoryUsage::eCPUtoGPU:
+			return "C>G";
+		case MemoryUsage::eGPUtoCPU:
+			return "G>C";
+		default:
+			return "???";
+		}
+	}
+
+	inline std::string format_as(const BufferCreateInfo& foo) {
+		return fmt::format("BufferCreateInfo{{{}, {}}}", foo.memory_usage, foo.size);
+	}
 
 	/// @brief A contiguous portion of GPU-visible memory
 	// fixed extent
@@ -307,6 +355,11 @@ namespace vuk {
 		std::strong_ordering operator<=>(const view<BufferLike<Type>, dynamic_extent>&) const noexcept = default;
 	};
 
+	template<class Type>
+	std::string format_as(const view<BufferLike<Type>, dynamic_extent>& foo) {
+		return fmt::format("buffer[{:x}:{}]", foo.ptr.device_address, foo.sz_bytes);
+	}
+
 	template<class T, size_t Extent>
 	struct is_view_type<view<T, Extent>> {
 		static constexpr bool value = true;
@@ -372,8 +425,8 @@ namespace std {
 	template<class T, size_t Extent>
 	struct hash<vuk::view<vuk::BufferLike<T>, Extent>> {
 		size_t operator()(vuk::view<vuk::BufferLike<T>, Extent> const& x) const {
-			uint32_t v = std::hash<uint32_t>()(x.ptr);
-			hash_combine_direct(v, std::hash<uint32_t>(x.sz_bytes));
+			uint32_t v = std::hash<uint32_t>()(x.ptr.device_address);
+			hash_combine_direct(v, std::hash<uint32_t>()(x.sz_bytes));
 			return v;
 		}
 	};

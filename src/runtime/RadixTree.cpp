@@ -172,6 +172,7 @@ namespace vuk {
 	template class RadixTree<int>;
 	template class RadixTree<std::pair<size_t, size_t>>;
 	template class RadixTree<bool>;
+	template class RadixTree<void*>;
 	template class RadixTree<AllocationEntry>;
 	template class RadixTree<ViewEntry>;
 } // namespace vuk

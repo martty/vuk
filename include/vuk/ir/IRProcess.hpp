@@ -1,12 +1,13 @@
 #pragma once
 
-#include "ResourceUse.hpp"
-#include "vuk/IR.hpp"
+#include "vuk/ir/IR.hpp"
 #include "vuk/RelSpan.hpp"
+#include "vuk/ResourceUse.hpp"
 #include "vuk/ShortAlloc.hpp"
 #include "vuk/SourceLocation.hpp"
 
 #include <deque>
+#include <fmt/format.h>
 #include <memory_resource>
 #include <robin_hood.h>
 #include <unordered_set>
@@ -18,6 +19,16 @@ namespace vuk {
 	enum class RW { eRead, eWrite };
 
 #define INIT(x) x(decltype(x)::allocator_type(*arena_))
+
+	struct IRPass;
+
+	using ir_pass_factory = std::unique_ptr<IRPass> (*)(struct RGCImpl& impl, Runtime& runtime, std::pmr::polymorphic_allocator<std::byte> allocator);
+	template<class T>
+	ir_pass_factory make_ir_pass() {
+		return +[](struct RGCImpl& impl, Runtime& runtime, std::pmr::polymorphic_allocator<std::byte> allocator) {
+			return std::unique_ptr<IRPass>(new T(impl, runtime, allocator));
+		};
+	}
 
 	struct RGCImpl {
 		RGCImpl() : arena_(new arena(4 * 1024 * 1024)), pool(std::make_unique<std::pmr::unsynchronized_pool_resource>()), mbr(pool.get()) {}
@@ -40,6 +51,7 @@ namespace vuk {
 		std::pmr::vector<ChainLink*> child_chains;
 
 		std::vector<std::pair<Resolver::BufferWithOffsetAndSize, ChainLink*>> bufs;
+		std::pmr::vector<Node*> new_nodes;
 
 		std::span<ScheduledItem*> transfer_passes, compute_passes, graphics_passes;
 
@@ -112,46 +124,21 @@ namespace vuk {
 			}
 		}
 
-		template<class T>
-		T& get_value(Ref parm) {
-			return *reinterpret_cast<T*>(get_value(parm));
-		};
-
-		void* get_value(Ref parm) {
-			switch (parm.node->kind) {
-			case Node::CONSTANT:
-				return parm.node->constant.value;
-			case Node::ACQUIRE:
-				return parm.node->acquire.values[parm.index];
-			default:
-				assert(0);
-				return nullptr;
-			}
-		}
-
-		std::span<void*> get_values(Node* node) {
-			assert(node->kind == Node::ACQUIRE);
-			return node->acquire.values;
-		}
-
 		Result<void> build_nodes();
+		Result<void> build_links_implicit(Runtime& runtime, std::pmr::vector<Node*>& working_set, std::pmr::polymorphic_allocator<std::byte> allocator);
 		Result<void> build_links(Runtime& runtime, std::vector<Node*>& working_set, std::pmr::polymorphic_allocator<std::byte> allocator);
-		template<class It>
-		Result<void> build_links(Runtime& runtime,
-		                         IRModule* module,
-		                         It start,
-		                         It end,
-		                         std::pmr::vector<Ref>& pass_reads,
-		                         std::pmr::vector<ChainLink*>& child_chains,
-		                         std::pmr::polymorphic_allocator<std::byte> allocator);
 		Result<void> implicit_linking(Allocator& alloc, IRModule* module, std::pmr::polymorphic_allocator<std::byte> allocator);
 		Result<void> build_sync();
-		Result<void> reify_inference();
 		Result<void> collect_chains();
+		Result<void> linearize(Runtime& runtime, std::pmr::polymorphic_allocator<std::byte> allocator);
 
 		ImageUsageFlags compute_usage(const ChainLink* head);
 
 		ProfilingCallbacks callbacks;
+
+		std::vector<ir_pass_factory> ir_passes;
+
+		Result<void> run_passes(Runtime& runtime, std::pmr::polymorphic_allocator<std::byte> allocator);
 	};
 #undef INIT
 
@@ -318,316 +305,36 @@ namespace vuk {
 		}
 	};
 
-	inline Result<RefOrValue, CannotBeConstantEvaluated> eval(Ref ref);
-
-	inline void set_if_available(void* dst, Ref& ref) {
-		auto res = eval(ref);
-		if (res.holds_value() && !res->is_ref) {
-			if (ref.type()->size == 8) {
-				uint64_t t;
-				memcpy(&t, res->value, 8);
-				if (t == ~(0ULL)) {
-					return;
-				}
-			} else if (ref.type()->size == 4) {
-				uint32_t t;
-				memcpy(&t, res->value, 4);
-				if (t == ~(0u)) {
-					return;
-				}
-			} else if (ref.type()->size == 2) {
-				uint16_t t;
-				memcpy(&t, res->value, 2);
-				if (t == USHRT_MAX) {
-					return;
-				}
-			} else if (ref.type()->size == 1) {
-				uint8_t t;
-				memcpy(&t, res->value, 1);
-				if (t == UCHAR_MAX) {
-					return;
-				}
-			} else {
-				assert(0);
-			}
-			memcpy(dst, res->value, ref.type()->size);
-			if (ref.node->kind != Node::CONSTANT) {
-				ref = current_module->make_constant(ref.type(), res->value);
-			}
-		}
+	inline auto format_as(Ref f) {
+		return std::string("\"") + fmt::to_string(fmt::ptr(f.node)) + "@" + fmt::to_string(f.index) + std::string("\"");
 	}
 
-	inline void evaluate_slice(Ref composite, uint8_t axis, uint64_t start, uint64_t count, void* composite_v, void* dst) {
-		auto t = Type::stripped(composite.type());
-		if (axis == Node::NamedAxis::FIELD) {
-			assert(t->kind == Type::COMPOSITE_TY || t->kind == Type::UNION_TY);
-			assert(count == 1);
-			auto sliced = static_cast<std::byte*>(composite_v);
-			auto offset = t->offsets[start];
-			memcpy(dst, sliced + offset, t->composite.types[start]->size);
-			return;
+	inline constexpr void access_to_usage(ImageUsageFlags& usage, Access acc) {
+		if (acc & (eMemoryRW | eColorRW)) {
+			usage |= ImageUsageFlagBits::eColorAttachment;
 		}
-		if (t->kind == Type::ARRAY_TY) {
-			assert(axis == 0);
-			assert(count == 1);
-			auto sliced = static_cast<std::byte*>(composite_v);
-			memcpy(dst, sliced + t->array.stride * start, (*t->array.T)->size);
-			return;
+		if (acc & (eMemoryRW | eFragmentSampled | eComputeSampled | eRayTracingSampled | eVertexSampled)) {
+			usage |= ImageUsageFlagBits::eSampled;
 		}
-		memcpy(dst, composite_v, t->size);
-		if (t->hash_value == current_module->types.builtin_image) {
-			if (axis == Node::NamedAxis::MIP) {
-				auto& sliced = *static_cast<ImageAttachment*>(dst);
-				sliced.base_level += start;
-				if (count != Range::REMAINING) {
-					sliced.level_count = count;
-				}
-			} else if (axis == Node::NamedAxis::LAYER) {
-				auto& sliced = *static_cast<ImageAttachment*>(dst);
-				sliced.base_layer += start;
-				if (count != Range::REMAINING) {
-					sliced.layer_count = count;
-				}
-			} else {
-				assert(0);
-			}
-		} else if (t->is_bufferlike_view()) {
-			if (axis == 0) {
-				auto& sliced = *static_cast<Buffer<>*>(dst);
-				sliced.ptr += start;
-				if (count != Range::REMAINING) {
-					sliced.sz_bytes = count;
-				}
-			} else {
-				assert(0);
-			}
-		} else {
-			assert(0);
+		if (acc & (eMemoryRW | eDepthStencilRW)) {
+			usage |= ImageUsageFlagBits::eDepthStencilAttachment;
 		}
-	}
-
-	template<class F, class... Args>
-	auto eval_with_type(const std::shared_ptr<Type>& t, F&& f, Args... args) {
-		switch (t->kind) {
-		case Type::INTEGER_TY: {
-			switch (t->scalar.width) {
-			case 32:
-				return f(*reinterpret_cast<uint32_t*>(args)...);
-				break;
-			case 64:
-				return f(*reinterpret_cast<uint64_t*>(args)...);
-				break;
-			default:
-				assert(0);
-			}
-			break;
+		if (acc & (eMemoryRW | eTransferRead)) {
+			usage |= ImageUsageFlagBits::eTransferSrc;
 		}
-		default:
-			break;
+		if (acc & (eMemoryRW | eTransferWrite)) {
+			usage |= ImageUsageFlagBits::eTransferDst;
 		}
-	}
-
-	inline void* eval_binop(Node::BinOp op, const std::shared_ptr<Type>& t, void* a, void* b) {
-		auto result = (void*)new char[t->size];
-		switch (op) {
-		case Node::BinOp::ADD: {
-			eval_with_type(
-			    t,
-			    [&](auto a, auto b) {
-				    auto c = a + b;
-				    memcpy(result, &c, sizeof(c));
-			    },
-			    a,
-			    b);
-		} break;
-		case Node::BinOp::SUB: {
-			eval_with_type(
-			    t,
-			    [&](auto a, auto b) {
-				    auto c = a - b;
-				    memcpy(result, &c, sizeof(c));
-			    },
-			    a,
-			    b);
-		} break;
-		case Node::BinOp::MUL: {
-			eval_with_type(
-			    t,
-			    [&](auto a, auto b) {
-				    auto c = a * b;
-				    memcpy(result, &c, sizeof(c));
-			    },
-			    a,
-			    b);
-		} break;
-		case Node::BinOp::DIV: {
-			eval_with_type(
-			    t,
-			    [&](auto a, auto b) {
-				    auto c = a / b;
-				    memcpy(result, &c, sizeof(c));
-			    },
-			    a,
-			    b);
-		} break;
-		case Node::BinOp::MOD: {
-			eval_with_type(
-			    t,
-			    [&](auto a, auto b) {
-				    auto c = a % b;
-				    memcpy(result, &c, sizeof(c));
-			    },
-			    a,
-			    b);
-		} break;
+		if (acc & (eMemoryRW | eFragmentRW | eComputeRW | eRayTracingRW)) {
+			usage |= ImageUsageFlagBits::eStorage;
 		}
-		return result;
-	}
-
-	inline Result<RefOrValue, CannotBeConstantEvaluated> eval(Ref ref) {
-		// can always operate on defs, values are ~immutable
-		if (ref.node->links) {
-			auto link = &ref.link();
-			if (link->def) {
-				while (link->prev && link->prev->def) {
-					link = link->prev;
-				}
-				ref = link->def;
-			}
-		}
-
-		switch (ref.node->kind) {
-		case Node::CONSTANT: {
-			return { expected_value, RefOrValue::from_value(ref.node->constant.value) };
-		}
-		case Node::CONSTRUCT: {
-			if (ref.type()->is_bufferlike_view()) {
-				auto& bound = constant<BufferCreateInfo>(ref.node->construct.args[0]);
-				set_if_available(&bound.size, ref.node->construct.args[1]);
-				return { expected_value, RefOrValue::from_value(&bound, ref) };
-			} else if (ref.type()->hash_value == current_module->types.builtin_image) {
-				auto& attachment = constant<ImageAttachment>(ref.node->construct.args[0]);
-				set_if_available(&attachment.extent.width, ref.node->construct.args[1]);
-				set_if_available(&attachment.extent.height, ref.node->construct.args[2]);
-				set_if_available(&attachment.extent.depth, ref.node->construct.args[3]);
-				set_if_available(&attachment.format, ref.node->construct.args[4]);
-				set_if_available(&attachment.sample_count, ref.node->construct.args[5]);
-				set_if_available(&attachment.base_layer, ref.node->construct.args[6]);
-				set_if_available(&attachment.layer_count, ref.node->construct.args[7]);
-				set_if_available(&attachment.base_level, ref.node->construct.args[8]);
-				set_if_available(&attachment.level_count, ref.node->construct.args[9]);
-				return { expected_value, RefOrValue::from_value(&attachment, ref) };
-			} else {
-				return { expected_value, RefOrValue::from_ref(ref) };
-			}
-		}
-		case Node::ACQUIRE_NEXT_IMAGE: {
-			auto swp_ = eval(ref.node->acquire_next_image.swapchain);
-			if (!swp_) {
-				return swp_;
-			}
-			auto& swp = *swp_;
-			assert(swp.is_ref && swp.ref.node->kind == Node::CONSTRUCT);
-			auto arr = swp.ref.node->construct.args[1]; // array of images
-			assert(arr.node->kind == Node::CONSTRUCT);
-			auto elem = arr.node->construct.args[1]; // first image
-			return eval(elem);
-		}
-		case Node::ACQUIRE:
-			return { expected_value, RefOrValue::from_value(ref.node->acquire.values[ref.index]) };
-		case Node::CALL: {
-			auto t = ref.type();
-			if (t->kind != Type::ALIASED_TY) {
-				return { expected_control, CannotBeConstantEvaluated{ ref } };
-			}
-			return eval(ref.node->call.args[t->aliased.ref_idx]);
-		}
-		case Node::MATH_BINARY: {
-			auto& math_binary = ref.node->math_binary;
-
-			auto a_ = eval(math_binary.a);
-			if (!a_) {
-				return a_;
-			}
-			auto& a_rov = *a_;
-			if (a_rov.is_ref) {
-				return { expected_control, CannotBeConstantEvaluated{ ref } };
-			}
-			auto a = a_rov.value;
-
-			auto b_ = eval(math_binary.b);
-			if (!b_) {
-				return b_;
-			}
-			auto& b_rov = *b_;
-			if (b_rov.is_ref) {
-				return { expected_control, CannotBeConstantEvaluated{ ref } };
-			}
-			auto b = b_rov.value;
-			return { expected_value, RefOrValue::adopt_value(eval_binop(math_binary.op, ref.type(), a, b)) };
-
-		} break;
-		case Node::SLICE: {
-			if (ref.index == 1) {
-				return eval(ref.node->slice.src);
-			}
-			auto composite_ = eval(ref.node->slice.src);
-			if (!composite_) {
-				return composite_;
-			}
-			auto& composite = *composite_;
-			auto start_ = eval(ref.node->slice.start);
-			if (!start_) {
-				return start_;
-			}
-			auto& start = *start_;
-			if (start.is_ref) {
-				return { expected_control, CannotBeConstantEvaluated{ ref } };
-			}
-			auto index = *static_cast<uint64_t*>(start.value);
-			auto count_ = eval(ref.node->slice.count);
-			if (!count_) {
-				return count_;
-			}
-			auto& count = *count_;
-			if (count.is_ref) {
-				return { expected_control, CannotBeConstantEvaluated{ ref } };
-			}
-			auto countv = *static_cast<uint64_t*>(count.value);
-
-			auto& slice = ref.node->slice;
-			auto type = Type::stripped(ref.node->slice.src.type());
-
-			if (composite.is_ref) {
-				if (slice.axis == Node::NamedAxis::FIELD) {
-					if (composite.ref.node->kind == Node::CONSTRUCT) {
-						return eval(composite.ref.node->construct.args[index + 1]);
-					} else {
-						return { expected_control, CannotBeConstantEvaluated{ ref } };
-					}
-				} else {
-					if (composite.ref.node->kind == Node::CONSTRUCT && type->kind == Type::ARRAY_TY) {
-						return eval(composite.ref.node->construct.args[index + 1]);
-					}
-				}
-			} else {
-				auto retv = RefOrValue::adopt_value(new char[ref.node->type[0]->size], composite.ref);
-				evaluate_slice(ref.node->slice.src, slice.axis, index, countv, composite.value, retv.value);
-				return { expected_value, std::move(retv) };
-			}
-
-			return { expected_control, CannotBeConstantEvaluated{ ref } };
-		}
-		default:
-			return { expected_control, CannotBeConstantEvaluated{ ref } };
-		}
-		assert(0);
-	}
+	};
 
 	// errors and printing
 	enum class Level { eError };
 
 	std::string format_source_location(Node* node);
+	std::string domain_to_string(DomainFlagBits domain);
 
 	void parm_to_string(Ref parm, std::string& msg);
 	void print_args_to_string(std::span<Ref> args, std::string& msg);
@@ -637,6 +344,7 @@ namespace vuk {
 	std::vector<std::string_view> arg_names(Type* t);
 
 	std::string format_graph_message(Level level, Node* node, std::string err);
+	std::string format_message(Level level, ScheduledItem& item, std::string err);
 
 	namespace errors { /*
 		RenderGraphException make_unattached_resource_exception(PassInfo& pass_info, Resource& resource);
@@ -644,3 +352,11 @@ namespace vuk {
 		RenderGraphException make_cbuf_references_undeclared_resource(PassInfo& pass_info, Resource::Type type, Name name);*/
 	} // namespace errors
 }; // namespace vuk
+
+#define VUK_ENABLE_ICE
+
+#ifndef VUK_ENABLE_ICE
+#define VUK_ICE(expression) (void)((!!(expression)) || assert(expression))
+#else
+#define VUK_ICE(expression) (void)((!!(expression)) || (GraphDumper::end_cluster(), GraphDumper::end_graph(), false) || (assert(expression), false))
+#endif

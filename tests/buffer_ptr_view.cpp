@@ -327,6 +327,10 @@ struct Bigbog {
 	uint32_t a_pilkshake;
 };
 
+std::string format_as(const Bigbog&) {
+	return "bigbog";
+}
+
 ADAPT_STRUCT_FOR_IR(Bigbog, the_boof, the_beef, a_milkshake, a_pilkshake);
 
 namespace vuk {

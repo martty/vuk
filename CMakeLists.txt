@@ -340,8 +340,15 @@ target_compile_features(vuk PUBLIC cxx_std_20)
 target_sources(vuk PRIVATE
 	src/Format.cpp
 	src/Name.cpp
-  src/IR.cpp
-	src/IRPasses.cpp
+	src/IR.cpp
+	src/IRDump.cpp
+	src/irpasses/LinkBuilding.cpp
+	src/irpasses/ReifyInference.cpp
+	src/irpasses/ConstantFolding.cpp
+	src/irpasses/DuplicatedResourceRef.cpp
+	src/irpasses/ForcedConvergence.cpp
+	src/irpasses/Linearization.cpp
+	src/irpasses/IRPasses.cpp
 	src/GraphDumper.cpp
 
 	src/runtime/Cache.cpp

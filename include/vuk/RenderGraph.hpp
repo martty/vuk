@@ -3,9 +3,9 @@
 #include "vuk/ErasedTupleAdaptor.hpp"
 #include "vuk/Hash.hpp"
 #include "vuk/ImageAttachment.hpp"
-#include "vuk/IR.hpp"
-#include "vuk/IRCppSupport.hpp"
-#include "vuk/IRCppTypes.hpp"
+#include "vuk/ir/IR.hpp"
+#include "vuk/ir/IRCppSupport.hpp"
+#include "vuk/ir/IRCppTypes.hpp"
 #include "vuk/Result.hpp"
 #include "vuk/runtime/vk/Image.hpp"
 #include "vuk/runtime/vk/Pipeline.hpp"
@@ -546,13 +546,6 @@ namespace vuk {
 		/// @brief retrieve nodes in the scheduled order
 		std::span<struct ScheduledItem*> get_scheduled_nodes() const;
 
-		template<class T>
-		T& get_value(Ref parm) {
-			return *reinterpret_cast<T*>(get_value(parm));
-		};
-
-		void* get_value(Ref parm);
-
 		Result<void> execute(Allocator& allocator);
 
 	private:
@@ -561,17 +554,8 @@ namespace vuk {
 		// internal passes
 		void queue_inference();
 		void pass_partitioning();
-		void resource_linking();
-		void render_pass_assignment();
-		Result<void> linearize();
 		Result<void> validate_read_undefined();
-		Result<void> validate_duplicated_resource_ref();
 		Result<void> validate_same_argument_different_access();
-
-		template<class Pred>
-		Result<void> rewrite(Pred pred);
-
-		void fill_render_pass_info(struct RenderPassInfo& rpass, const size_t& i, class CommandBuffer& cobuf);
 	};
 } // namespace vuk
 

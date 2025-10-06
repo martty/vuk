@@ -3,12 +3,12 @@
 #include "vuk/ImageAttachment.hpp"
 #include "vuk/RelSpan.hpp"
 #include "vuk/ResourceUse.hpp"
+#include "vuk/runtime/vk/Allocation.hpp"
 #include "vuk/runtime/vk/VkSwapchain.hpp" //TODO: leaking vk
 #include "vuk/ShortAlloc.hpp"
 #include "vuk/SourceLocation.hpp"
 #include "vuk/SyncPoint.hpp"
 #include "vuk/Types.hpp"
-#include "vuk/runtime/vk/Allocation.hpp"
 
 #include <atomic>
 #include <deque>
@@ -72,13 +72,13 @@ namespace vuk {
 				std::span<std::shared_ptr<Type>> args;
 				std::span<std::shared_ptr<Type>> return_types;
 				size_t hash_code;
-				int execute_on;
+				DomainFlags execute_on;
 			} opaque_fn;
 			struct {
 				void* shader;
 				std::span<std::shared_ptr<Type>> args;
 				std::span<std::shared_ptr<Type>> return_types;
-				int execute_on;
+				DomainFlags execute_on;
 			} shader_fn;
 			struct {
 				std::shared_ptr<Type>* T;
@@ -95,6 +95,7 @@ namespace vuk {
 				void* (*get)(void* value, size_t index) = nullptr;
 				bool (*is_default)(void* value, size_t index) = nullptr;
 				void (*destroy)(void* dst) = nullptr;
+				void (*format_to)(void* value, std::string& dst) = nullptr;
 			} composite;
 		};
 
@@ -377,6 +378,7 @@ namespace vuk {
 		size_t index;
 		AcquireRelease* rel_acq = nullptr;
 		bool held = false;
+		DomainFlags compute_class = DomainFlagBits::eDevice;
 
 		template<uint8_t c>
 		struct Fixed {
@@ -474,7 +476,8 @@ namespace vuk {
 			struct : Fixed<1> {
 				Ref dst;
 				Ref value;
-				size_t index;
+				int index;
+				bool set_on_allocate = false;
 			} set;
 			struct : Fixed<1> {
 				Ref src;
@@ -596,22 +599,6 @@ namespace vuk {
 			return { r, std::unique_ptr<char[]>(static_cast<char*>(v)), v, false };
 		}
 	};
-
-	Result<RefOrValue, CannotBeConstantEvaluated> eval(Ref ref);
-
-	template<class T>
-	  requires(!std::is_pointer_v<T>)
-	Result<T, CannotBeConstantEvaluated> eval(Ref ref) {
-		auto res = eval(ref);
-		if (!res) {
-			return res;
-		}
-		if (res.holds_value() && !res->is_ref) {
-			return { expected_value, *static_cast<T*>(res->value) };
-		} else {
-			return { expected_control, CannotBeConstantEvaluated{ ref } };
-		}
-	}
 
 	template<class T, size_t size>
 	struct InlineArena {
@@ -808,7 +795,7 @@ namespace vuk {
 					                 .opaque_fn = { .args = std::span{ arg_ptr_ret_ty_ptr.data(), args.size() },
 					                                .return_types = std::span{ arg_ptr_ret_ty_ptr.data() + args.size(), ret_types.size() },
 					                                .hash_code = hash_code,
-					                                .execute_on = execute_on.m_mask } };
+					                                .execute_on = execute_on } };
 				t->callback = std::make_unique<UserCallbackType>(std::move(callback));
 				t->child_types = std::move(arg_ptr_ret_ty_ptr);
 				t->debug_info = allocate_type_debug_info(std::string(name));
@@ -829,7 +816,7 @@ namespace vuk {
 					                 .shader_fn = { .shader = shader,
 					                                .args = std::span{ arg_ptr_ret_ty_ptr.data(), args.size() },
 					                                .return_types = std::span{ arg_ptr_ret_ty_ptr.data() + args.size(), ret_types.size() },
-					                                .execute_on = execute_on.m_mask } };
+					                                .execute_on = execute_on } };
 				t->child_types = std::move(arg_ptr_ret_ty_ptr);
 				t->debug_info = allocate_type_debug_info(std::string(name));
 				return emplace_type(std::shared_ptr<Type>(t));
@@ -1040,6 +1027,12 @@ namespace vuk {
 					// nothing to do
 				} else if (t->kind == Type::MEMORY_TY) {
 					// nothing to do
+				} else if (t->kind == Type::FLOAT_TY) {
+					// nothing to do
+				} else if (t->kind == Type::POINTER_TY) {
+					// nothing to do
+				} else if (t->kind == Type::VOID_TY) {
+					// nothing to do
 				} else if (t->kind == Type::IMBUED_TY) {
 					destroy(t->imbued.T->get(), v);
 				} else if (t->kind == Type::ALIASED_TY) {
@@ -1155,7 +1148,8 @@ namespace vuk {
 			std::shared_ptr<Type>* ty = new std::shared_ptr<Type>[1]{ type };
 			auto value_ptr = new char[type->size];
 			memcpy(value_ptr, value, type->size);
-			return first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ ty, 1 }, .constant = { .value = value_ptr, .owned = true } }));
+			return first(emplace_op(Node{
+			    .kind = Node::CONSTANT, .type = std::span{ ty, 1 }, .compute_class = DomainFlagBits::eConstant, .constant = { .value = value_ptr, .owned = true } }));
 		}
 
 		template<class T>
@@ -1168,8 +1162,10 @@ namespace vuk {
 			} else {
 				ty = new std::shared_ptr<Type>[1]{ types.memory(sizeof(T)) };
 			}
-			return first(
-			    emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ ty, 1 }, .constant = { .value = new (new char[sizeof(T)]) T(value), .owned = true } }));
+			return first(emplace_op(Node{ .kind = Node::CONSTANT,
+			                              .type = std::span{ ty, 1 },
+			                              .compute_class = DomainFlagBits::eConstant,
+			                              .constant = { .value = new (new char[sizeof(T)]) T(value), .owned = true } }));
 		}
 
 		template<class T>
@@ -1182,17 +1178,30 @@ namespace vuk {
 			} else {
 				ty = new std::shared_ptr<Type>[1]{ types.memory(sizeof(T)) };
 			}
-			return first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ ty, 1 }, .constant = { .value = value, .owned = false } }));
+			return first(emplace_op(Node{
+			    .kind = Node::CONSTANT, .type = std::span{ ty, 1 }, .compute_class = DomainFlagBits::eConstant, .constant = { .value = value, .owned = false } }));
+		}
+
+		void set_value(Ref ref, Ref value) {
+			emplace_op(Node{ .kind = Node::SET, .set = { .dst = ref, .value = value, .index = -1 } });
 		}
 
 		void set_value(Ref ref, size_t index, Ref value) {
-			emplace_op(Node{ .kind = Node::SET, .set = { .dst = ref, .value = value, .index = index } });
+			emplace_op(Node{ .kind = Node::SET, .set = { .dst = ref, .value = value, .index = (int)index } });
+		}
+
+		void set_value_on_allocate_src(Ref ref, size_t index, Ref value) {
+			emplace_op(Node{ .kind = Node::SET, .set = { .dst = ref, .value = value, .index = (int)index, .set_on_allocate = true } });
 		}
 
 		template<class T>
 		void set_value(Ref ref, size_t index, T value) {
-			auto co = make_constant(value);
-			emplace_op(Node{ .kind = Node::SET, .set = { .dst = ref, .value = co, .index = index } });
+			set_value(ref, index, make_constant(value));
+		}
+
+		template<class T>
+		void set_value_on_allocate_src(Ref ref, size_t index, T value) {
+			set_value_on_allocate_src(ref, index, make_constant(value));
 		}
 
 		Ref make_declare_image(ImageAttachment value) {
@@ -1204,49 +1213,58 @@ namespace vuk {
 			if (value.extent.width > 0) {
 				args_ptr[1] = make_constant(&ptr->extent.width);
 			} else {
-				args_ptr[1] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1]{ types.u32() }, 1 } }));
+				args_ptr[1] = first(emplace_op(Node{
+				    .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1]{ types.u32() }, 1 }, .compute_class = DomainFlagBits::ePlaceholder }));
 			}
 			if (value.extent.height > 0) {
 				args_ptr[2] = make_constant(&ptr->extent.height);
 			} else {
-				args_ptr[2] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1]{ types.u32() }, 1 } }));
+				args_ptr[2] = first(emplace_op(Node{
+				    .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1]{ types.u32() }, 1 }, .compute_class = DomainFlagBits::ePlaceholder }));
 			}
 			if (value.extent.depth > 0) {
 				args_ptr[3] = make_constant(&ptr->extent.depth);
 			} else {
-				args_ptr[3] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1]{ types.u32() }, 1 } }));
+				args_ptr[3] = first(emplace_op(Node{
+				    .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1]{ types.u32() }, 1 }, .compute_class = DomainFlagBits::ePlaceholder }));
 			}
 			if (value.format != Format::eUndefined) {
 				args_ptr[4] = make_constant(&ptr->format);
 			} else {
-				args_ptr[4] =
-				    first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1]{ types.memory(sizeof(Format)) }, 1 } }));
+				args_ptr[4] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER,
+				                                     .type = std::span{ new std::shared_ptr<Type>[1]{ types.memory(sizeof(Format)) }, 1 },
+				                                     .compute_class = DomainFlagBits::ePlaceholder }));
 			}
 			if (value.sample_count != Samples::eInfer) {
 				args_ptr[5] = make_constant(&ptr->sample_count);
 			} else {
-				args_ptr[5] =
-				    first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1]{ types.memory(sizeof(Samples)) }, 1 } }));
+				args_ptr[5] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER,
+				                                     .type = std::span{ new std::shared_ptr<Type>[1]{ types.memory(sizeof(Samples)) }, 1 },
+				                                     .compute_class = DomainFlagBits::ePlaceholder }));
 			}
 			if (value.base_layer != VK_REMAINING_ARRAY_LAYERS) {
 				args_ptr[6] = make_constant(&ptr->base_layer);
 			} else {
-				args_ptr[6] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1]{ types.u32() }, 1 } }));
+				args_ptr[6] = first(emplace_op(Node{
+				    .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1]{ types.u32() }, 1 }, .compute_class = DomainFlagBits::ePlaceholder }));
 			}
 			if (value.layer_count != VK_REMAINING_ARRAY_LAYERS) {
 				args_ptr[7] = make_constant(&ptr->layer_count);
 			} else {
-				args_ptr[7] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1]{ types.u32() }, 1 } }));
+				args_ptr[7] = first(emplace_op(Node{
+				    .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1]{ types.u32() }, 1 }, .compute_class = DomainFlagBits::ePlaceholder }));
 			}
 			if (value.base_level != VK_REMAINING_MIP_LEVELS) {
 				args_ptr[8] = make_constant(&ptr->base_level);
 			} else {
-				args_ptr[8] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1]{ types.u32() }, 1 } }));
+				args_ptr[8] = first(emplace_op(Node{
+				    .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1]{ types.u32() }, 1 }, .compute_class = DomainFlagBits::ePlaceholder }));
 			}
 			if (value.level_count != VK_REMAINING_MIP_LEVELS) {
 				args_ptr[9] = make_constant(&ptr->level_count);
 			} else {
-				args_ptr[9] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1]{ types.u32() }, 1 } }));
+				args_ptr[9] = first(emplace_op(Node{
+				    .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1]{ types.u32() }, 1 }, .compute_class = DomainFlagBits::ePlaceholder }));
 			}
 
 			return first(emplace_op(Node{ .kind = Node::CONSTRUCT,
@@ -1255,7 +1273,8 @@ namespace vuk {
 		}
 
 		Ref make_placeholder(std::shared_ptr<Type> type) {
-			return first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1]{ type }, 1 } }));
+			return first(emplace_op(
+			    Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1]{ type }, 1 }, .compute_class = DomainFlagBits::ePlaceholder }));
 		}
 
 		Ref make_declare_array(std::shared_ptr<Type> type, std::span<Ref> args) {
@@ -1466,6 +1485,37 @@ namespace vuk {
 		void collect_garbage();
 		void collect_garbage(std::pmr::polymorphic_allocator<std::byte> allocator);
 	};
+
+	template<class T>
+	T* get_value(Ref parm) {
+		assert(parm.node->kind == Node::ACQUIRE || parm.node->kind == Node::CONSTANT);
+		if (parm.node->kind == Node::ACQUIRE) {
+			return reinterpret_cast<T*>(parm.node->acquire.values[parm.index]);
+		} else if (parm.node->kind == Node::CONSTANT) {
+			assert(parm.index == 0);
+			return reinterpret_cast<T*>(parm.node->constant.value);
+		}
+		assert(false);
+		return nullptr;
+	};
+
+	inline void* get_value(Ref parm) {
+		assert(parm.node->kind == Node::ACQUIRE || parm.node->kind == Node::CONSTANT);
+		switch (parm.node->kind) {
+		case Node::CONSTANT:
+			return parm.node->constant.value;
+		case Node::ACQUIRE:
+			return parm.node->acquire.values[parm.index];
+		default:
+			assert(0);
+			return nullptr;
+		}
+	}
+
+	inline std::span<void*> get_values(Node* node) {
+		assert(node->kind == Node::ACQUIRE);
+		return node->acquire.values;
+	}
 
 	extern thread_local std::shared_ptr<IRModule> current_module;
 
