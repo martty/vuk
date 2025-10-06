@@ -30,4 +30,5 @@ namespace vuk {
 
 	extern template class RadixTree<int>;
 	extern template class RadixTree<std::pair<size_t, size_t>>;
+	extern template class RadixTree<void*>;
 } // namespace vuk

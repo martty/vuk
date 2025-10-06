@@ -91,7 +91,7 @@ namespace vuk {
 		static constexpr std::tuple members = EVAL(MAKE_INITIALIZER TRANSFORM(MEM_OBJ_ARG, (__VA_ARGS__)));                                                        \
 		static constexpr std::array member_names = EVAL(MAKE_INITIALIZER TRANSFORM(STRIFY, (__VA_ARGS__)));                                                        \
 		static constexpr std::tuple EVAL(MAKE_TEMPLATE_LIST TRANSFORM(MEM_OBJ_TYPE, (__VA_ARGS__))) member_types;                                                  \
-		static constexpr std::array offsets = EVAL(MAKE_INITIALIZER TRANSFORM(OFFSETIFY, (__VA_ARGS__)));                                                          \
+		inline static std::array offsets = EVAL(MAKE_INITIALIZER TRANSFORM(OFFSETIFY, (__VA_ARGS__)));                                                             \
 		static void construct(void* dst, std::span<void*> parts) {                                                                                                 \
 			T& v = *new (dst) T;                                                                                                                                     \
 			size_t i = 0;                                                                                                                                            \
@@ -108,15 +108,18 @@ namespace vuk {
 			    },                                                                                                                                                   \
 			    members);                                                                                                                                            \
 		}                                                                                                                                                          \
+		template<size_t I>                                                                                                                                         \
+		static bool check_member_at_index(const T& v) {                                                                                                            \
+			constexpr auto member = std::get<I>(members);                                                                                                            \
+			return (v.*member) == member_placeholder<member>::value;                                                                                                 \
+		}                                                                                                                                                          \
 		static bool is_default(void* value, size_t index) {                                                                                                        \
 			T& v = *reinterpret_cast<T*>(value);                                                                                                                     \
-			T def{};                                                                                                                                                 \
-			return std::apply(                                                                                                                                       \
-			    [&](auto... member_obj_tys) {                                                                                                                        \
-				    std::array results = { (def.*member_obj_tys) == (v.*member_obj_tys)... };                                                                          \
-				    return results[index];                                                                                                                             \
-			    },                                                                                                                                                   \
-			    members);                                                                                                                                            \
+			bool result = false;                                                                                                                                     \
+			[&]<size_t... I>(std::index_sequence<I...>) {                                                                                                            \
+				((result = (I == index ? check_member_at_index<I>(v) : result)), ...);                                                                                 \
+			}(std::make_index_sequence<std::tuple_size_v<decltype(members)>>{});                                                                                     \
+			return result;                                                                                                                                           \
 		}                                                                                                                                                          \
 		static void destroy(void* value) {                                                                                                                         \
 			T& v = *reinterpret_cast<T*>(value);                                                                                                                     \
@@ -138,7 +141,7 @@ namespace vuk {
 		static constexpr std::tuple members = EVAL(MAKE_INITIALIZER TRANSFORM(MEM_OBJ_ARG, (__VA_ARGS__)));                                                        \
 		static constexpr std::array member_names = EVAL(MAKE_INITIALIZER TRANSFORM(STRIFY, (__VA_ARGS__)));                                                        \
 		static constexpr std::tuple EVAL(MAKE_TEMPLATE_LIST TRANSFORM(MEM_OBJ_TYPE, (__VA_ARGS__))) member_types;                                                  \
-		static constexpr std::array offsets = EVAL(MAKE_INITIALIZER TRANSFORM(OFFSETIFY, (__VA_ARGS__)));                                                          \
+		inline static std::array offsets = EVAL(MAKE_INITIALIZER TRANSFORM(OFFSETIFY, (__VA_ARGS__)));                                                             \
 		static void construct(void* dst, std::span<void*> parts) {                                                                                                 \
 			T& v = *new (dst) T;                                                                                                                                     \
 			size_t i = 0;                                                                                                                                            \
@@ -155,15 +158,18 @@ namespace vuk {
 			    },                                                                                                                                                   \
 			    members);                                                                                                                                            \
 		}                                                                                                                                                          \
+		template<size_t I>                                                                                                                                         \
+		static bool check_member_at_index(const T& v) {                                                                                                            \
+			constexpr auto member = std::get<I>(members);                                                                                                            \
+			return (v.*member) == member_placeholder<member>::value;                                                                                                 \
+		}                                                                                                                                                          \
 		static bool is_default(void* value, size_t index) {                                                                                                        \
 			T& v = *reinterpret_cast<T*>(value);                                                                                                                     \
-			T def{};                                                                                                                                                 \
-			return std::apply(                                                                                                                                       \
-			    [&](auto... member_obj_tys) {                                                                                                                        \
-				    std::array results = { (def.*member_obj_tys) == (v.*member_obj_tys)... };                                                                          \
-				    return results[index];                                                                                                                             \
-			    },                                                                                                                                                   \
-			    members);                                                                                                                                            \
+			bool result = false;                                                                                                                                     \
+			[&]<size_t... I>(std::index_sequence<I...>) {                                                                                                            \
+				((result = (I == index ? check_member_at_index<I>(v) : result)), ...);                                                                                 \
+			}(std::make_index_sequence<std::tuple_size_v<decltype(members)>>{});                                                                                     \
+			return result;                                                                                                                                           \
 		}                                                                                                                                                          \
 		static void destroy(void* value) {                                                                                                                         \
 			T& v = *reinterpret_cast<T*>(value);                                                                                                                     \
@@ -185,7 +191,7 @@ namespace vuk {
 		static constexpr std::tuple members = EVAL(MAKE_INITIALIZER TRANSFORM(MEM_OBJ_ARG, (__VA_ARGS__)));                                                        \
 		static constexpr std::array member_names = EVAL(MAKE_INITIALIZER TRANSFORM(STRIFY, (__VA_ARGS__)));                                                        \
 		static constexpr std::tuple EVAL(MAKE_TEMPLATE_LIST TRANSFORM(MEM_OBJ_TYPE, (__VA_ARGS__))) member_types;                                                  \
-		static constexpr std::array offsets = EVAL(MAKE_INITIALIZER TRANSFORM(OFFSETIFY, (__VA_ARGS__)));                                                          \
+		inline static std::array offsets = EVAL(MAKE_INITIALIZER TRANSFORM(OFFSETIFY, (__VA_ARGS__)));                                                             \
 		static void construct(void* dst, std::span<void*> parts) {                                                                                                 \
 			T& v = *new (dst) T;                                                                                                                                     \
 			size_t i = 0;                                                                                                                                            \
@@ -202,15 +208,18 @@ namespace vuk {
 			    },                                                                                                                                                   \
 			    members);                                                                                                                                            \
 		}                                                                                                                                                          \
+		template<size_t I>                                                                                                                                         \
+		static bool check_member_at_index(const T& v) {                                                                                                            \
+			constexpr auto member = std::get<I>(members);                                                                                                            \
+			return (v.*member) == member_placeholder<member>::value;                                                                                                 \
+		}                                                                                                                                                          \
 		static bool is_default(void* value, size_t index) {                                                                                                        \
 			T& v = *reinterpret_cast<T*>(value);                                                                                                                     \
-			T def{};                                                                                                                                                 \
-			return std::apply(                                                                                                                                       \
-			    [&](auto... member_obj_tys) {                                                                                                                        \
-				    std::array results = { (def.*member_obj_tys) == (v.*member_obj_tys)... };                                                                          \
-				    return results[index];                                                                                                                             \
-			    },                                                                                                                                                   \
-			    members);                                                                                                                                            \
+			bool result = false;                                                                                                                                     \
+			[&]<size_t... I>(std::index_sequence<I...>) {                                                                                                            \
+				((result = (I == index ? check_member_at_index<I>(v) : result)), ...);                                                                                 \
+			}(std::make_index_sequence<std::tuple_size_v<decltype(members)>>{});                                                                                     \
+			return result;                                                                                                                                           \
 		}                                                                                                                                                          \
 		static void destroy(void* value) {                                                                                                                         \
 			T& v = *reinterpret_cast<T*>(value);                                                                                                                     \

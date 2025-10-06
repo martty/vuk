@@ -1,7 +1,8 @@
 #pragma once
 
 #include "vuk/ErasedTupleAdaptor.hpp"
-#include "vuk/IR.hpp"
+#include "vuk/ir/IR.hpp"
+#include <fmt/format.h>
 
 namespace vuk {
 	template<class>
@@ -43,7 +44,10 @@ namespace vuk {
 			                                                   .construct = &erased_tuple_adaptor<T>::construct,
 			                                                   .get = &erased_tuple_adaptor<T>::get,
 			                                                   .is_default = &erased_tuple_adaptor<T>::is_default,
-			                                                   .destroy = &erased_tuple_adaptor<T>::destroy } }));
+			                                                   .destroy = &erased_tuple_adaptor<T>::destroy,
+			                                                   .format_to = [](void* v, std::string& dst) {
+				                                                   fmt::format_to(std::back_inserter(dst), "{}", *reinterpret_cast<T*>(v));
+			                                                   } } }));
 			return composite_type;
 		} else {
 			static_assert(dependent_false<T>::value, "Cannot convert type to IR");

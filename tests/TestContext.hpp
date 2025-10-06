@@ -8,7 +8,7 @@
 #include "vuk/runtime/vk/AllocatorHelpers.hpp"
 #include "vuk/runtime/vk/DeviceFrameResource.hpp"
 #include "vuk/runtime/vk/VkRuntime.hpp"
-#include <vuk/IR.hpp>
+#include <vuk/ir/IR.hpp>
 #ifdef WIN32
 #include <Windows.h>
 #endif

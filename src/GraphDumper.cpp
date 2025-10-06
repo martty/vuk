@@ -7,10 +7,10 @@
 #include <shellapi.h>
 #endif
 
-#include "vuk/IR.hpp"
+#include "vuk/ir/IR.hpp"
 #include <fmt/format.h>
 
-#include "GraphDumper.hpp"
+#include "vuk/ir/GraphDumper.hpp"
 
 namespace vuk {
 	struct GraphDumperImpl {

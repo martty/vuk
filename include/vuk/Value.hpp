@@ -1,8 +1,8 @@
 #pragma once
 
 #include "vuk/ImageAttachment.hpp"
-#include "vuk/IR.hpp"
-#include "vuk/IRCppTypes.hpp"
+#include "vuk/ir/IR.hpp"
+#include "vuk/ir/IRCppTypes.hpp"
 #include "vuk/runtime/vk/Allocator.hpp"
 #include "vuk/runtime/vk/VkRuntime.hpp"
 #include "vuk/Types.hpp"
@@ -23,6 +23,7 @@ namespace vuk {
 	public:
 		UntypedValue() = default;
 		UntypedValue(ExtRef extref) : node(std::move(extref.node)), index(extref.index) {}
+		UntypedValue(Ref ref) : node(std::make_shared<ExtNode>(ref.node)), index(ref.index) {}
 
 		/// @brief Set a debug name for this Value
 		/// @param name Debug name to assign
@@ -80,9 +81,31 @@ namespace vuk {
 		ValueBase(U s)
 		  requires(Unsynchronized<U> && std::is_convertible_v<U, T>)
 		{
-			Ref ref = current_module->make_constant(to_IR_type<U>(), &s);
-			node = std::make_shared<ExtNode>(ref.node);
-			index = ref.index;
+			// support for placeholders
+			if constexpr (erased_tuple_adaptor<U>::value) {
+				constexpr size_t member_count = std::tuple_size_v<decltype(erased_tuple_adaptor<U>::members)>;
+				std::array<Ref, member_count> args;
+
+				std::apply(
+				    [&](auto... member_ptrs) {
+					    size_t i = 0;
+					    ((args[i] = erased_tuple_adaptor<U>::is_default(&s, i)
+					                    ? current_module->make_placeholder(to_IR_type<detail::member_type_t<decltype(member_ptrs)>>())
+					                    : current_module->make_constant(to_IR_type<detail::member_type_t<decltype(member_ptrs)>>(), erased_tuple_adaptor<U>::get(&s, i)),
+					      i++),
+					     ...);
+				    },
+				    erased_tuple_adaptor<U>::members);
+
+				Ref ref = current_module->make_construct(to_IR_type<U>(), nullptr, std::span(args));
+				node = std::make_shared<ExtNode>(ref.node);
+				index = ref.index;
+			} else {
+				// Regular constant for non-adapted types
+				Ref ref = current_module->make_constant(to_IR_type<U>(), &s);
+				node = std::make_shared<ExtNode>(ref.node);
+				index = ref.index;
+			}
 		}
 
 		/// @brief Internal: Transmute this Value to a different type
@@ -99,9 +122,7 @@ namespace vuk {
 		/// @brief Access the underlying resource (only after declare or wait/get)
 		/// @return Pointer to the resource
 		T* operator->() noexcept {
-			auto v = eval(get_head());
-			assert(v.holds_value());
-			return (T*)v->value;
+			return get_value<T>(get_head());
 		}
 
 		auto operator->() noexcept
@@ -129,7 +150,7 @@ namespace vuk {
 		  requires(!std::is_array_v<T>)
 		{
 			if (auto result = wait(allocator, compiler, options)) {
-				return eval<T>(get_head());
+				return { expected_value, *get_value<T>(get_head()) };
 			} else {
 				return result;
 			}
@@ -218,7 +239,7 @@ namespace vuk {
 		{
 			assert(Type::stripped(this->get_head().type())->kind == Type::ARRAY_TY);
 			Ref item = current_module->make_extract(this->get_head(), current_module->make_constant(index));
-			return Value<std::remove_reference_t<decltype(std::declval<T>()[0])>>(ExtRef(std::make_shared<ExtNode>(item.node, this->node), item));
+			return Value<std::remove_reference_t<decltype(std::declval<T>()[0])>>(item);
 		}
 
 		/// @brief Get a specific mip level of this image
@@ -229,7 +250,7 @@ namespace vuk {
 		{
 			Ref item = current_module->make_slice(
 			    this->get_head(), Node::NamedAxis::MIP, current_module->make_constant<uint64_t>(mip), current_module->make_constant<uint64_t>(1u));
-			return Value(ExtRef(std::make_shared<ExtNode>(item.node, this->node), item));
+			return Value(item);
 		}
 
 		/// @brief Get a specific array layer of this image
@@ -240,7 +261,7 @@ namespace vuk {
 		{
 			Ref item = current_module->make_slice(
 			    this->get_head(), Node::NamedAxis::LAYER, current_module->make_constant<uint64_t>(layer), current_module->make_constant<uint64_t>(1u));
-			return Value(ExtRef(std::make_shared<ExtNode>(item.node, this->node), item));
+			return Value(item);
 		}
 	};
 
@@ -255,11 +276,21 @@ namespace vuk {
 		Value<ptr<BufferLike<Type>>> ptr;
 		Value<size_t> sz_bytes;
 
-		using ValueBase<view<BufferLike<Type>, dynamic_extent>>::ValueBase;
+		Value<view<BufferLike<Type>, dynamic_extent>>(ExtRef extref) : ValueBase<view<BufferLike<Type>, dynamic_extent>>(extref) {
+			ptr = Value<vuk::ptr<BufferLike<Type>>>(current_module->make_extract(this->get_head(), 0));
+			sz_bytes = Value<size_t>(current_module->make_extract(this->get_head(), 1));
+		}
+
+		Value<view<BufferLike<Type>, dynamic_extent>>(Ref ref) : ValueBase<view<BufferLike<Type>, dynamic_extent>>(ref) {
+			ptr = Value<vuk::ptr<BufferLike<Type>>>(current_module->make_extract(this->get_head(), 0));
+			sz_bytes = Value<size_t>(current_module->make_extract(this->get_head(), 1));
+		}
 
 		Value<view<BufferLike<Type>, dynamic_extent>>(Value<vuk::ptr<BufferLike<Type>>> ptr, Value<size_t> count)
 		  requires(!std::is_array_v<Type>)
-		    : ptr(ptr), sz_bytes(count * sizeof(Type)) {}
+		    : ptr(ptr), sz_bytes(count * sizeof(Type)) {
+			assert(false);
+		}
 
 		auto& operator[](Value<size_t> index)
 		  requires(!std::is_same_v<Type, void>)
@@ -302,33 +333,31 @@ namespace vuk {
 		}
 
 		// TODO: PAV: operate on Ts, not bytes
+		// TODO: PAV: this is completely wrong
 		/// @brief Create a new view that is a subset of the original
 		[[nodiscard]] Value<view<BufferLike<Type>>> subview(Value<uint64_t> offset, Value<uint64_t> new_count = ~(0ULL)) const {
 			// TODO: IR assert
 			// 	assert(offset + new_count <= count());
 			Ref item = current_module->make_slice(this->get_head(), 0, offset.get_head(), new_count.get_head());
-			return Value(ExtRef(std::make_shared<ExtNode>(item.node, this->node), item));
+			return Value(item);
 		}
 
 		template<class U = Type>
 		void same_size(const Value<view<BufferLike<U>>>& src) {
 			this->node->deps.push_back(src.node);
-			this->set_with_extract(this->get_head(), src.get_head(), 1);
+			current_module->set_value(sz_bytes.get_head(), src.sz_bytes.get_head());
 		}
 
 		void set_memory_usage(MemoryUsage mu) {
-			// TODO: this needs to be a bit more tricky
-			current_module->set_value(this->get_head(), 0, mu);
+			current_module->set_value_on_allocate_src(this->get_head(), 0, mu);
 		}
 
 		void set_size(Value<uint64_t> size) {
-			// TODO: this needs to be a bit more tricky
-			current_module->set_value(this->get_head(), 1, size.get_head());
+			current_module->set_value_on_allocate_src(this->get_head(), 1, size.get_head());
 		}
 
 		void set_alignment(Value<uint64_t> alignment) {
-			// TODO: this needs to be a bit more tricky
-			current_module->set_value(this->get_head(), 2, alignment.get_head());
+			current_module->set_value_on_allocate_src(this->get_head(), 2, alignment.get_head());
 		}
 	};
 

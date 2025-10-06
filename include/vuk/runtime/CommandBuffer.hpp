@@ -262,6 +262,7 @@ namespace vuk {
 	class CommandBuffer {
 	protected:
 		friend struct Compiler;
+		friend struct Scheduler;
 		Runtime& ctx;
 		Allocator* allocator;
 		CommandBufferAllocation command_buffer_allocation;

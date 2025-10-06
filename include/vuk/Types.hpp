@@ -821,16 +821,17 @@ namespace vuk {
 		return Access((uint64_t)bit0 | (uint64_t)bit1);
 	}
 
-	enum class DomainFlagBits {
+	enum class DomainFlagBits : uint16_t {
 		eNone = 0,
-		eHost = 1 << 0,
-		ePE = 1 << 1,
-		eGraphicsQueue = 1 << 2,
-		eComputeQueue = 1 << 3,
-		eTransferQueue = 1 << 4,
-		eGraphicsOperation = 1 << 5,
-		eComputeOperation = 1 << 6,
-		eTransferOperation = 1 << 7,
+		eConstant = 0,               // Computable during compile time
+		eHost = 1 << 0,              // Host (CPU)
+		ePE = 1 << 1,                // Presentation Engine (e.g. swapchain)
+		eTransferQueue = 1 << 2,     // Queue capable of transfer
+		eComputeQueue = 1 << 3,      // Queue capable of compute
+		eGraphicsQueue = 1 << 4,     // Queue capable of graphics
+		eGraphicsOperation = 1 << 5, // Operation that uses graphics capabilities
+		eComputeOperation = 1 << 6,  // Operation that uses compute capabilities
+		eTransferOperation = 1 << 7, // Operation that uses transfer capabilities
 		eDomainMask = 0b11111,
 		eQueueMask = 0b11100,
 		eOpMask = 0b11100000,
@@ -841,7 +842,9 @@ namespace vuk {
 		eTransferOnCompute = eComputeQueue | eComputeOperation,
 		eTransferOnTransfer = eTransferQueue | eTransferOperation,
 		eDevice = eGraphicsQueue | eComputeQueue | eTransferQueue,
-		eAny = eDevice | eHost | ePE
+		eAny = eDevice | eHost | ePE,
+		ePlaceholder = 1 << 8, // Compute class only - Placeholder (for IR only)
+		eCrossDevice = 1 << 9  // Compute class only - Computation requires roundtrip between host and device
 	};
 
 	using DomainFlags = Flags<DomainFlagBits>;

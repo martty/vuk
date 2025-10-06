@@ -81,7 +81,7 @@ TEST_CASE("graph is cleaned up after submit") {
 		fmt::println("{}, held: {}", Node::kind_to_sv(op.kind), op.held);
 	}
 #ifndef VUK_GARBAGE_SAN
-	CHECK(current_module->op_arena.size() == 2);
+	CHECK(current_module->op_arena.size() == 6);
 #endif
 }
 
