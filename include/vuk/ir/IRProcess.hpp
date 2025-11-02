@@ -44,6 +44,7 @@ namespace vuk {
 		std::vector<std::shared_ptr<ExtNode>> refs;
 		std::vector<Node*> ref_nodes;
 		std::vector<Node*> set_nodes;
+		std::unordered_map<Ref, Ref> set_node_map;
 		std::vector<std::shared_ptr<ExtNode>> depnodes;
 		std::vector<Node*> nodes;
 		std::vector<Node*> garbage_nodes;

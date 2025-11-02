@@ -350,7 +350,7 @@ namespace vuk {
 			PLACEHOLDER,
 			CONSTANT,
 			CONSTRUCT,
-			SLICE,
+			SLICE, /* SLICED REST ORIGINAL */
 			CONVERGE,
 			IMPORT,
 			CALL,
@@ -566,10 +566,12 @@ namespace vuk {
 
 	template<class T>
 	T& constant(Ref ref) {
+		assert(ref.node->kind == Node::CONSTANT);
 		return *reinterpret_cast<T*>(ref.node->constant.value);
 	}
 
 	inline void* constant(Ref ref) {
+		assert(ref.node->kind == Node::CONSTANT);
 		return ref.node->constant.value;
 	}
 

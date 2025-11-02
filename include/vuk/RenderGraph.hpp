@@ -335,12 +335,6 @@ namespace vuk {
 		return { make_ext_ref(ref) };
 	}
 
-	[[nodiscard]] inline Value<PipelineBaseInfo*> compile_pipeline(PipelineBaseCreateInfo pbci, VUK_CALLSTACK) {
-		Ref ref = current_module->make_compile_pipeline(current_module->make_constant(pbci));
-		current_module->set_source_location(ref.node, VUK_CALL);
-		return { make_ext_ref(ref) };
-	}
-
 	// declare ~~ int* x;
 	// acquire ~~ int* x = _existing_;
 	// discard ~~ int* x = _existing_; invalidate(x);
@@ -377,10 +371,7 @@ namespace vuk {
 	template<class T>
 	[[nodiscard]] inline Value<T> discard(Name name, T buf, VUK_CALLSTACK) {
 		assert(buf);
-		Ref ref = current_module->make_constant(buf);
-		current_module->name_output(ref, name.c_str());
-		current_module->set_source_location(ref.node, VUK_CALL);
-		return { make_ext_ref(ref) };
+		return acquire(name, buf, Access::eNone, VUK_CALL);
 	}
 
 	template<class T = byte>
@@ -565,15 +556,6 @@ namespace std {
 		size_t operator()(vuk::Subrange::Image const& x) const noexcept {
 			size_t h = 0;
 			hash_combine(h, x.base_layer, x.base_level, x.layer_count, x.level_count);
-			return h;
-		}
-	};
-
-	template<>
-	struct hash<vuk::Ref> {
-		size_t operator()(vuk::Ref const& x) const noexcept {
-			size_t h = 0;
-			hash_combine(h, x.node, x.index);
 			return h;
 		}
 	};
