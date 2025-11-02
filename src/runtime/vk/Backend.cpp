@@ -14,7 +14,7 @@
 #include <unordered_set>
 #include <vector>
 
-#define VUK_DUMP_EXEC
+// #define VUK_DUMP_EXEC
 // #define VUK_DEBUG_IMBAR
 // #define VUK_DEBUG_MEMBAR
 
@@ -575,8 +575,6 @@ namespace vuk {
 			if (base_ty->hash_value == current_module->types.builtin_image) {
 				auto& img_att = *reinterpret_cast<ImageAttachment*>(value);
 				key = reinterpret_cast<uint64_t>(img_att.image.image);
-			} else if (base_ty->kind == Type::POINTER_TY) {
-				key = reinterpret_cast<ptr_base*>(value)->device_address;
 			} else if (base_ty->is_bufferlike_view()) {
 				auto buf = reinterpret_cast<Buffer<>*>(value);
 				auto bo = alloc.get_context().ptr_to_buffer_offset(buf->ptr);

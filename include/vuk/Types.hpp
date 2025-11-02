@@ -1062,4 +1062,11 @@ namespace vuk {
 	};
 } // namespace vuk
 
+namespace std {
+	template<>
+	struct hash<vuk::Ref> {
+		size_t operator()(vuk::Ref const& x) const noexcept;
+	};
+} // namespace std
+
 #undef MOV
