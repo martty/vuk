@@ -393,11 +393,11 @@ namespace vuk {
 		template<class F>
 		void visit_all_postorder(F&& f) {
 			std::vector<Node*, short_alloc<Node*>> work_queue(*impl.arena_);
+			for (auto& node : impl.nodes) {
+				node->flag = 0;
+			}
 			for (auto& node : impl.ref_nodes) {
-				if (node->flag == 0) {
-					node->flag = 1;
-					work_queue.push_back(node);
-				}
+				work_queue.push_back(node);
 			}
 
 			while (!work_queue.empty()) {
@@ -409,7 +409,6 @@ namespace vuk {
 					for (int i = 0; i < count; i++) {
 						auto arg = node->fixed_node.args[i].node;
 						if (arg->flag == 0) {
-							arg->flag = 1;
 							work_queue.push_back(arg);
 						}
 					}
@@ -417,13 +416,15 @@ namespace vuk {
 					for (int i = 0; i < node->variable_node.args.size(); i++) {
 						auto arg = node->variable_node.args[i].node;
 						if (arg->flag == 0) {
-							arg->flag = 1;
 							work_queue.push_back(arg);
 						}
 					}
 				}
 				if (work_queue.size() == sz) { // leaf node or all children processed, process
-					f(node);
+					if (node->flag == 0) {
+						node->flag = 1;
+						f(node);
+					}
 					work_queue.pop_back();
 				}
 			}
