@@ -1,5 +1,5 @@
-#include "vuk/runtime/vk/Program.hpp"
 #include "vuk/Hash.hpp"
+#include "vuk/runtime/vk/Program.hpp"
 #include "vuk/ShaderSource.hpp"
 
 #include <spirv_cross.hpp>
@@ -246,237 +246,242 @@ namespace vuk {
 		return *sets[set];
 	}
 
-	VkShaderStageFlagBits Program::introspect(const uint32_t* ir, size_t word_count) {
+	std::vector<Program> Program::introspect(const uint32_t* ir, size_t word_count) {
 		spirv_cross::Compiler refl(ir, word_count);
+		std::vector<Program> programs;
 		auto resources = refl.get_shader_resources();
-		auto entry_name = refl.get_entry_points_and_stages()[0];
-		auto entry_point = refl.get_entry_point(entry_name.name, entry_name.execution_model);
-		auto model = entry_point.model;
-		auto stage = [=]() {
-			switch (model) {
-			case spv::ExecutionModel::ExecutionModelVertex:
-				return VK_SHADER_STAGE_VERTEX_BIT;
-			case spv::ExecutionModel::ExecutionModelTessellationControl:
-				return VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
-			case spv::ExecutionModel::ExecutionModelTessellationEvaluation:
-				return VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
-			case spv::ExecutionModel::ExecutionModelGeometry:
-				return VK_SHADER_STAGE_GEOMETRY_BIT;
-			case spv::ExecutionModel::ExecutionModelFragment:
-				return VK_SHADER_STAGE_FRAGMENT_BIT;
-			case spv::ExecutionModel::ExecutionModelGLCompute:
-				return VK_SHADER_STAGE_COMPUTE_BIT;
-			case spv::ExecutionModel::ExecutionModelAnyHitKHR:
-				return VK_SHADER_STAGE_ANY_HIT_BIT_KHR;
-			case spv::ExecutionModel::ExecutionModelCallableKHR:
-				return VK_SHADER_STAGE_CALLABLE_BIT_KHR;
-			case spv::ExecutionModel::ExecutionModelClosestHitKHR:
-				return VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
-			case spv::ExecutionModel::ExecutionModelIntersectionKHR:
-				return VK_SHADER_STAGE_INTERSECTION_BIT_KHR;
-			case spv::ExecutionModel::ExecutionModelMissKHR:
-				return VK_SHADER_STAGE_MISS_BIT_KHR;
-			case spv::ExecutionModel::ExecutionModelRayGenerationKHR:
-				return VK_SHADER_STAGE_RAYGEN_BIT_KHR;
-			default:
-				return VK_SHADER_STAGE_VERTEX_BIT;
+		for (auto& entry_name : refl.get_entry_points_and_stages()) {
+			auto& program = programs.emplace_back();
+			program.entry_point = entry_name.name;
+			auto entry_point = refl.get_entry_point(entry_name.name, entry_name.execution_model);
+			auto model = entry_point.model;
+			auto stage = [=]() {
+				switch (model) {
+				case spv::ExecutionModel::ExecutionModelVertex:
+					return VK_SHADER_STAGE_VERTEX_BIT;
+				case spv::ExecutionModel::ExecutionModelTessellationControl:
+					return VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
+				case spv::ExecutionModel::ExecutionModelTessellationEvaluation:
+					return VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
+				case spv::ExecutionModel::ExecutionModelGeometry:
+					return VK_SHADER_STAGE_GEOMETRY_BIT;
+				case spv::ExecutionModel::ExecutionModelFragment:
+					return VK_SHADER_STAGE_FRAGMENT_BIT;
+				case spv::ExecutionModel::ExecutionModelGLCompute:
+					return VK_SHADER_STAGE_COMPUTE_BIT;
+				case spv::ExecutionModel::ExecutionModelAnyHitKHR:
+					return VK_SHADER_STAGE_ANY_HIT_BIT_KHR;
+				case spv::ExecutionModel::ExecutionModelCallableKHR:
+					return VK_SHADER_STAGE_CALLABLE_BIT_KHR;
+				case spv::ExecutionModel::ExecutionModelClosestHitKHR:
+					return VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+				case spv::ExecutionModel::ExecutionModelIntersectionKHR:
+					return VK_SHADER_STAGE_INTERSECTION_BIT_KHR;
+				case spv::ExecutionModel::ExecutionModelMissKHR:
+					return VK_SHADER_STAGE_MISS_BIT_KHR;
+				case spv::ExecutionModel::ExecutionModelRayGenerationKHR:
+					return VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+				default:
+					return VK_SHADER_STAGE_VERTEX_BIT;
+				}
+			}();
+			program.stages = stage;
+			if (stage == VK_SHADER_STAGE_VERTEX_BIT) {
+				for (auto& sb : resources.stage_inputs) {
+					auto type = refl.get_type(sb.type_id);
+					auto location = refl.get_decoration(sb.id, spv::DecorationLocation);
+					unsigned count = 1;
+					if (type.array.size() > 0) {
+						count = type.array[0];
+					}
+					for (uint32_t i = 0; i < count; i++) {
+						Attribute a;
+						a.location = location + i;
+						a.name = sb.name.c_str();
+						a.type = to_type(type);
+						program.attributes.push_back(a);
+					}
+				}
 			}
-		}();
-		stages = stage;
-		if (stage == VK_SHADER_STAGE_VERTEX_BIT) {
-			for (auto& sb : resources.stage_inputs) {
+			// uniform buffers
+			for (auto& ub : resources.uniform_buffers) {
+				auto type = refl.get_type(ub.type_id);
+				auto binding = refl.get_decoration(ub.id, spv::DecorationBinding);
+				auto set = refl.get_decoration(ub.id, spv::DecorationDescriptorSet);
+				Binding un{ .type = DescriptorType::eUniformBuffer, .non_writable = true };
+				un.binding = binding;
+				un.stage = stage;
+				un.name = std::string(ub.name.c_str());
+				if (type.array.size() > 0)
+					un.array_size = type.array[0];
+				else
+					un.array_size = 1;
+				if (type.basetype == spirv_cross::SPIRType::Struct) {
+					reflect_members(refl, refl.get_type(ub.type_id), un.members);
+				}
+				un.size = refl.get_declared_struct_size(type);
+
+				program.ensure_set(set).bindings.push_back(un);
+			}
+
+			for (auto& sb : resources.storage_buffers) {
 				auto type = refl.get_type(sb.type_id);
-				auto location = refl.get_decoration(sb.id, spv::DecorationLocation);
-				unsigned count = 1;
-				if (type.array.size() > 0) {
-					count = type.array[0];
+				auto binding = refl.get_decoration(sb.id, spv::DecorationBinding);
+				auto set = refl.get_decoration(sb.id, spv::DecorationDescriptorSet);
+				Binding un{ .type = DescriptorType::eStorageBuffer };
+				un.binding = binding;
+				un.stage = stage;
+				un.name = sb.name.c_str();
+				if (type.array.size() > 0)
+					un.array_size = type.array[0];
+				else
+					un.array_size = 1;
+				un.min_size = refl.get_declared_struct_size(refl.get_type(sb.type_id));
+				if (type.basetype == spirv_cross::SPIRType::Struct) {
+					reflect_members(refl, refl.get_type(sb.type_id), un.members);
 				}
-				for (uint32_t i = 0; i < count; i++) {
-					Attribute a;
-					a.location = location + i;
-					a.name = sb.name.c_str();
-					a.type = to_type(type);
-					attributes.push_back(a);
+				un.is_hlsl_counter_buffer = refl.buffer_is_hlsl_counter_buffer(sb.id);
+				un.non_writable = refl.get_decoration(sb.id, spv::DecorationNonWritable);
+				un.non_readable = refl.get_decoration(sb.id, spv::DecorationNonReadable);
+
+				program.ensure_set(set).bindings.push_back(un);
+			}
+
+			for (auto& si : resources.sampled_images) {
+				auto type = refl.get_type(si.type_id);
+				auto binding = refl.get_decoration(si.id, spv::DecorationBinding);
+				auto set = refl.get_decoration(si.id, spv::DecorationDescriptorSet);
+				Binding t{ .type = DescriptorType::eCombinedImageSampler, .non_writable = true };
+				t.binding = binding;
+				t.name = std::string(si.name.c_str());
+				t.stage = stage;
+				// maybe spirv cross bug?
+				t.array_size = type.array.size() == 1 ? (type.array[0] == 1 ? 0 : type.array[0]) : -1;
+				t.shadow = type.image.depth;
+
+				program.ensure_set(set).bindings.push_back(t);
+			}
+
+			for (auto& sa : resources.separate_samplers) {
+				auto type = refl.get_type(sa.type_id);
+				auto binding = refl.get_decoration(sa.id, spv::DecorationBinding);
+				auto set = refl.get_decoration(sa.id, spv::DecorationDescriptorSet);
+				Binding t{ .type = DescriptorType::eSampler, .non_writable = true };
+				t.binding = binding;
+				t.name = std::string(sa.name.c_str());
+				t.stage = stage;
+				// maybe spirv cross bug?
+				t.array_size = type.array.size() == 1 ? (type.array[0] == 1 ? 0 : type.array[0]) : -1;
+				t.shadow = type.image.depth;
+
+				program.ensure_set(set).bindings.push_back(t);
+			}
+
+			for (auto& si : resources.separate_images) {
+				auto type = refl.get_type(si.type_id);
+				auto binding = refl.get_decoration(si.id, spv::DecorationBinding);
+				auto set = refl.get_decoration(si.id, spv::DecorationDescriptorSet);
+				Binding t{ .type = DescriptorType::eSampledImage, .non_writable = true };
+				t.binding = binding;
+				t.name = std::string(si.name.c_str());
+				t.stage = stage;
+				// maybe spirv cross bug?
+				t.array_size = type.array.size() == 1 ? (type.array[0] == 1 ? 0 : type.array[0]) : -1;
+
+				program.ensure_set(set).bindings.push_back(t);
+			}
+
+			for (auto& sb : resources.storage_images) {
+				auto type = refl.get_type(sb.type_id);
+				auto binding = refl.get_decoration(sb.id, spv::DecorationBinding);
+				auto set = refl.get_decoration(sb.id, spv::DecorationDescriptorSet);
+				Binding un{ .type = DescriptorType::eStorageImage };
+				un.binding = binding;
+				un.stage = stage;
+				un.name = sb.name.c_str();
+				un.non_writable = refl.get_decoration(sb.id, spv::DecorationNonWritable);
+				un.non_readable = refl.get_decoration(sb.id, spv::DecorationNonReadable);
+				// maybe spirv cross bug?
+				un.array_size = type.array.size() == 1 ? (type.array[0] == 1 ? 0 : type.array[0]) : -1;
+
+				program.ensure_set(set).bindings.push_back(un);
+			}
+
+			// subpass inputs
+			for (auto& si : resources.subpass_inputs) {
+				auto type = refl.get_type(si.type_id);
+				auto binding = refl.get_decoration(si.id, spv::DecorationBinding);
+				auto set = refl.get_decoration(si.id, spv::DecorationDescriptorSet);
+				Binding s{ .type = DescriptorType::eInputAttachment, .non_writable = true };
+				s.name = std::string(si.name.c_str());
+				s.binding = binding;
+				s.stage = stage;
+
+				program.ensure_set(set).bindings.push_back(s);
+			}
+
+			// ASs
+			for (auto& as : resources.acceleration_structures) {
+				auto type = refl.get_type(as.type_id);
+				auto binding = refl.get_decoration(as.id, spv::DecorationBinding);
+				auto set = refl.get_decoration(as.id, spv::DecorationDescriptorSet);
+				Binding s{ .type = DescriptorType::eAccelerationStructureKHR, .non_writable = true };
+				s.name = std::string(as.name.c_str());
+				s.binding = binding;
+				s.stage = stage;
+				s.array_size = type.array.size() == 1 ? (type.array[0] == 1 ? 0 : type.array[0]) : -1;
+
+				program.ensure_set(set).bindings.push_back(s);
+			}
+
+			for (auto& sc : refl.get_specialization_constants()) {
+				program.spec_constants.emplace_back(
+				    SpecConstant{ sc.constant_id, to_type(refl.get_type(refl.get_constant(sc.id).constant_type)), (VkShaderStageFlags)stage });
+			}
+
+			// remove duplicated bindings (aliased bindings)
+			// TODO: we need to preserve this information somewhere
+			for (auto& set : program.sets) {
+				if (!set) {
+					continue;
 				}
+				unq(set->bindings);
+				std::sort(set->bindings.begin(), set->bindings.end(), [](auto& a, auto& b) { return a.binding < b.binding; });
+			}
+
+			std::sort(program.spec_constants.begin(), program.spec_constants.end(), binding_cmp);
+
+			for (auto& set : program.sets) {
+				if (!set) {
+					continue;
+				}
+				unsigned max_binding = 0;
+				for (auto& ub : set->bindings) {
+					max_binding = std::max(max_binding, ub.binding);
+				}
+				set->highest_descriptor_binding = max_binding;
+			}
+
+			program.flatten_bindings();
+
+			// push constants
+			for (auto& si : resources.push_constant_buffers) {
+				auto type = refl.get_type(si.base_type_id);
+				VkPushConstantRange pcr;
+				pcr.offset = 0;
+				pcr.size = (uint32_t)refl.get_declared_struct_size(type);
+				pcr.stageFlags = stage;
+				program.push_constant_ranges.push_back(pcr);
+			}
+
+			if (stage == VK_SHADER_STAGE_COMPUTE_BIT) {
+				program.local_size = { refl.get_execution_mode_argument(spv::ExecutionMode::ExecutionModeLocalSize, 0),
+					                     refl.get_execution_mode_argument(spv::ExecutionMode::ExecutionModeLocalSize, 1),
+					                     refl.get_execution_mode_argument(spv::ExecutionMode::ExecutionModeLocalSize, 2) };
 			}
 		}
-		// uniform buffers
-		for (auto& ub : resources.uniform_buffers) {
-			auto type = refl.get_type(ub.type_id);
-			auto binding = refl.get_decoration(ub.id, spv::DecorationBinding);
-			auto set = refl.get_decoration(ub.id, spv::DecorationDescriptorSet);
-			Binding un{ .type = DescriptorType::eUniformBuffer, .non_writable = true };
-			un.binding = binding;
-			un.stage = stage;
-			un.name = std::string(ub.name.c_str());
-			if (type.array.size() > 0)
-				un.array_size = type.array[0];
-			else
-				un.array_size = 1;
-			if (type.basetype == spirv_cross::SPIRType::Struct) {
-				reflect_members(refl, refl.get_type(ub.type_id), un.members);
-			}
-			un.size = refl.get_declared_struct_size(type);
 
-			ensure_set(set).bindings.push_back(un);
-		}
-
-		for (auto& sb : resources.storage_buffers) {
-			auto type = refl.get_type(sb.type_id);
-			auto binding = refl.get_decoration(sb.id, spv::DecorationBinding);
-			auto set = refl.get_decoration(sb.id, spv::DecorationDescriptorSet);
-			Binding un{ .type = DescriptorType::eStorageBuffer };
-			un.binding = binding;
-			un.stage = stage;
-			un.name = sb.name.c_str();
-			if (type.array.size() > 0)
-				un.array_size = type.array[0];
-			else
-				un.array_size = 1;
-			un.min_size = refl.get_declared_struct_size(refl.get_type(sb.type_id));
-			if (type.basetype == spirv_cross::SPIRType::Struct) {
-				reflect_members(refl, refl.get_type(sb.type_id), un.members);
-			}
-			un.is_hlsl_counter_buffer = refl.buffer_is_hlsl_counter_buffer(sb.id);
-			un.non_writable = refl.get_decoration(sb.id, spv::DecorationNonWritable);
-			un.non_readable = refl.get_decoration(sb.id, spv::DecorationNonReadable);
-
-			ensure_set(set).bindings.push_back(un);
-		}
-
-		for (auto& si : resources.sampled_images) {
-			auto type = refl.get_type(si.type_id);
-			auto binding = refl.get_decoration(si.id, spv::DecorationBinding);
-			auto set = refl.get_decoration(si.id, spv::DecorationDescriptorSet);
-			Binding t{ .type = DescriptorType::eCombinedImageSampler, .non_writable = true };
-			t.binding = binding;
-			t.name = std::string(si.name.c_str());
-			t.stage = stage;
-			// maybe spirv cross bug?
-			t.array_size = type.array.size() == 1 ? (type.array[0] == 1 ? 0 : type.array[0]) : -1;
-			t.shadow = type.image.depth;
-
-			ensure_set(set).bindings.push_back(t);
-		}
-
-		for (auto& sa : resources.separate_samplers) {
-			auto type = refl.get_type(sa.type_id);
-			auto binding = refl.get_decoration(sa.id, spv::DecorationBinding);
-			auto set = refl.get_decoration(sa.id, spv::DecorationDescriptorSet);
-			Binding t{ .type = DescriptorType::eSampler, .non_writable = true };
-			t.binding = binding;
-			t.name = std::string(sa.name.c_str());
-			t.stage = stage;
-			// maybe spirv cross bug?
-			t.array_size = type.array.size() == 1 ? (type.array[0] == 1 ? 0 : type.array[0]) : -1;
-			t.shadow = type.image.depth;
-
-			ensure_set(set).bindings.push_back(t);
-		}
-
-		for (auto& si : resources.separate_images) {
-			auto type = refl.get_type(si.type_id);
-			auto binding = refl.get_decoration(si.id, spv::DecorationBinding);
-			auto set = refl.get_decoration(si.id, spv::DecorationDescriptorSet);
-			Binding t{ .type = DescriptorType::eSampledImage, .non_writable = true };
-			t.binding = binding;
-			t.name = std::string(si.name.c_str());
-			t.stage = stage;
-			// maybe spirv cross bug?
-			t.array_size = type.array.size() == 1 ? (type.array[0] == 1 ? 0 : type.array[0]) : -1;
-
-			ensure_set(set).bindings.push_back(t);
-		}
-
-		for (auto& sb : resources.storage_images) {
-			auto type = refl.get_type(sb.type_id);
-			auto binding = refl.get_decoration(sb.id, spv::DecorationBinding);
-			auto set = refl.get_decoration(sb.id, spv::DecorationDescriptorSet);
-			Binding un{ .type = DescriptorType::eStorageImage };
-			un.binding = binding;
-			un.stage = stage;
-			un.name = sb.name.c_str();
-			un.non_writable = refl.get_decoration(sb.id, spv::DecorationNonWritable);
-			un.non_readable = refl.get_decoration(sb.id, spv::DecorationNonReadable);
-			// maybe spirv cross bug?
-			un.array_size = type.array.size() == 1 ? (type.array[0] == 1 ? 0 : type.array[0]) : -1;
-
-			ensure_set(set).bindings.push_back(un);
-		}
-
-		// subpass inputs
-		for (auto& si : resources.subpass_inputs) {
-			auto type = refl.get_type(si.type_id);
-			auto binding = refl.get_decoration(si.id, spv::DecorationBinding);
-			auto set = refl.get_decoration(si.id, spv::DecorationDescriptorSet);
-			Binding s{ .type = DescriptorType::eInputAttachment, .non_writable = true };
-			s.name = std::string(si.name.c_str());
-			s.binding = binding;
-			s.stage = stage;
-
-			ensure_set(set).bindings.push_back(s);
-		}
-
-		// ASs
-		for (auto& as : resources.acceleration_structures) {
-			auto type = refl.get_type(as.type_id);
-			auto binding = refl.get_decoration(as.id, spv::DecorationBinding);
-			auto set = refl.get_decoration(as.id, spv::DecorationDescriptorSet);
-			Binding s{ .type = DescriptorType::eAccelerationStructureKHR, .non_writable = true };
-			s.name = std::string(as.name.c_str());
-			s.binding = binding;
-			s.stage = stage;
-			s.array_size = type.array.size() == 1 ? (type.array[0] == 1 ? 0 : type.array[0]) : -1;
-
-			ensure_set(set).bindings.push_back(s);
-		}
-
-		for (auto& sc : refl.get_specialization_constants()) {
-			spec_constants.emplace_back(SpecConstant{ sc.constant_id, to_type(refl.get_type(refl.get_constant(sc.id).constant_type)), (VkShaderStageFlags)stage });
-		}
-
-		// remove duplicated bindings (aliased bindings)
-		// TODO: we need to preserve this information somewhere
-		for (auto& set : sets) {
-			if (!set) {
-				continue;
-			}
-			unq(set->bindings);
-			std::sort(set->bindings.begin(), set->bindings.end(), [](auto& a, auto& b) { return a.binding < b.binding; });
-		}
-
-		std::sort(spec_constants.begin(), spec_constants.end(), binding_cmp);
-
-		for (auto& set : sets) {
-			if (!set) {
-				continue;
-			}
-			unsigned max_binding = 0;
-			for (auto& ub : set->bindings) {
-				max_binding = std::max(max_binding, ub.binding);
-			}
-			set->highest_descriptor_binding = max_binding;
-		}
-
-		flatten_bindings();
-
-		// push constants
-		for (auto& si : resources.push_constant_buffers) {
-			auto type = refl.get_type(si.base_type_id);
-			VkPushConstantRange pcr;
-			pcr.offset = 0;
-			pcr.size = (uint32_t)refl.get_declared_struct_size(type);
-			pcr.stageFlags = stage;
-			push_constant_ranges.push_back(pcr);
-		}
-
-		if (stage == VK_SHADER_STAGE_COMPUTE_BIT) {
-			local_size = { refl.get_execution_mode_argument(spv::ExecutionMode::ExecutionModeLocalSize, 0),
-				             refl.get_execution_mode_argument(spv::ExecutionMode::ExecutionModeLocalSize, 1),
-				             refl.get_execution_mode_argument(spv::ExecutionMode::ExecutionModeLocalSize, 2) };
-		}
-
-		return stage;
+		return programs;
 	}
 
 	void Program::append(const Program& o) {

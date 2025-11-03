@@ -112,7 +112,8 @@ namespace vuk {
 			VkShaderStageFlags stage;
 		};
 
-		VkShaderStageFlagBits introspect(const uint32_t* ir, size_t word_count);
+		static std::vector<Program> introspect(const uint32_t* ir, size_t word_count);
+		std::string entry_point;
 
 		std::array<unsigned, 3> local_size;
 
@@ -136,8 +137,7 @@ namespace vuk {
 
 	struct ShaderModule {
 		VkShaderModule shader_module;
-		Program reflection_info;
-		VkShaderStageFlagBits stage;
+		std::vector<Program> reflection_info;
 		bool override_entry_point_name_to_main = false;
 	};
 

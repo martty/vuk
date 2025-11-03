@@ -359,8 +359,7 @@ namespace vuk {
 			assert(0);
 		}
 
-		Program p;
-		auto stage = p.introspect(spirv_ptr, size);
+		std::vector<Program> programs = Program::introspect(spirv_ptr, size);
 
 		VkShaderModuleCreateInfo moduleCreateInfo{ .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO };
 		moduleCreateInfo.codeSize = size * sizeof(uint32_t);
@@ -371,7 +370,7 @@ namespace vuk {
 		set_name(sm, Name(name));
 		// WORKAROUND: slang doesn't seem to preserve entry point name
 		bool override_entry_point_name = cinfo.source.language == ShaderSourceLanguage::eSlang;
-		return { sm, std::move(p), stage, override_entry_point_name };
+		return { sm, std::move(programs), override_entry_point_name };
 	}
 
 	PipelineBaseInfo Runtime::create(const create_info_t<PipelineBaseInfo>& cinfo) {
@@ -389,15 +388,16 @@ namespace vuk {
 			auto& sm = impl->shader_modules.acquire({ source, cinfo.shader_paths[i], cinfo.defines, cinfo.compile_options });
 			VkPipelineShaderStageCreateInfo shader_stage{ .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO };
 			shader_stage.pSpecializationInfo = nullptr;
-			shader_stage.stage = sm.stage;
+			auto entry_point_name = sm.override_entry_point_name_to_main ? "main" : source.entry_point;
+			auto it = std::find_if(sm.reflection_info.begin(), sm.reflection_info.end(), [&](auto& p) { return p.entry_point == entry_point_name; });
+			assert(it != sm.reflection_info.end());
+			entry_point_names.push_back(entry_point_name);
+
+			shader_stage.stage = (VkShaderStageFlagBits)it->stages; // always one stage per entry point
 			shader_stage.module = sm.shader_module;
-			if (sm.override_entry_point_name_to_main) {
-				entry_point_names.push_back("main");
-			} else {
-				entry_point_names.push_back(source.entry_point);
-			}
+
 			psscis.push_back(shader_stage);
-			accumulated_reflection.append(sm.reflection_info);
+			accumulated_reflection.append(*it);
 			pipe_name += cinfo.shader_paths[i] + "+";
 		}
 		pipe_name = pipe_name.substr(0, pipe_name.size() - 1); // trim off last "+"
