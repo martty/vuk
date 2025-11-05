@@ -273,9 +273,8 @@ if (VUK_USE_SLANG)
 	FetchContent_Declare(
 	  slang-fc
 	  GIT_REPOSITORY https://github.com/shader-slang/slang
-	  GIT_TAG 76fdeaa477a5d21176facf0296f77e28e2d59477
-	  GIT_SHALLOW ON
-	  GIT_SUBMODULES external/miniz external/lz4 external/unordered_dense external/spirv-headers external/spirv-tools external/vulkan external/glslang
+	  GIT_TAG 708e1bbe1197d198831ffbe8601ad0d9bdb821f9
+	  GIT_SUBMODULES external/miniz external/lz4 external/unordered_dense external/spirv-headers external/spirv-tools external/vulkan external/glslang external/lua
 	  GIT_SUBMODULES_RECURSE ON
 	)
 	FetchContent_GetProperties(slang-fc)
@@ -420,7 +419,7 @@ function(copy_runtime_dlls TARGET)
     add_custom_command(
       TARGET "${TARGET}" POST_BUILD
       COMMAND "${CMAKE_COMMAND}" -E copy
-        -t "$<TARGET_RUNTIME_DLLS:${TARGET}>" "$<TARGET_FILE_DIR:${TARGET}>"
+        -t  "$<TARGET_FILE_DIR:${TARGET}>" "$<TARGET_RUNTIME_DLLS:${TARGET}>"
       COMMAND_EXPAND_LISTS
     )
 

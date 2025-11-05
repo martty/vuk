@@ -368,9 +368,7 @@ namespace vuk {
 		this->vkCreateShaderModule(device, &moduleCreateInfo, nullptr, &sm);
 		std::string name = "ShaderModule: " + cinfo.filename;
 		set_name(sm, Name(name));
-		// WORKAROUND: slang doesn't seem to preserve entry point name
-		bool override_entry_point_name = cinfo.source.language == ShaderSourceLanguage::eSlang;
-		return { sm, std::move(programs), override_entry_point_name };
+		return { sm, std::move(programs) };
 	}
 
 	PipelineBaseInfo Runtime::create(const create_info_t<PipelineBaseInfo>& cinfo) {
@@ -388,7 +386,7 @@ namespace vuk {
 			auto& sm = impl->shader_modules.acquire({ source, cinfo.shader_paths[i], cinfo.defines, cinfo.compile_options });
 			VkPipelineShaderStageCreateInfo shader_stage{ .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO };
 			shader_stage.pSpecializationInfo = nullptr;
-			auto entry_point_name = sm.override_entry_point_name_to_main ? "main" : source.entry_point;
+			auto& entry_point_name = source.entry_point;
 			auto it = std::find_if(sm.reflection_info.begin(), sm.reflection_info.end(), [&](auto& p) { return p.entry_point == entry_point_name; });
 			assert(it != sm.reflection_info.end());
 			entry_point_names.push_back(entry_point_name);

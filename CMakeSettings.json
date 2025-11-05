@@ -44,7 +44,7 @@
         },
         {
           "name": "VUK_USE_SLANG",
-          "value": "False",
+          "value": "True",
           "type": "BOOL"
         },
         {

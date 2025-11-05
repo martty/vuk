@@ -138,7 +138,6 @@ namespace vuk {
 	struct ShaderModule {
 		VkShaderModule shader_module;
 		std::vector<Program> reflection_info;
-		bool override_entry_point_name_to_main = false;
 	};
 
 	struct ShaderModuleCreateInfo;
