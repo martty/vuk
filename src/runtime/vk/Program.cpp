@@ -249,9 +249,10 @@ namespace vuk {
 	std::vector<Program> Program::introspect(const uint32_t* ir, size_t word_count) {
 		spirv_cross::Compiler refl(ir, word_count);
 		std::vector<Program> programs;
-		auto resources = refl.get_shader_resources();
 		for (auto& entry_name : refl.get_entry_points_and_stages()) {
+			refl.set_entry_point(entry_name.name, entry_name.execution_model);
 			auto& program = programs.emplace_back();
+			auto resources = refl.get_shader_resources();
 			program.entry_point = entry_name.name;
 			auto entry_point = refl.get_entry_point(entry_name.name, entry_name.execution_model);
 			auto model = entry_point.model;
