@@ -1,3 +1,4 @@
+#include "vuk/ir/GraphDumper.hpp"
 #include "vuk/ir/IRPasses.hpp"
 
 namespace vuk {
@@ -26,6 +27,48 @@ namespace vuk {
 	};
 
 	Result<void> constant_folding::operator()() {
+		rewrite([this](Node* node, Replacer& r) {
+			switch (node->kind) {
+			case Node::SLICE: {
+				if (node->type[0]->kind == Type::INTEGER_TY) {
+					// direct slicing of a composite
+					if (node->slice.src.node->kind == Node::CONSTRUCT && node->slice.axis == Node::NamedAxis::FIELD) {
+						auto field_idx = constant<uint64_t>(node->slice.start);
+						r.replace({ node, 0 }, node->slice.src.node->construct.args[field_idx + 1]);
+					}
+					// slicing a slice
+					else if (node->slice.src.node->kind == Node::SLICE && node->slice.src.index <= 1 && node->slice.axis == Node::NamedAxis::FIELD) {
+						auto field_idx = constant<uint64_t>(node->slice.start);
+						auto new_slice = current_module->make_extract(node->slice.src.node->slice.src, field_idx);
+						add_node(new_slice.node);
+						r.replace({ node, 0 }, new_slice);
+					} else if (node->slice.src.node->kind == Node::CALL) {
+						auto field_idx = constant<uint64_t>(node->slice.start);
+						auto new_slice = current_module->make_extract(node->slice.src.link().prev->def, field_idx);
+						add_node(new_slice.node);
+						r.replace({ node, 0 }, new_slice);
+					}
+				}
+			} break;
+			case Node::CONVERGE: {
+				// if all args are the same, replace with that arg
+				bool all_same = true;
+				auto first = node->converge.diverged[0].node;
+				for (auto& arg : node->converge.diverged) {
+					if (!(arg.node == first)) {
+						all_same = false;
+						break;
+					}
+				}
+				if (all_same && node->converge.diverged[0].node->kind == Node::SLICE) {
+					r.replace({ node, 0 }, node->converge.diverged[0].node->slice.src);
+				}
+			} break;
+			default:
+				break;
+			}
+		});
+
 		// compute class assignments & perform constant folding
 		visit_all_postorder([this](Node* node) {
 			DomainFlags op_class = op_compute_class[node->kind];
@@ -51,10 +94,19 @@ namespace vuk {
 					    if (input_class.m_mask > node->compute_class.m_mask) {
 						    node->compute_class = input_class;
 					    }
-					    // do constant folding here
-					    if (arg.node->compute_class == DomainFlagBits::eConstant && arg.node->kind != Node::CONSTANT) {
+					    // fold away logical copies
+					    if (arg.node->kind == Node::LOGICAL_COPY) {
+						    arg = arg.node->logical_copy.src;
+					    } else if (arg.node->compute_class == DomainFlagBits::eConstant && arg.node->kind != Node::CONSTANT &&
+					               arg.node->kind != Node::PLACEHOLDER) { // do constant folding here
 						    auto result = eval(arg);
-						    if (result) {
+						    if (result.holds_value()) {
+							    arg = current_module->make_constant(arg.type(), *result);
+							    add_node(arg.node);
+						    }
+					    } else if (arg.type()->kind == Type::INTEGER_TY && arg.node->kind != Node::CONSTANT) {
+						    auto result = eval(arg);
+						    if (result.holds_value()) {
 							    arg = current_module->make_constant(arg.type(), *result);
 							    add_node(arg.node);
 						    }
@@ -63,6 +115,27 @@ namespace vuk {
 				    node);
 			}
 		});
+
+		if (impl.set_nodes.size() > 0) {
+			// apply SETs
+			rewrite([](Node* node, Replacer& r) {
+				if (node->kind == Node::SET) {
+					auto& set = node->set;
+					if (set.value.node->kind != Node::PLACEHOLDER) {
+						r.replace(set.dst, set.value);
+					}
+				}
+			});
+			/*
+			GraphDumper::begin_graph(true, "Before Constant Folding");
+			GraphDumper::dump_graph(impl.nodes, false, false);
+			GraphDumper::end_graph();
+			printf("");
+			*/
+		}
+
+		impl.set_nodes.clear();
+
 		return { expected_value };
 	}
 } // namespace vuk

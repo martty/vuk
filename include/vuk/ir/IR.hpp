@@ -473,7 +473,7 @@ namespace vuk {
 			struct : Fixed<1> {
 				Ref src;
 			} logical_copy;
-			struct : Fixed<1> {
+			struct : Fixed<2> {
 				Ref dst;
 				Ref value;
 				int index;

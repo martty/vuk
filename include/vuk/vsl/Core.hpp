@@ -81,8 +81,7 @@ namespace vuk {
 		size_t alignment = format_to_texel_block_size(image.format);
 		size_t size = compute_image_size(image.format, image.extent);
 		auto src = *allocate_buffer(allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
-		::memcpy(&*src, src_data, size);
-
+		::memcpy(&src[0], src_data, size);
 		BufferImageCopy bc;
 		bc.imageOffset = { 0, 0, 0 };
 		bc.bufferRowLength = 0;

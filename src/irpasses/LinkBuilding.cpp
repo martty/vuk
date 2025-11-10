@@ -163,7 +163,7 @@ namespace vuk {
 		prev = link;
 	};
 
-	void IRPass::add_read(Node* node, Ref& parm, size_t index) {
+	void IRPass::add_read(Node* node, Ref& parm, size_t index, bool needs_ssa = true) {
 		VUK_ICE(parm.node->kind != Node::GARBAGE);
 		auto& st_parm = parm;
 		if (!st_parm.node->links) {
@@ -175,7 +175,7 @@ namespace vuk {
 			}
 		}
 		auto link = &st_parm.link();
-		if (link->undef.node != nullptr && node->index > link->undef.node->index) { // there is already a write and it is earlier than us
+		if (link->undef.node != nullptr && node->index > link->undef.node->index && needs_ssa) { // there is already a write and it is earlier than us
 			VUK_ICE(do_ssa);
 			auto last_write = walk_writes(node, parm);
 			parm = last_write;
@@ -310,7 +310,11 @@ namespace vuk {
 		case Node::SLICE: {
 			add_read(node, node->slice.start, 1);
 			add_read(node, node->slice.count, 2);
-			add_write(node, node->slice.src, 0);
+			if (node->type[0]->kind == Type::INTEGER_TY) {
+				add_read(node, node->slice.src, 0, false);
+			} else {
+				add_write(node, node->slice.src, 0);
+			}
 			if (node->kind == Node::LOGICAL_COPY) { // if we rewrote this to a copy
 				add_result(node, 0, node->slice.src);
 				break;
