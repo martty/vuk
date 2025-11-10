@@ -1,7 +1,10 @@
+#include "vuk/ir/GraphDumper.hpp"
 #include "vuk/ir/IR.hpp"
 #include "vuk/ir/IRPasses.hpp"
 #include "vuk/Result.hpp"
 #include "vuk/SyncLowering.hpp"
+#include <stack>
+#include <unordered_map>
 
 namespace vuk {
 	Result<void> reify_inference::operator()() {
@@ -30,9 +33,62 @@ namespace vuk {
 			}
 		};
 
+		std::unordered_set<Node*> inference_graph;
+		// compute uses - direct & indirect of placeholders
+
+		auto traverse = [&](auto& const self, Ref r, std::vector<size_t>& type_path) {
+			switch (r.node->kind) {
+			case Node::PLACEHOLDER:
+				[[fallthrough]];
+			case Node::MATH_BINARY:
+				[[fallthrough]];
+			case Node::CONSTRUCT:
+				[[fallthrough]];
+			case Node::LOGICAL_COPY:
+				[[fallthrough]];
+			case Node::SLICE: {
+				break;
+			}
+			default:
+				return;
+			}
+			if (!inference_graph.emplace(r.node).second) {
+				return;
+			}
+
+			for_each_use(r, [&](Ref use) {
+				if (use.node->kind == Node::CONSTRUCT) {
+					type_path.push_back(use.index);
+					self(self, first(use.node), type_path); // reads are rrefs
+					type_path.pop_back();
+				} else if (use.node->kind == Node::SLICE) {
+					auto& slice = use.node->slice;
+					if (!type_path.empty() && constant<uint64_t>(slice.start) == type_path.back()) {
+						auto t = type_path.back();
+						type_path.pop_back();
+						self(self, first(use.node), type_path);
+						type_path.push_back(t);
+					} else {
+						self(self, nth(use.node, 1), type_path);
+					}
+				} else {
+					self(self, use, type_path);
+				}
+			});
+		};
+		/*
+		for (auto node : impl.nodes) {
+		  switch (node->kind) {
+		  case Node::PLACEHOLDER: {
+		    std::vector<size_t> type_path;
+		    traverse(traverse, Ref{ node, 0 }, type_path);
+		  } break;
+		  }
+		}*/
+
+		/*
 		// construct reification - if there were later setting of fields, then remove placeholders
 		// TODO: PAV: constructs with placeholders inside them - to be redone
-		/*
 		for (auto node : impl.nodes) {
 		  auto ty = node->type[0];
 		  switch (node->kind) {
@@ -69,17 +125,17 @@ namespace vuk {
 		        placeholder_to_ptr(args_ptr[9], &ptr->level_count);
 		      }
 		    } else if (ty->kind == Type::COMPOSITE_TY) {
-		      auto* base = constant(args_ptr[0]);
-		      if (ty->is_bufferlike_view() &&
-		          node->construct.args[2].node->kind != Node::PLACEHOLDER) { // if we are constructing a view, and the view has known size
-		        auto def = eval(node->construct.args[1]);
-		        if (def && def->is_ref && def->ref.node->kind == Node::CONSTRUCT && def->ref.node->construct.args[2].node->kind == Node::PLACEHOLDER) {
-		          def->ref.node->construct.args[2] = node->construct.args[2];
+		      // special casing for buffer views
+		      if (ty->is_bufferlike_view()) {
+		        // case 1: view has a known size, but the allocate is a placeholder
+		        if (node->construct.args[2].node->kind != Node::PLACEHOLDER) {
+		          auto def = eval(node->construct.args[1]);
+		          if (def && def->is_ref && def->ref.node->kind == Node::CONSTRUCT && def->ref.node->construct.args[2].node->kind == Node::PLACEHOLDER) {
+		            def->ref.node->construct.args[2] = node->construct.args[2];
+		          }
 		        }
 		      }
-		      if (!base) { // if there was no value provided here, then we don't perform any reification
-		        break;
-		      }
+
 		      for (size_t i = 1; i < node->construct.args.size(); i++) {
 		        bool is_default = ty->composite.is_default(base, i - 1);
 		        if (!is_default) {
@@ -92,8 +148,8 @@ namespace vuk {
 		  default:
 		    break;
 		  }
-		}
-
+		}*/
+		/*
 		// framebuffer inference
 		do {
 		  progress = false;

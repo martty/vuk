@@ -341,7 +341,7 @@ namespace vuk {
 		void print_ctx();
 		Ref walk_writes(Node* node, Ref parm);
 		void add_write(Node* node, Ref& parm, size_t index);
-		void add_read(Node* node, Ref& parm, size_t index);
+		void add_read(Node* node, Ref& parm, size_t index, bool needs_ssa);
 		void add_breaking_result(Node* node, size_t output_idx);
 		void add_result(Node* node, size_t output_idx, Ref parm);
 		void process_node_links(Node* node);
@@ -399,6 +399,9 @@ namespace vuk {
 			for (auto& node : impl.ref_nodes) {
 				work_queue.push_back(node);
 			}
+			for (auto& node : impl.set_nodes) {
+				work_queue.push_back(node);
+			}
 
 			while (!work_queue.empty()) {
 				auto node = work_queue.back();
@@ -433,6 +436,19 @@ namespace vuk {
 				node->flag = 0;
 			}
 		}
+
+		void for_each_use(Ref r, auto fn) {
+			auto link = &r.node->links[r.index];
+			while (link) {
+				for (auto read : link->reads.to_span(impl.pass_reads)) {
+					fn(read);
+				}
+				if (link->undef) {
+					fn(link->undef);
+				}
+				link = link->next;
+			}
+		};
 
 		struct Replace {
 			Ref needle;
@@ -493,8 +509,14 @@ namespace vuk {
 			std::vector<Replace, short_alloc<Replace>> replaces(*impl.arena_);
 			Replacer rr(replaces);
 
-			for (auto node : impl->nodes) {
+			// impl.nodes might grow during pred calls
+			for (size_t i = 0; i < impl.nodes.size(); i++) {
+				auto& node = impl.nodes[i];
 				pred(node, rr);
+				if (new_nodes.size() > 0) {
+					impl.nodes.insert(impl.nodes.end(), new_nodes.begin(), new_nodes.end());
+					new_nodes.clear();
+				}
 			}
 
 			/* fmt::print("[");
@@ -505,7 +527,7 @@ namespace vuk {
 
 			std::vector<Ref*, short_alloc<Ref*>> args(*impl.arena_);
 			// collect all args
-			for (auto node : impl->nodes) {
+			for (auto node : impl.nodes) {
 				auto count = node->generic_node.arg_count;
 				if (count != (uint8_t)~0u) {
 					for (int i = 0; i < count; i++) {

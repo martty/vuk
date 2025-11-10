@@ -750,22 +750,6 @@ namespace vuk {
 		GraphDumper::next_cluster("modules", "full");
 		GraphDumper::dump_graph(impl->nodes, false, false);
 
-		// apply SET nodes
-		for (auto& s : impl->set_nodes) {
-			auto link = &s->set.dst.link();
-			if (!link) {
-				continue;
-			}
-			while (link->prev) {
-				link = link->prev;
-			}
-			auto def_node = link->def.node;
-			if (def_node->kind == Node::CONSTRUCT) {
-				def_node->construct.args[s->set.index + 1] = s->set.value;
-			}
-		}
-		impl->set_nodes.clear();
-
 		VUK_DO_OR_RETURN(impl->build_nodes());
 		VUK_DO_OR_RETURN(impl->build_links(alloc.get_context(), impl->nodes, allocator));
 		impl->ir_passes = {
