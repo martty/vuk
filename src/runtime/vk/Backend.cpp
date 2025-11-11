@@ -14,7 +14,7 @@
 #include <unordered_set>
 #include <vector>
 
-// #define VUK_DUMP_EXEC
+#define VUK_DUMP_EXEC
 // #define VUK_DEBUG_IMBAR
 // #define VUK_DEBUG_MEMBAR
 

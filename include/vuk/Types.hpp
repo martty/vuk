@@ -115,9 +115,9 @@ namespace vuk {
 
 		struct Framebuffer {};
 
-		Samples() noexcept : count(SampleCountFlagBits::e1) {}
-		Samples(SampleCountFlagBits samples) noexcept : count(samples) {}
-		Samples(Framebuffer) noexcept : count(SampleCountFlagBits::eInfer) {}
+		constexpr Samples() noexcept : count(SampleCountFlagBits::e1) {}
+		constexpr Samples(SampleCountFlagBits samples) noexcept : count(samples) {}
+		constexpr Samples(Framebuffer) noexcept : count(SampleCountFlagBits::eInfer) {}
 
 		constexpr static auto e1 = SampleCountFlagBits::e1;
 		constexpr static auto e2 = SampleCountFlagBits::e2;

@@ -30,6 +30,8 @@ namespace vuk {
 	struct RenderGraphException : Exception {
 		using Exception::Exception;
 
+		enum class InfoLevel { eString, eNode, eRef, eNodePair, eRefPair };
+
 		void throw_this() override {
 			throw *this;
 		}

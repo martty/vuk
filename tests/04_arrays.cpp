@@ -78,8 +78,8 @@ TEST_CASE("arrayed images, commands") {
 		auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data));
 		auto [img2, fut2] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data));
 
-		size_t alignment = format_to_texel_block_size(fut->format);
-		size_t size = compute_image_size(fut->format, fut->extent);
+		size_t alignment = format_to_texel_block_size(*fut->format);
+		size_t size = compute_image_size(*fut->format, *fut->extent);
 		auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
 
 		auto arr = declare_array("images", std::move(fut), std::move(fut2));
@@ -109,8 +109,8 @@ TEST_CASE("arrayed images, divergent source sync") {
 		auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data));
 		auto [img2, fut2] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data));
 
-		size_t alignment = format_to_texel_block_size(fut->format);
-		size_t size = compute_image_size(fut->format, fut->extent);
+		size_t alignment = format_to_texel_block_size(*fut->format);
+		size_t size = compute_image_size(*fut->format, *fut->extent);
 		auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
 
 		fut = image_use<eFragmentRead>(clear_image(std::move(fut), vuk::ClearColor(5u, 5u, 5u, 5u)));
@@ -146,8 +146,8 @@ TEST_CASE("image slicing, mips") {
 		ia.level_count = 2;
 		auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data));
 
-		size_t alignment = format_to_texel_block_size(fut->format);
-		size_t size = compute_image_size(fut->format, fut->extent);
+		size_t alignment = format_to_texel_block_size(*fut->format);
+		size_t size = compute_image_size(*fut->format, *fut->extent);
 		auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
 
 		{
@@ -195,8 +195,8 @@ TEST_CASE("image slicing, reconvergence") {
 	ia.level_count = 2;
 	auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data));
 
-	size_t alignment = format_to_texel_block_size(fut->format);
-	size_t size = compute_image_size(fut->format, fut->extent);
+	size_t alignment = format_to_texel_block_size(*fut->format);
+	size_t size = compute_image_size(*fut->format, *fut->extent);
 	auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
 
 	{
@@ -218,8 +218,8 @@ TEST_CASE("image slicing, reconvergence 2") {
 		ia.level_count = 2;
 		auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data));
 
-		size_t alignment = format_to_texel_block_size(fut->format);
-		size_t size = compute_image_size(fut->format, fut->extent);
+		size_t alignment = format_to_texel_block_size(*fut->format);
+		size_t size = compute_image_size(*fut->format, *fut->extent);
 		auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
 
 		{
@@ -242,8 +242,8 @@ TEST_CASE("image slicing, reconvergence 3") {
 		ia.level_count = 2;
 		auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data));
 
-		size_t alignment = format_to_texel_block_size(fut->format);
-		size_t size = compute_image_size(fut->format, fut->extent);
+		size_t alignment = format_to_texel_block_size(*fut->format);
+		size_t size = compute_image_size(*fut->format, *fut->extent);
 		auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
 
 		{
@@ -270,8 +270,8 @@ TEST_CASE("image slicing, reconvergence with undef") {
 		ia.level_count = 2;
 		auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data));
 
-		size_t alignment = format_to_texel_block_size(fut->format);
-		size_t size = compute_image_size(fut->format, fut->extent);
+		size_t alignment = format_to_texel_block_size(*fut->format);
+		size_t size = compute_image_size(*fut->format, *fut->extent);
 		auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
 
 		{
@@ -292,8 +292,8 @@ TEST_CASE("image slicing, forced reconvergence") {
 		ia.level_count = 2;
 		auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data));
 
-		size_t alignment = format_to_texel_block_size(fut->format);
-		size_t size = compute_image_size(fut->format, fut->extent);
+		size_t alignment = format_to_texel_block_size(*fut->format);
+		size_t size = compute_image_size(*fut->format, *fut->extent);
 		auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
 
 		{
@@ -395,8 +395,8 @@ TEST_CASE("mip generation 2") {
 	std::string trace = "";
 
 	auto mipped = generate_mips(trace, std::move(img), 5);
-	size_t alignment = format_to_texel_block_size(mipped->format);
-	size_t size = compute_image_size(mipped->format, { 1, 1, 1 });
+	size_t alignment = format_to_texel_block_size(*mipped->format);
+	size_t size = compute_image_size(*mipped->format, { 1, 1, 1 });
 	auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
 	auto res = download_buffer(copy(mipped.mip(4), discard("dst", *dst))).get(*test_context.allocator, test_context.compiler);
 	auto updata = res->to_span<float>();
@@ -441,8 +441,8 @@ TEST_CASE("mip generation 3") {
 	std::string trace = "";
 
 	generate_mips_2(trace, img, 5);
-	size_t alignment = format_to_texel_block_size(img->format);
-	size_t size = compute_image_size(img->format, { 1, 1, 1 });
+	size_t alignment = format_to_texel_block_size(*img->format);
+	size_t size = compute_image_size(*img->format, { 1, 1, 1 });
 	auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
 	auto res = download_buffer(copy(img.mip(4), discard("dst", *dst))).get(*test_context.allocator, test_context.compiler);
 	auto updata = res->to_span<float>();
@@ -458,8 +458,8 @@ TEST_CASE("mip generation 4") {
 	std::string trace = "";
 
 	generate_mips_2(trace, img, 5);
-	size_t alignment = format_to_texel_block_size(img->format);
-	size_t size = compute_image_size(img->format, { 1, 1, 1 });
+	size_t alignment = format_to_texel_block_size(*img->format);
+	size_t size = compute_image_size(*img->format, { 1, 1, 1 });
 	auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
 	auto res = download_buffer(copy(img.mip(4), discard("dst", *dst))).get(*test_context.allocator, test_context.compiler);
 	auto updata = res->to_span<float>();
@@ -474,8 +474,8 @@ TEST_CASE("mip generation 5") {
 	std::string trace = "";
 
 	generate_mips_2(trace, img, 5);
-	size_t alignment = format_to_texel_block_size(img->format);
-	size_t size = compute_image_size(img->format, { 1, 1, 1 });
+	size_t alignment = format_to_texel_block_size(*img->format);
+	size_t size = compute_image_size(*img->format, { 1, 1, 1 });
 	auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
 	auto res = download_buffer(copy(img.mip(4), discard("dst", *dst))).get(*test_context.allocator, test_context.compiler);
 	auto updata = res->to_span<float>();
@@ -491,8 +491,8 @@ TEST_CASE("mip2mip dep") {
 
 	auto a = img.mip(0);
 	blit_image(a, img.mip(4), Filter::eLinear);
-	size_t alignment = format_to_texel_block_size(img->format);
-	size_t size = compute_image_size(img->format, { 1, 1, 1 });
+	size_t alignment = format_to_texel_block_size(*img->format);
+	size_t size = compute_image_size(*img->format, { 1, 1, 1 });
 	auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
 	auto res = download_buffer(copy(img.mip(4), discard("dst", *dst))).get(*test_context.allocator, test_context.compiler);
 	auto updata = res->to_span<float>();
@@ -503,7 +503,7 @@ vuk::Value<vuk::ImageAttachment> bloom_pass(std::string& trace,
                                             vuk::Value<vuk::ImageAttachment> downsample_image,
                                             vuk::Value<vuk::ImageAttachment> upsample_image,
                                             vuk::Value<vuk::ImageAttachment> input) {
-	auto bloom_mip_count = downsample_image->level_count;
+	uint32_t bloom_mip_count = *downsample_image->level_count;
 	auto prefilter = vuk::make_pass(
 	    "bloom_prefilter", [&trace](vuk::CommandBuffer& command_buffer, VUK_IA(vuk::eComputeRW) target, VUK_IA(vuk::eComputeSampled) input) { trace += "p"; });
 

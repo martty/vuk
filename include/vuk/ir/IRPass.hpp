@@ -299,6 +299,7 @@ namespace vuk {
 
 	struct IRPass : IREvalContext {
 		IRPass(RGCImpl& impl, Runtime& runtime, std::pmr::polymorphic_allocator<std::byte> allocator) : impl(impl), runtime(runtime), allocator(allocator) {}
+		virtual ~IRPass() {}
 
 		RGCImpl& impl;
 		Runtime& runtime;
