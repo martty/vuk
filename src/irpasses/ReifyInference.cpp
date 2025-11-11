@@ -36,7 +36,7 @@ namespace vuk {
 		std::unordered_set<Node*> inference_graph;
 		// compute uses - direct & indirect of placeholders
 
-		auto traverse = [&](auto& const self, Ref r, std::vector<size_t>& type_path) {
+		auto traverse = [&](const auto& self, Ref r, std::vector<size_t>& type_path) {
 			switch (r.node->kind) {
 			case Node::PLACEHOLDER:
 				[[fallthrough]];

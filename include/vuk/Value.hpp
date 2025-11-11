@@ -15,6 +15,9 @@
 namespace vuk {
 	struct SyncHelper;
 
+	template<>
+	struct erased_tuple_adaptor<ImageAttachment>;
+
 	template<class T>
 	struct is_value : std::false_type {};
 
@@ -177,93 +180,54 @@ namespace vuk {
 	public:
 		using ValueBase<T>::ValueBase;
 
-		// Image inferences
-
-		/// @brief Infer extent (width, height, depth) from another image
-		/// @param src Source image to copy extent from
-		void same_extent_as(const Value<ImageAttachment>& src)
-		  requires std::is_same_v<T, ImageAttachment>
-		{
-			this->node->deps.push_back(src.node);
-			this->set_with_extract(this->get_head(), src.get_head(), 0);
-			this->set_with_extract(this->get_head(), src.get_head(), 1);
-			this->set_with_extract(this->get_head(), src.get_head(), 2);
-		}
-
-		/// @brief Infer 2D extent (width, height) from another image
-		/// @param src Source image to copy 2D extent from
-		void same_2D_extent_as(const Value<ImageAttachment>& src)
-		  requires std::is_same_v<T, ImageAttachment>
-		{
-			this->node->deps.push_back(src.node);
-			this->set_with_extract(this->get_head(), src.get_head(), 0);
-			this->set_with_extract(this->get_head(), src.get_head(), 1);
-		}
-
-		/// @brief Infer format from another image
-		/// @param src Source image to copy format from
-		void same_format_as(const Value<ImageAttachment>& src)
-		  requires std::is_same_v<T, ImageAttachment>
-		{
-			this->node->deps.push_back(src.node);
-			this->set_with_extract(this->get_head(), src.get_head(), 3);
-		}
-
-		/// @brief Infer shape (extent, layers, mip levels) from another image
-		/// @param src Source image to copy shape from
-		void same_shape_as(const Value<ImageAttachment>& src)
-		  requires std::is_same_v<T, ImageAttachment>
-		{
-			same_extent_as(src);
-
-			for (auto i = 6; i < 10; i++) { /* 6 - 9 : layers, levels */
-				this->set_with_extract(this->get_head(), src.get_head(), i - 1);
-			}
-		}
-
-		/// @brief Infer all properties (shape, format, sample count) from another image
-		/// @param src Source image to copy properties from
-		void similar_to(const Value<ImageAttachment>& src)
-		  requires std::is_same_v<T, ImageAttachment>
-		{
-			same_shape_as(src);
-			same_format_as(src);
-			this->set_with_extract(this->get_head(), src.get_head(), 4);
-		}
-
-		/// @brief Array subscript operator for array-typed Values
-		/// @param index Index into the array
-		/// @return Value representing the array element
-		auto operator[](size_t index)
-		  requires std::is_array_v<T>
-		{
+		auto operator[](size_t index) {
 			assert(Type::stripped(this->get_head().type())->kind == Type::ARRAY_TY);
 			Ref item = current_module->make_extract(this->get_head(), current_module->make_constant(index));
 			return Value<std::remove_reference_t<decltype(std::declval<T>()[0])>>(item);
 		}
 
-		/// @brief Get a specific mip level of this image
-		/// @param mip Mip level to extract
-		/// @return Value representing the mip level
-		auto mip(uint32_t mip)
-		  requires std::is_same_v<T, ImageAttachment>
+		template<class U = T>
+		U operator*()
+		  requires(Unsynchronized<U> && !std::is_array_v<U>)
 		{
-			Ref item = current_module->make_slice(
-			    this->get_head(), Node::NamedAxis::MIP, current_module->make_constant<uint64_t>(mip), current_module->make_constant<uint64_t>(1u));
-			return Value(item);
-		}
-
-		/// @brief Get a specific array layer of this image
-		/// @param layer Array layer to extract
-		/// @return Value representing the array layer
-		auto layer(uint32_t layer)
-		  requires std::is_same_v<T, ImageAttachment>
-		{
-			Ref item = current_module->make_slice(
-			    this->get_head(), Node::NamedAxis::LAYER, current_module->make_constant<uint64_t>(layer), current_module->make_constant<uint64_t>(1u));
-			return Value(item);
+			auto v = eval(this->get_head());
+			if (v) {
+				return *static_cast<T*>(*v);
+			}
+			assert(false);
+			return U{}; // unreachable
 		}
 	};
+
+	inline Value<uint64_t> operator+(Value<uint64_t> a, Value<uint64_t> b) {
+		Ref ref = current_module->make_math_binary_op(Node::BinOp::ADD, a.get_head(), b.get_head());
+		a.node->deps.push_back(b.node);
+		return std::move(a).transmute<uint64_t>(ref);
+	}
+
+	inline Value<uint64_t> operator-(Value<uint64_t> a, Value<uint64_t> b) {
+		Ref ref = current_module->make_math_binary_op(Node::BinOp::SUB, a.get_head(), b.get_head());
+		a.node->deps.push_back(b.node);
+		return std::move(a).transmute<uint64_t>(ref);
+	}
+
+	inline Value<uint64_t> operator*(Value<uint64_t> a, Value<uint64_t> b) {
+		Ref ref = current_module->make_math_binary_op(Node::BinOp::MUL, a.get_head(), b.get_head());
+		a.node->deps.push_back(b.node);
+		return std::move(a).transmute<uint64_t>(ref);
+	}
+
+	inline Value<uint64_t> operator/(Value<uint64_t> a, Value<uint64_t> b) {
+		Ref ref = current_module->make_math_binary_op(Node::BinOp::DIV, a.get_head(), b.get_head());
+		a.node->deps.push_back(b.node);
+		return std::move(a).transmute<uint64_t>(ref);
+	}
+
+	inline Value<uint64_t> operator%(Value<uint64_t> a, Value<uint64_t> b) {
+		Ref ref = current_module->make_math_binary_op(Node::BinOp::MOD, a.get_head(), b.get_head());
+		a.node->deps.push_back(b.node);
+		return std::move(a).transmute<uint64_t>(ref);
+	}
 
 	template<class T>
 	struct is_value<Value<T>> : std::true_type {};
@@ -274,19 +238,18 @@ namespace vuk {
 	template<class Type>
 	struct Value<view<BufferLike<Type>, dynamic_extent>> : ValueBase<view<BufferLike<Type>, dynamic_extent>> {
 		Value<ptr<BufferLike<Type>>> ptr;
-		Value<size_t> sz_bytes;
-
-		Value<view<BufferLike<Type>, dynamic_extent>>(ExtRef extref) : ValueBase<view<BufferLike<Type>, dynamic_extent>>(extref) {
-			ptr = Value<vuk::ptr<BufferLike<Type>>>(current_module->make_extract(this->get_head(), 0));
-			sz_bytes = Value<size_t>(current_module->make_extract(this->get_head(), 1));
-		}
+		Value<uint64_t> sz_bytes;
 
 		Value<view<BufferLike<Type>, dynamic_extent>>(Ref ref) : ValueBase<view<BufferLike<Type>, dynamic_extent>>(ref) {
 			ptr = Value<vuk::ptr<BufferLike<Type>>>(current_module->make_extract(this->get_head(), 0));
-			sz_bytes = Value<size_t>(current_module->make_extract(this->get_head(), 1));
+			sz_bytes = Value<uint64_t>(current_module->make_extract(this->get_head(), 1));
 		}
 
-		Value<view<BufferLike<Type>, dynamic_extent>>(Value<vuk::ptr<BufferLike<Type>>> ptr, Value<size_t> count)
+		Value<view<BufferLike<Type>, dynamic_extent>>(ExtRef extref) : ValueBase<view<BufferLike<Type>, dynamic_extent>>(extref) {
+			ptr = Value<vuk::ptr<BufferLike<Type>>>(current_module->make_extract(this->get_head(), 0));
+			sz_bytes = Value<uint64_t>(current_module->make_extract(this->get_head(), 1));
+		}
+		Value<view<BufferLike<Type>, dynamic_extent>>(Value<vuk::ptr<BufferLike<Type>>> ptr, Value<uint64_t> count)
 		  requires(!std::is_array_v<Type>)
 		    : ptr(ptr), sz_bytes(count * sizeof(Type)) {
 			assert(false);
@@ -315,11 +278,11 @@ namespace vuk {
 			return ptr;
 		}
 
-		[[nodiscard]] Value<size_t> size_bytes() const noexcept {
+		[[nodiscard]] Value<uint64_t> size_bytes() const noexcept {
 			return sz_bytes;
 		}
 
-		[[nodiscard]] Value<size_t> size() const noexcept {
+		[[nodiscard]] Value<uint64_t> size() const noexcept {
 			return sz_bytes / sizeof(Type);
 		}
 
@@ -366,35 +329,87 @@ namespace vuk {
 	
 	// Arithmetic operators for Value<uint64_t>
 
-	inline Value<uint64_t> operator+(Value<uint64_t> a, Value<uint64_t> b) {
-		Ref ref = current_module->make_math_binary_op(Node::BinOp::ADD, a.get_head(), b.get_head());
-		a.node->deps.push_back(b.node);
-		return std::move(a).transmute<uint64_t>(ref);
-	}
+	template<>
+	struct Value<ImageAttachment> : ValueBase<ImageAttachment> {
+		Value<Image> image = {};
+		Value<ImageView> image_view = {};
 
-	inline Value<uint64_t> operator-(Value<uint64_t> a, Value<uint64_t> b) {
-		Ref ref = current_module->make_math_binary_op(Node::BinOp::SUB, a.get_head(), b.get_head());
-		a.node->deps.push_back(b.node);
-		return std::move(a).transmute<uint64_t>(ref);
-	}
+		Value<ImageCreateFlags> image_flags = {};
+		Value<ImageType> image_type = ImageType::e2D;
+		Value<ImageTiling> tiling = ImageTiling::eOptimal;
+		Value<ImageUsageFlags> usage = {};
+		Value<Extent3D> extent = {};
+		Value<Format> format = Format::eUndefined;
+		Value<Samples> sample_count = Samples::eInfer;
+		Value<bool> allow_srgb_unorm_mutable = false;
+		Value<ImageViewCreateFlags> image_view_flags = {};
+		Value<ImageViewType> view_type = ImageViewType::eInfer;
+		Value<ComponentMapping> components = {};
+		Value<ImageLayout> layout = ImageLayout::eUndefined;
 
-	inline Value<uint64_t> operator*(Value<uint64_t> a, Value<uint64_t> b) {
-		Ref ref = current_module->make_math_binary_op(Node::BinOp::MUL, a.get_head(), b.get_head());
-		a.node->deps.push_back(b.node);
-		return std::move(a).transmute<uint64_t>(ref);
-	}
+		Value<uint32_t> base_level = VK_REMAINING_MIP_LEVELS;
+		Value<uint32_t> level_count = VK_REMAINING_MIP_LEVELS;
 
-	inline Value<uint64_t> operator/(Value<uint64_t> a, Value<uint64_t> b) {
-		Ref ref = current_module->make_math_binary_op(Node::BinOp::DIV, a.get_head(), b.get_head());
-		a.node->deps.push_back(b.node);
-		return std::move(a).transmute<uint64_t>(ref);
-	}
+		Value<uint32_t> base_layer = VK_REMAINING_ARRAY_LAYERS;
+		Value<uint32_t> layer_count = VK_REMAINING_ARRAY_LAYERS;
 
-	inline Value<uint64_t> operator%(Value<uint64_t> a, Value<uint64_t> b) {
-		Ref ref = current_module->make_math_binary_op(Node::BinOp::MOD, a.get_head(), b.get_head());
-		a.node->deps.push_back(b.node);
-		return std::move(a).transmute<uint64_t>(ref);
-	}
+		Value<ImageAttachment>() = default;
+
+		Value<ImageAttachment>(Ref ref) : ValueBase<ImageAttachment>(ref) {
+			/* ptr = Value<vuk::ptr<BufferLike<Type>>>(current_module->make_extract(this->get_head(), 0));
+			sz_bytes = Value<size_t>(current_module->make_extract(this->get_head(), 1));*/
+		}
+
+		Value<ImageAttachment>(ExtRef extref) : Value<ImageAttachment>(Ref(extref.node->get_node(), extref.index)) {}
+		// Image inferences
+		void same_extent_as(const Value<ImageAttachment>& src) {
+			this->node->deps.push_back(src.node);
+			this->set_with_extract(this->get_head(), src.get_head(), 0);
+			this->set_with_extract(this->get_head(), src.get_head(), 1);
+			this->set_with_extract(this->get_head(), src.get_head(), 2);
+		}
+
+		/// @brief Inference target has the same width & height as the source
+		void same_2D_extent_as(const Value<ImageAttachment>& src) {
+			this->node->deps.push_back(src.node);
+			this->set_with_extract(this->get_head(), src.get_head(), 0);
+			this->set_with_extract(this->get_head(), src.get_head(), 1);
+		}
+
+		/// @brief Inference target has the same format as the source
+		void same_format_as(const Value<ImageAttachment>& src) {
+			this->node->deps.push_back(src.node);
+			this->set_with_extract(this->get_head(), src.get_head(), 3);
+		}
+
+		/// @brief Inference target has the same shape(extent, layers, levels) as the source
+		void same_shape_as(const Value<ImageAttachment>& src) {
+			same_extent_as(src);
+
+			for (auto i = 6; i < 10; i++) { /* 6 - 9 : layers, levels */
+				this->set_with_extract(this->get_head(), src.get_head(), i - 1);
+			}
+		}
+
+		/// @brief Inference target is similar to(same shape, same format, same sample count) the source
+		void similar_to(const Value<ImageAttachment>& src) {
+			same_shape_as(src);
+			same_format_as(src);
+			this->set_with_extract(this->get_head(), src.get_head(), 4);
+		}
+
+		Value<ImageAttachment> mip(uint32_t mip) {
+			Ref item = current_module->make_slice(
+			    this->get_head(), Node::NamedAxis::MIP, current_module->make_constant<uint64_t>(mip), current_module->make_constant<uint64_t>(1u));
+			return Value(item);
+		}
+
+		Value<ImageAttachment> layer(uint32_t layer) {
+			Ref item = current_module->make_slice(
+			    this->get_head(), Node::NamedAxis::LAYER, current_module->make_constant<uint64_t>(layer), current_module->make_constant<uint64_t>(1u));
+			return Value(item);
+		}
+	};
 
 	/// @brief Submit multiple Values for execution
 	/// @param allocator Allocator to use for resource allocation

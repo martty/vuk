@@ -760,7 +760,7 @@ namespace vuk {
 		VUK_DO_OR_RETURN(validate_same_argument_different_access());
 
 		VUK_DO_OR_RETURN(impl->collect_chains());
-		impl->ir_passes = { { make_ir_pass<forced_convergence>() } };
+		impl->ir_passes = { make_ir_pass<forced_convergence>() };
 		impl->run_passes(alloc.get_context(), allocator);
 		VUK_DO_OR_RETURN(impl->collect_chains());
 

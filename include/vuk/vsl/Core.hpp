@@ -227,7 +227,7 @@ namespace vuk {
 		memcpy(&value_as_uint, &value, sizeof(T));
 		auto buf2buf = vuk::make_pass(
 		    "fill buffer", [value_as_uint](vuk::CommandBuffer& command_buffer, VUK_BA(vuk::eClear) dst) { command_buffer.fill_buffer(dst, value_as_uint); });
-		buf2buf(dst.cast<byte>(), VUK_CALL);
+		buf2buf(dst.template cast<byte>(), VUK_CALL);
 	}
 
 	template<class T>

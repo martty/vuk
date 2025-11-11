@@ -24,28 +24,40 @@ namespace vuk {
 	struct erased_tuple_adaptor : std::false_type {};
 
 // https://stackoverflow.com/a/44479664
-#define EVAL(...)                                              __VA_ARGS__
-#define VARCOUNT(...)                                          EVAL(VARCOUNT_I(__VA_ARGS__, 9, 8, 7, 6, 5, 4, 3, 2, 1, ))
-#define VARCOUNT_I(_, _9, _8, _7, _6, _5, _4, _3, _2, X_, ...) X_
-#define STR(X)                                                 STR_I(X)
-#define STR_I(X)                                               #X
-#define GLUE(X, Y)                                             GLUE_I(X, Y)
-#define GLUE_I(X, Y)                                           X##Y
-#define FIRST(...)                                             EVAL(FIRST_I(__VA_ARGS__, ))
-#define FIRST_I(X, ...)                                        X
-#define TUPLE_TAIL(...)                                        EVAL(TUPLE_TAIL_I(__VA_ARGS__))
-#define TUPLE_TAIL_I(X, ...)                                   (__VA_ARGS__)
+#define EVAL(...)                                                                                                          __VA_ARGS__
+#define VARCOUNT(...)                                                                                                      EVAL(VARCOUNT_I(__VA_ARGS__, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, ))
+#define VARCOUNT_I(_, _21, _20, _19, _18, _17, _16, _15, _14, _13, _12, _11, _10, _9, _8, _7, _6, _5, _4, _3, _2, X_, ...) X_
+#define STR(X)                                                                                                             STR_I(X)
+#define STR_I(X)                                                                                                           #X
+#define GLUE(X, Y)                                                                                                         GLUE_I(X, Y)
+#define GLUE_I(X, Y)                                                                                                       X##Y
+#define FIRST(...)                                                                                                         EVAL(FIRST_I(__VA_ARGS__, ))
+#define FIRST_I(X, ...)                                                                                                    X
+#define TUPLE_TAIL(...)                                                                                                    EVAL(TUPLE_TAIL_I(__VA_ARGS__))
+#define TUPLE_TAIL_I(X, ...)                                                                                               (__VA_ARGS__)
 
-#define TRANSFORM(NAME_, ARGS_)   (GLUE(TRANSFORM_, VARCOUNT ARGS_)(NAME_, ARGS_))
-#define TRANSFORM_1(NAME_, ARGS_) NAME_ ARGS_
-#define TRANSFORM_2(NAME_, ARGS_) NAME_(FIRST ARGS_), TRANSFORM_1(NAME_, TUPLE_TAIL ARGS_)
-#define TRANSFORM_3(NAME_, ARGS_) NAME_(FIRST ARGS_), TRANSFORM_2(NAME_, TUPLE_TAIL ARGS_)
-#define TRANSFORM_4(NAME_, ARGS_) NAME_(FIRST ARGS_), TRANSFORM_3(NAME_, TUPLE_TAIL ARGS_)
-#define TRANSFORM_5(NAME_, ARGS_) NAME_(FIRST ARGS_), TRANSFORM_4(NAME_, TUPLE_TAIL ARGS_)
-#define TRANSFORM_6(NAME_, ARGS_) NAME_(FIRST ARGS_), TRANSFORM_5(NAME_, TUPLE_TAIL ARGS_)
-#define TRANSFORM_7(NAME_, ARGS_) NAME_(FIRST ARGS_), TRANSFORM_6(NAME_, TUPLE_TAIL ARGS_)
-#define TRANSFORM_8(NAME_, ARGS_) NAME_(FIRST ARGS_), TRANSFORM_7(NAME_, TUPLE_TAIL ARGS_)
-#define TRANSFORM_9(NAME_, ARGS_) NAME_(FIRST ARGS_), TRANSFORM_8(NAME_, TUPLE_TAIL ARGS_)
+#define TRANSFORM(NAME_, ARGS_)    (GLUE(TRANSFORM_, VARCOUNT ARGS_)(NAME_, ARGS_))
+#define TRANSFORM_1(NAME_, ARGS_)  NAME_ ARGS_
+#define TRANSFORM_2(NAME_, ARGS_)  NAME_(FIRST ARGS_), TRANSFORM_1(NAME_, TUPLE_TAIL ARGS_)
+#define TRANSFORM_3(NAME_, ARGS_)  NAME_(FIRST ARGS_), TRANSFORM_2(NAME_, TUPLE_TAIL ARGS_)
+#define TRANSFORM_4(NAME_, ARGS_)  NAME_(FIRST ARGS_), TRANSFORM_3(NAME_, TUPLE_TAIL ARGS_)
+#define TRANSFORM_5(NAME_, ARGS_)  NAME_(FIRST ARGS_), TRANSFORM_4(NAME_, TUPLE_TAIL ARGS_)
+#define TRANSFORM_6(NAME_, ARGS_)  NAME_(FIRST ARGS_), TRANSFORM_5(NAME_, TUPLE_TAIL ARGS_)
+#define TRANSFORM_7(NAME_, ARGS_)  NAME_(FIRST ARGS_), TRANSFORM_6(NAME_, TUPLE_TAIL ARGS_)
+#define TRANSFORM_8(NAME_, ARGS_)  NAME_(FIRST ARGS_), TRANSFORM_7(NAME_, TUPLE_TAIL ARGS_)
+#define TRANSFORM_9(NAME_, ARGS_)  NAME_(FIRST ARGS_), TRANSFORM_8(NAME_, TUPLE_TAIL ARGS_)
+#define TRANSFORM_10(NAME_, ARGS_) NAME_(FIRST ARGS_), TRANSFORM_9(NAME_, TUPLE_TAIL ARGS_)
+#define TRANSFORM_11(NAME_, ARGS_) NAME_(FIRST ARGS_), TRANSFORM_10(NAME_, TUPLE_TAIL ARGS_)
+#define TRANSFORM_12(NAME_, ARGS_) NAME_(FIRST ARGS_), TRANSFORM_11(NAME_, TUPLE_TAIL ARGS_)
+#define TRANSFORM_13(NAME_, ARGS_) NAME_(FIRST ARGS_), TRANSFORM_12(NAME_, TUPLE_TAIL ARGS_)
+#define TRANSFORM_14(NAME_, ARGS_) NAME_(FIRST ARGS_), TRANSFORM_13(NAME_, TUPLE_TAIL ARGS_)
+#define TRANSFORM_15(NAME_, ARGS_) NAME_(FIRST ARGS_), TRANSFORM_14(NAME_, TUPLE_TAIL ARGS_)
+#define TRANSFORM_16(NAME_, ARGS_) NAME_(FIRST ARGS_), TRANSFORM_15(NAME_, TUPLE_TAIL ARGS_)
+#define TRANSFORM_17(NAME_, ARGS_) NAME_(FIRST ARGS_), TRANSFORM_16(NAME_, TUPLE_TAIL ARGS_)
+#define TRANSFORM_18(NAME_, ARGS_) NAME_(FIRST ARGS_), TRANSFORM_17(NAME_, TUPLE_TAIL ARGS_)
+#define TRANSFORM_19(NAME_, ARGS_) NAME_(FIRST ARGS_), TRANSFORM_18(NAME_, TUPLE_TAIL ARGS_)
+#define TRANSFORM_20(NAME_, ARGS_) NAME_(FIRST ARGS_), TRANSFORM_19(NAME_, TUPLE_TAIL ARGS_)
+#define TRANSFORM_21(NAME_, ARGS_) NAME_(FIRST ARGS_), TRANSFORM_20(NAME_, TUPLE_TAIL ARGS_)
 
 #define TRANSFORMSC(NAME_, ARGS_)   (GLUE(TRANSFORMSC_, VARCOUNT ARGS_)(NAME_, ARGS_))
 #define TRANSFORMSC_1(NAME_, ARGS_) NAME_ ARGS_
@@ -73,6 +85,45 @@ namespace vuk {
 #define TRANSFORMSC_9(NAME_, ARGS_)                                                                                                                            \
 	NAME_(FIRST ARGS_);                                                                                                                                          \
 	TRANSFORMSC_8(NAME_, TUPLE_TAIL ARGS_)
+#define TRANSFORMSC_10(NAME_, ARGS_)                                                                                                                           \
+	NAME_(FIRST ARGS_);                                                                                                                                          \
+	TRANSFORMSC_9(NAME_, TUPLE_TAIL ARGS_)
+#define TRANSFORMSC_11(NAME_, ARGS_)                                                                                                                           \
+	NAME_(FIRST ARGS_);                                                                                                                                          \
+	TRANSFORMSC_10(NAME_, TUPLE_TAIL ARGS_)
+#define TRANSFORMSC_11(NAME_, ARGS_)                                                                                                                           \
+	NAME_(FIRST ARGS_);                                                                                                                                          \
+	TRANSFORMSC_10(NAME_, TUPLE_TAIL ARGS_)
+#define TRANSFORMSC_12(NAME_, ARGS_)                                                                                                                           \
+	NAME_(FIRST ARGS_);                                                                                                                                          \
+	TRANSFORMSC_11(NAME_, TUPLE_TAIL ARGS_)
+#define TRANSFORMSC_13(NAME_, ARGS_)                                                                                                                           \
+	NAME_(FIRST ARGS_);                                                                                                                                          \
+	TRANSFORMSC_12(NAME_, TUPLE_TAIL ARGS_)
+#define TRANSFORMSC_14(NAME_, ARGS_)                                                                                                                           \
+	NAME_(FIRST ARGS_);                                                                                                                                          \
+	TRANSFORMSC_13(NAME_, TUPLE_TAIL ARGS_)
+#define TRANSFORMSC_15(NAME_, ARGS_)                                                                                                                           \
+	NAME_(FIRST ARGS_);                                                                                                                                          \
+	TRANSFORMSC_14(NAME_, TUPLE_TAIL ARGS_)
+#define TRANSFORMSC_16(NAME_, ARGS_)                                                                                                                           \
+	NAME_(FIRST ARGS_);                                                                                                                                          \
+	TRANSFORMSC_15(NAME_, TUPLE_TAIL ARGS_)
+#define TRANSFORMSC_17(NAME_, ARGS_)                                                                                                                           \
+	NAME_(FIRST ARGS_);                                                                                                                                          \
+	TRANSFORMSC_16(NAME_, TUPLE_TAIL ARGS_)
+#define TRANSFORMSC_18(NAME_, ARGS_)                                                                                                                           \
+	NAME_(FIRST ARGS_);                                                                                                                                          \
+	TRANSFORMSC_17(NAME_, TUPLE_TAIL ARGS_)
+#define TRANSFORMSC_19(NAME_, ARGS_)                                                                                                                           \
+	NAME_(FIRST ARGS_);                                                                                                                                          \
+	TRANSFORMSC_18(NAME_, TUPLE_TAIL ARGS_)
+#define TRANSFORMSC_20(NAME_, ARGS_)                                                                                                                           \
+	NAME_(FIRST ARGS_);                                                                                                                                          \
+	TRANSFORMSC_19(NAME_, TUPLE_TAIL ARGS_)
+#define TRANSFORMSC_21(NAME_, ARGS_)                                                                                                                           \
+	NAME_(FIRST ARGS_);                                                                                                                                          \
+	TRANSFORMSC_20(NAME_, TUPLE_TAIL ARGS_)
 
 #define MEM_OBJ_ARG(X)  &T::X
 #define STRIFY(X)       STR(X)

@@ -1,4 +1,3 @@
-#include "vuk/runtime/vk/DeviceVkResource.hpp"
 #include "vuk/Exception.hpp"
 #include "vuk/runtime/vk/Address.hpp"
 #include "vuk/runtime/vk/DeviceNestedResource.hpp"
@@ -280,7 +279,7 @@ namespace vuk {
 				deallocate_memory_views({ dst.data(), (uint64_t)i });
 				return res;
 			}
-			ViewEntry ve{ .ptr = ci.ptr, .size = { .linear = ci.vci.count * ci.vci.elem_size }, .buffer = ci.vci };
+			ViewEntry ve{ .ptr = ci.ptr, .size = { .linear = ci.vci.count * ci.vci.elem_size }, .buffer = { ci.vci } };
 			ctx->add_generic_view(meta_p.device_address, ve);
 			dst[i] = generic_view_base{ meta_p.device_address };
 		}
@@ -299,9 +298,9 @@ namespace vuk {
 	}
 
 	/* void DeviceVkResource::set_buffer_allocation_name(Buffer& dst, Name name) {
-		vmaSetAllocationName(impl->allocator, static_cast<VmaAllocation>(dst.allocation), name.c_str());
+	  vmaSetAllocationName(impl->allocator, static_cast<VmaAllocation>(dst.allocation), name.c_str());
 	}*/
-	
+
 	Result<void, AllocateException> DeviceVkResource::allocate_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc) {
 		assert(dst.size() == cis.size());
 		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
@@ -1252,7 +1251,7 @@ namespace vuk {
 	}
 
 	/* void DeviceNestedResource::set_buffer_allocation_name(Buffer& dst, Name name) {
-		upstream->set_buffer_allocation_name(dst, name);
+	  upstream->set_buffer_allocation_name(dst, name);
 	}*/
 
 	Result<void, AllocateException>

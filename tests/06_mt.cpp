@@ -39,8 +39,8 @@ TEST_CASE("MT") {
 	auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, Samples::e1);
 	auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data));
 
-	size_t alignment = format_to_texel_block_size(fut->format);
-	size_t size = compute_image_size(fut->format, fut->extent);
+	size_t alignment = format_to_texel_block_size(*fut->format);
+	size_t size = compute_image_size(*fut->format, *fut->extent);
 
 	auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
 	auto dst_buf = discard("dst", *dst);
@@ -58,11 +58,11 @@ TEST_CASE("MT reconvergence") {
 		ia.level_count = 2;
 		auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data));
 
-		size_t alignment = format_to_texel_block_size(fut->format);
-		size_t size = compute_image_size(fut->format, fut->extent);
+		size_t alignment = format_to_texel_block_size(*fut->format);
+		size_t size = compute_image_size(*fut->format, *fut->extent);
 		auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
 
-		vuk::Value<vuk::ImageAttachment> futp;
+		vuk::Value<ImageAttachment> futp;
 
 		std::jthread worker([&]() {
 			void_clear_image(fut.mip(0), vuk::ClearColor(7u, 7u, 7u, 7u));

@@ -1519,6 +1519,8 @@ namespace vuk {
 		return node->acquire.values;
 	}
 
+	Result<void*, CannotBeConstantEvaluated> eval(Ref parm);
+
 	extern thread_local std::shared_ptr<IRModule> current_module;
 
 	struct ExtNode {

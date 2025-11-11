@@ -43,6 +43,25 @@ namespace vuk {
 namespace vuk {
 	ADAPT_TEMPLATED_STRUCT_FOR_IR(Buffer, ptr, sz_bytes);
 	ADAPT_STRUCT_FOR_IR(BufferCreateInfo, memory_usage, size, alignment);
+	ADAPT_STRUCT_FOR_IR(ImageAttachment,
+	                    image,
+	                    image_view,
+	                    image_flags,
+	                    image_type,
+	                    tiling,
+	                    usage,
+	                    extent,
+	                    format,
+	                    sample_count,
+	                    allow_srgb_unorm_mutable,
+	                    image_view_flags,
+	                    view_type,
+	                    components,
+	                    layout,
+	                    base_level,
+	                    level_count,
+	                    base_layer,
+	                    layer_count);
 
 	static_assert(erased_tuple_adaptor<view<BufferLike<float>>>::value);
 } // namespace vuk
@@ -335,7 +354,6 @@ namespace vuk {
 		return { make_ext_ref(ref) };
 	}
 
-	// declare ~~ int* x;
 	// acquire ~~ int* x = _existing_;
 	// discard ~~ int* x = _existing_; invalidate(x);
 
