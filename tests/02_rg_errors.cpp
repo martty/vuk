@@ -34,7 +34,7 @@ TEST_CASE("error: can't construct incomplete") {
 	REQUIRE_THROWS(download_buffer(copy(std::move(buf0), std::move(buf3))).get(*test_context.allocator, test_context.compiler));
 }
 
-auto image2buf = make_pass("copy image to buffer", [](CommandBuffer& cbuf, VUK_IA(Access::eTransferRead) src, VUK_BA(Access::eTransferWrite) dst) {
+static auto image2buf = make_pass("copy image to buffer", [](CommandBuffer& cbuf, VUK_IA(Access::eTransferRead) src, VUK_BA(Access::eTransferWrite) dst) {
 	BufferImageCopy bc;
 	bc.imageOffset = { 0, 0, 0 };
 	bc.bufferRowLength = 0;
@@ -50,7 +50,7 @@ auto image2buf = make_pass("copy image to buffer", [](CommandBuffer& cbuf, VUK_I
 	return dst;
 });
 
-auto blit_down = make_pass("blit down", [](CommandBuffer& cbuf, VUK_IA(Access::eTransferRead | Access::eTransferWrite) img) {
+static auto blit_down = make_pass("blit down", [](CommandBuffer& cbuf, VUK_IA(Access::eTransferRead | Access::eTransferWrite) img) {
 	ImageBlit region = {};
 	region.srcOffsets[0] = Offset3D{};
 	region.srcOffsets[1] = Offset3D{ 2, 2, 1 };
@@ -96,15 +96,15 @@ TEST_CASE("error: attaching something twice decl/decl") {
 }
 /*
 TEST_CASE("not an error: attaching something twice acq/acq") {
-	{
-		auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, 100, 1 });
-		auto buf_a = vuk::acquire_buf("a", *dst, vuk::Access::eNone);
-		auto buf_b = vuk::acquire_buf("a again", *dst, vuk::Access::eNone);
+  {
+    auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, 100, 1 });
+    auto buf_a = vuk::acquire_buf("a", *dst, vuk::Access::eNone);
+    auto buf_b = vuk::acquire_buf("a again", *dst, vuk::Access::eNone);
 
-		auto wr_buf = vuk::make_pass("wr", [](CommandBuffer&, VUK_BA(vuk::eTransferWrite) buf, VUK_BA(vuk::eTransferWrite) bufb) { return buf; });
+    auto wr_buf = vuk::make_pass("wr", [](CommandBuffer&, VUK_BA(vuk::eTransferWrite) buf, VUK_BA(vuk::eTransferWrite) bufb) { return buf; });
 
-		REQUIRE_NOTHROW(wr_buf(buf_a, buf_b).get(*test_context.allocator, test_context.compiler));
-	}
+    REQUIRE_NOTHROW(wr_buf(buf_a, buf_b).get(*test_context.allocator, test_context.compiler));
+  }
 }*/
 
 TEST_CASE("error: attaching something twice decl/acq") {
@@ -129,7 +129,6 @@ TEST_CASE("error: passing same things with different access") {
 		REQUIRE_THROWS(wr_buf(buf_a, buf_a).get(*test_context.allocator, test_context.compiler));
 	}
 }
-
 
 #pragma clang diagnostic pop
 #pragma warning(pop)

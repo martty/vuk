@@ -35,8 +35,9 @@ namespace vuk {
 #define VUK_ARG(type, access) vuk::Arg<type, access, vuk::tag_type<__COUNTER__>>
 #endif
 
-#define VUK_CALLSTACK vuk::SourceLocationAtFrame _pscope = VUK_HERE_AND_NOW(), vuk::SourceLocationAtFrame _scope = VUK_HERE_AND_NOW()
-#define VUK_CALL      (_pscope != _scope ? _scope.parent = &_pscope, _scope : _scope)
+#define VUK_CALLSTACK                                                                                                                                          \
+	[[maybe_unused]] vuk::SourceLocationAtFrame _pscope = VUK_HERE_AND_NOW(), [[maybe_unused]] vuk::SourceLocationAtFrame _scope = VUK_HERE_AND_NOW()
+#define VUK_CALL (_pscope != _scope ? _scope.parent = &_pscope, _scope : _scope)
 
 namespace vuk {
 	ResourceUse to_use(Access acc);
@@ -108,7 +109,7 @@ public:
 
 	template<typename>
 	struct tuple_to_typelist {
-		DELAYED_ERROR("tuple_to_typelist expects a std::tuple");
+		DELAYED_ERROR("tuple_to_typelist expects a std::tuple")
 	};
 
 	template<typename... Ts>
@@ -121,7 +122,7 @@ public:
 
 	template<typename>
 	struct typelist_to_tuple {
-		DELAYED_ERROR("typelist_to_tuple expects a type_list");
+		DELAYED_ERROR("typelist_to_tuple expects a type_list")
 	};
 
 	template<typename... Ts>
@@ -197,7 +198,7 @@ public:
 	inline constexpr std::size_t tuple_element_index_v = tuple_element_index<T, Tuple>::value;
 
 	template<typename Tuple, typename... Ts>
-	auto make_indices(const Tuple& tuple, type_list<Ts...>) {
+	auto make_indices([[maybe_unused]] const Tuple& tuple, type_list<Ts...>) {
 		return std::array{ tuple_element_index_v<Ts, Tuple>... };
 	}
 
@@ -278,7 +279,7 @@ public:
 	struct is_tuple<std::tuple<T...>> : std::true_type {};
 
 	template<typename... T>
-	static auto make_ret(std::shared_ptr<ExtNode> extnode, const std::tuple<T...>& us) {
+	static auto make_ret(std::shared_ptr<ExtNode> extnode, [[maybe_unused]] const std::tuple<T...>& us) {
 		if constexpr (sizeof...(T) > 0) {
 			size_t i = 0;
 			// FIXME: I think this is well defined but seems like compilers don't agree on the result
@@ -340,7 +341,6 @@ public:
 				if (!opaque_fn_ty) {
 					std::array<std::shared_ptr<Type>, arg_count> arg_types = { current_module->types.make_imbued_ty(T{ nullptr, args.get_head() }.src.type(),
 						                                                                                              T::access)... };
-
 					fixed_vector<std::shared_ptr<Type>, arg_count> ret_types;
 					if constexpr (is_tuple<Ret>::value) {
 						auto [idxs, ret_tuple] = intersect_tuples<std::tuple<T...>, Ret>(arg_tuple_as_a);
@@ -371,7 +371,7 @@ public:
 						                                                                         std::span<void*> opaque_meta,
 						                                                                         std::span<void*> opaque_rets) mutable -> void {
 							cb(cbuf, opaque_args, opaque_meta, opaque_rets.subspan(0, old_ret_cnt));
-							for (auto i = 0; i < maps_to_add.size(); i++) {
+							for (size_t i = 0; i < maps_to_add.size(); i++) {
 								opaque_rets[old_ret_cnt + i] = opaque_args[maps_to_add[i]];
 							}
 						};

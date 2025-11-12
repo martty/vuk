@@ -493,7 +493,7 @@ namespace vuk {
 		if (o.sets.size() > sets.size()) {
 			sets.resize(o.sets.size());
 		}
-		for (auto index = 0; index < o.sets.size(); index++) {
+		for (size_t index = 0; index < o.sets.size(); index++) {
 			auto& os = o.sets[index];
 			if (!os) {
 				continue;

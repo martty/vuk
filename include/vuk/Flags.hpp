@@ -1,7 +1,7 @@
 #pragma once
 
-#include <type_traits>
 #include <memory>
+#include <type_traits>
 #include <utility>
 
 namespace vuk {
@@ -15,7 +15,8 @@ namespace vuk {
 
 		constexpr Flags(BitType bit) noexcept : m_mask(static_cast<MaskType>(bit)) {}
 
-		constexpr Flags(Flags<BitType> const& rhs) noexcept : m_mask(rhs.m_mask) {}
+		constexpr Flags(Flags<BitType> const& rhs) noexcept = default;
+		constexpr Flags& operator=(Flags<BitType> const& rhs) noexcept = default;
 
 		constexpr explicit Flags(MaskType flags) noexcept : m_mask(flags) {}
 

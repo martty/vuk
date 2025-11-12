@@ -5,7 +5,7 @@
 
 using namespace vuk;
 
-auto image2buf = make_pass("copy image to buffer", [](CommandBuffer& cbuf, VUK_IA(Access::eTransferRead) src, VUK_BA(Access::eTransferWrite) dst) {
+static auto image2buf = make_pass("copy image to buffer", [](CommandBuffer& cbuf, VUK_IA(Access::eTransferRead) src, VUK_BA(Access::eTransferWrite) dst) {
 	BufferImageCopy bc;
 	bc.imageOffset = { 0, 0, 0 };
 	bc.bufferRowLength = 0;

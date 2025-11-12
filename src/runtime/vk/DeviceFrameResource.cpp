@@ -5,8 +5,8 @@
 #include "vuk/runtime/vk/PipelineInstance.hpp"
 #include "vuk/runtime/vk/Query.hpp"
 #include "vuk/runtime/vk/RenderPass.hpp"
-#include "vuk/runtime/vk/VkRuntime.hpp"
 #include "vuk/runtime/vk/VkQueueExecutor.hpp"
+#include "vuk/runtime/vk/VkRuntime.hpp"
 
 #include <atomic>
 #include <mutex>
@@ -67,9 +67,7 @@ namespace vuk {
 			            { &iv, 1 }, { &ivci, 1 }, VUK_HERE_AND_NOW()); // TODO: dropping error
 			        return iv;
 		        },
-		        +[](void* allocator, const ImageView& iv) {
-			        reinterpret_cast<DeviceSuperFrameResourceImpl*>(allocator)->sfr->deallocate_image_views({ &iv, 1 });
-		        }),
+		        +[](void* allocator, const ImageView& iv) { reinterpret_cast<DeviceSuperFrameResourceImpl*>(allocator)->sfr->deallocate_image_views({ &iv, 1 }); }),
 		    graphics_pipeline_cache(
 		        this,
 		        +[](void* allocator, const GraphicsPipelineInstanceCreateInfo& ci) {
@@ -199,7 +197,7 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	void DeviceFrameResource::deallocate_semaphores(std::span<const VkSemaphore> src) {} // noop
+	void DeviceFrameResource::deallocate_semaphores([[maybe_unused]] [[maybe_unused]] std::span<const VkSemaphore> src) {} // noop
 
 	Result<void, AllocateException> DeviceFrameResource::allocate_fences(std::span<VkFence> dst, SourceLocationAtFrame loc) {
 		VUK_DO_OR_RETURN(upstream->allocate_fences(dst, loc));
@@ -209,7 +207,7 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	void DeviceFrameResource::deallocate_fences(std::span<const VkFence> src) {} // noop
+	void DeviceFrameResource::deallocate_fences([[maybe_unused]] std::span<const VkFence> src) {} // noop
 
 	Result<void, AllocateException> DeviceFrameResource::allocate_command_buffers(std::span<CommandBufferAllocation> dst,
 	                                                                              std::span<const CommandBufferAllocationCreateInfo> cis,
@@ -271,14 +269,14 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	void DeviceFrameResource::deallocate_framebuffers(std::span<const VkFramebuffer> src) {} // noop
+	void DeviceFrameResource::deallocate_framebuffers([[maybe_unused]] std::span<const VkFramebuffer> src) {} // noop
 
 	Result<void, AllocateException> DeviceFrameResource::allocate_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc) {
 		VUK_DO_OR_RETURN(static_cast<DeviceSuperFrameResource*>(upstream)->allocate_cached_images(dst, cis, loc));
 		return { expected_value };
 	}
 
-	void DeviceFrameResource::deallocate_images(std::span<const Image> src) {} // noop
+	void DeviceFrameResource::deallocate_images([[maybe_unused]] std::span<const Image> src) {} // noop
 
 	Result<void, AllocateException>
 	DeviceFrameResource::allocate_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc) {
@@ -289,7 +287,7 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	void DeviceFrameResource::deallocate_image_views(std::span<const ImageView> src) {} // noop
+	void DeviceFrameResource::deallocate_image_views([[maybe_unused]] std::span<const ImageView> src) {} // noop
 
 	Result<void, AllocateException> DeviceFrameResource::allocate_persistent_descriptor_sets(std::span<PersistentDescriptorSet> dst,
 	                                                                                         std::span<const PersistentDescriptorSetCreateInfo> cis,
@@ -302,7 +300,7 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	void DeviceFrameResource::deallocate_persistent_descriptor_sets(std::span<const PersistentDescriptorSet> src) {} // noop
+	void DeviceFrameResource::deallocate_persistent_descriptor_sets([[maybe_unused]] std::span<const PersistentDescriptorSet> src) {} // noop
 
 	Result<void, AllocateException>
 	DeviceFrameResource::allocate_descriptor_sets_with_value(std::span<DescriptorSet> dst, std::span<const SetBinding> cis, SourceLocationAtFrame loc) {
@@ -315,7 +313,7 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	void DeviceFrameResource::deallocate_descriptor_sets(std::span<const DescriptorSet> src) {} // noop
+	void DeviceFrameResource::deallocate_descriptor_sets([[maybe_unused]] std::span<const DescriptorSet> src) {} // noop
 
 	Result<void, AllocateException>
 	DeviceFrameResource::allocate_descriptor_sets(std::span<DescriptorSet> dst, std::span<const DescriptorSetLayoutAllocInfo> cis, SourceLocationAtFrame loc) {
@@ -382,7 +380,7 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	void DeviceFrameResource::deallocate_timestamp_query_pools(std::span<const TimestampQueryPool> src) {} // noop
+	void DeviceFrameResource::deallocate_timestamp_query_pools([[maybe_unused]] std::span<const TimestampQueryPool> src) {} // noop
 
 	Result<void, AllocateException>
 	DeviceFrameResource::allocate_timestamp_queries(std::span<TimestampQuery> dst, std::span<const TimestampQueryCreateInfo> cis, SourceLocationAtFrame loc) {
@@ -422,7 +420,7 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	void DeviceFrameResource::deallocate_timestamp_queries(std::span<const TimestampQuery> src) {} // noop
+	void DeviceFrameResource::deallocate_timestamp_queries([[maybe_unused]] std::span<const TimestampQuery> src) {} // noop
 
 	void DeviceFrameResource::wait_sync_points(std::span<const SyncPoint> src) {
 		std::unique_lock _(impl->syncpoints_mutex);
@@ -501,7 +499,7 @@ namespace vuk {
 	void DeviceFrameResource::wait() {
 		if (impl->fences.size() > 0) {
 			if (impl->fences.size() > 64) {
-				int i = 0;
+				size_t i = 0;
 				for (; i < impl->fences.size() - 64; i += 64) {
 					impl->ctx->vkWaitForFences(device, 64, impl->fences.data() + i, true, UINT64_MAX);
 				}
@@ -518,7 +516,7 @@ namespace vuk {
 			std::vector<uint64_t> values;
 			values.reserve(impl->syncpoints.size());
 
-			for (uint64_t i = 0; i < impl->syncpoints.size(); i++) {
+			for (size_t i = 0; i < impl->syncpoints.size(); i++) {
 				auto& sp = impl->syncpoints[i];
 				if (sp.executor->type == Executor::Type::eVulkanDeviceQueue) {
 					auto dev_queue = static_cast<QueueExecutor*>(sp.executor);
@@ -722,7 +720,7 @@ namespace vuk {
 		vec.insert(vec.end(), src.begin(), src.end());
 	}
 
-	void DeviceSuperFrameResource::deallocate_timestamp_queries(std::span<const TimestampQuery> src) {} // noop
+	void DeviceSuperFrameResource::deallocate_timestamp_queries([[maybe_unused]] std::span<const TimestampQuery> src) {} // noop
 
 	void DeviceSuperFrameResource::wait_sync_points(std::span<const SyncPoint> src) {
 		std::shared_lock _s(impl->new_frame_mutex);
@@ -923,7 +921,7 @@ namespace vuk {
 		impl->ray_tracing_pipeline_cache.clear();
 		impl->render_pass_cache.clear();
 
-		for (auto i = 0; i < frames_in_flight; i++) {
+		for (uint64_t i = 0; i < frames_in_flight; i++) {
 			auto lframe = (impl->frame_counter + i) % frames_in_flight;
 			auto& f = impl->frames[lframe];
 			f.wait();
@@ -934,7 +932,7 @@ namespace vuk {
 			f.impl->linear_gpu_only.free();
 		}
 
-		for (auto i = 0; i < frames_in_flight; i++) {
+		for (uint64_t i = 0; i < frames_in_flight; i++) {
 			auto lframe = (impl->frame_counter + i) % frames_in_flight;
 			auto& f = impl->frames[lframe];
 			deallocate_frame(f);

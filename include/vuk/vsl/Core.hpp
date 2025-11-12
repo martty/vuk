@@ -15,7 +15,8 @@ namespace vuk {
 	/// @param buffer Buffer to fill
 	/// @param src_data pointer to source data
 	/// @param size size of source data
-	inline Value<Buffer> host_data_to_buffer(Allocator& allocator, DomainFlagBits copy_domain, Buffer dst, const void* src_data, size_t size, VUK_CALLSTACK) {
+	inline Value<Buffer>
+	host_data_to_buffer(Allocator& allocator, [[maybe_unused]] DomainFlagBits copy_domain, Buffer dst, const void* src_data, size_t size, VUK_CALLSTACK) {
 		// host-mapped buffers just get memcpys
 		if (dst.mapped_ptr) {
 			memcpy(dst.mapped_ptr, src_data, size);
@@ -49,11 +50,10 @@ namespace vuk {
 	inline Value<Buffer> download_buffer(Value<Buffer> buffer_src, VUK_CALLSTACK) {
 		auto dst = declare_buf("dst", Buffer{ .memory_usage = MemoryUsage::eGPUtoCPU }, VUK_CALL);
 		dst.same_size(buffer_src);
-		auto download =
-		    make_pass("download buffer", [](CommandBuffer& command_buffer, VUK_BA(Access::eTransferRead) src, VUK_BA(Access::eTransferWrite) dst) {
-			    command_buffer.copy_buffer(src, dst);
-			    return dst;
-		    });
+		auto download = make_pass("download buffer", [](CommandBuffer& command_buffer, VUK_BA(Access::eTransferRead) src, VUK_BA(Access::eTransferWrite) dst) {
+			command_buffer.copy_buffer(src, dst);
+			return dst;
+		});
 		return download(std::move(buffer_src), std::move(dst), VUK_CALL);
 	}
 
@@ -63,7 +63,7 @@ namespace vuk {
 	/// @param image ImageAttachment to fill
 	/// @param src_data pointer to source data
 	inline Value<ImageAttachment>
-	host_data_to_image(Allocator& allocator, DomainFlagBits copy_domain, ImageAttachment image, const void* src_data, VUK_CALLSTACK) {
+	host_data_to_image(Allocator& allocator, [[maybe_unused]] DomainFlagBits copy_domain, ImageAttachment image, const void* src_data, VUK_CALLSTACK) {
 		size_t alignment = format_to_texel_block_size(image.format);
 		size_t size = compute_image_size(image.format, image.extent);
 		auto src = *allocate_buffer(allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
@@ -83,11 +83,10 @@ namespace vuk {
 
 		auto srcbuf = acquire_buf("src", *src, Access::eNone, VUK_CALL);
 		auto dst = declare_ia("dst", image, VUK_CALL);
-		auto image_upload =
-		    make_pass("image upload", [bc](CommandBuffer& command_buffer, VUK_BA(Access::eTransferRead) src, VUK_IA(Access::eTransferWrite) dst) {
-			    command_buffer.copy_buffer_to_image(src, dst, bc);
-			    return dst;
-		    });
+		auto image_upload = make_pass("image upload", [bc](CommandBuffer& command_buffer, VUK_BA(Access::eTransferRead) src, VUK_IA(Access::eTransferWrite) dst) {
+			command_buffer.copy_buffer_to_image(src, dst, bc);
+			return dst;
+		});
 
 		return image_upload(std::move(srcbuf), std::move(dst), VUK_CALL);
 	}
@@ -197,9 +196,9 @@ namespace vuk {
 
 	inline Value<Buffer> copy(Value<Buffer> src, Value<Buffer> dst, VUK_CALLSTACK) {
 		auto buf2buf = vuk::make_pass("copy buffer to buffer", [](vuk::CommandBuffer& command_buffer, VUK_BA(vuk::eCopyRead) src, VUK_BA(vuk::eCopyWrite) dst) {
-			    command_buffer.copy_buffer(src, dst);
-			    return dst;
-		    });
+			command_buffer.copy_buffer(src, dst);
+			return dst;
+		});
 		return buf2buf(src, dst, VUK_CALL);
 	}
 
@@ -208,9 +207,8 @@ namespace vuk {
 		uint32_t value_as_uint;
 		static_assert(sizeof(T) == sizeof(uint32_t), "T must be 4 bytes");
 		memcpy(&value_as_uint, &value, sizeof(T));
-		auto buf2buf = vuk::make_pass("fill buffer", [value_as_uint](vuk::CommandBuffer& command_buffer, VUK_BA(vuk::eClear) dst) {
-			command_buffer.fill_buffer(dst, value_as_uint);
-		    });
+		auto buf2buf = vuk::make_pass(
+		    "fill buffer", [value_as_uint](vuk::CommandBuffer& command_buffer, VUK_BA(vuk::eClear) dst) { command_buffer.fill_buffer(dst, value_as_uint); });
 		buf2buf(dst, VUK_CALL);
 	}
 
@@ -234,7 +232,7 @@ namespace vuk {
 		return buf2img(src, dst, VUK_CALL);
 	}
 
-		inline Value<ImageAttachment> copy(Value<ImageAttachment> src, Value<ImageAttachment> dst, VUK_CALLSTACK) {
+	inline Value<ImageAttachment> copy(Value<ImageAttachment> src, Value<ImageAttachment> dst, VUK_CALLSTACK) {
 		auto img2img = make_pass("copy image to image", [](CommandBuffer& cbuf, VUK_IA(Access::eCopyRead) src, VUK_IA(Access::eCopyWrite) dst) {
 			assert(src->level_count == dst->level_count);
 

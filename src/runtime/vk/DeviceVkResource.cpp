@@ -533,9 +533,9 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	void DeviceVkResource::deallocate_timestamp_queries(std::span<const TimestampQuery> src) {}
+	void DeviceVkResource::deallocate_timestamp_queries([[maybe_unused]] std::span<const TimestampQuery> src) {}
 
-	void DeviceVkResource::wait_sync_points(std::span<const SyncPoint> src) {} // noop
+	void DeviceVkResource::wait_sync_points([[maybe_unused]] std::span<const SyncPoint> src) {} // noop
 
 	Result<void, AllocateException> DeviceVkResource::allocate_acceleration_structures(std::span<VkAccelerationStructureKHR> dst,
 	                                                                                   std::span<const VkAccelerationStructureCreateInfoKHR> cis,
@@ -587,7 +587,7 @@ namespace vuk {
 			gpci.renderPass = cinfo.render_pass;
 			gpci.layout = cinfo.base->pipeline_layout;
 			auto psscis = cinfo.base->psscis;
-			for (auto i = 0; i < psscis.size(); i++) {
+			for (size_t i = 0; i < psscis.size(); i++) {
 				psscis[i].pName = cinfo.base->entry_point_names[i].c_str();
 			}
 			gpci.pStages = psscis.data();
@@ -919,7 +919,7 @@ namespace vuk {
 			uint32_t callable_count = 0;
 
 			auto psscis = cinfo.base->psscis;
-			for (auto i = 0; i < psscis.size(); i++) {
+			for (size_t i = 0; i < psscis.size(); i++) {
 				psscis[i].pName = cinfo.base->entry_point_names[i].c_str();
 			}
 

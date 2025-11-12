@@ -142,7 +142,7 @@ namespace vuk::extra {
 
 		old_swapchain->images.clear();
 
-		for (auto i = 0; i < images.size(); i++) {
+		for (size_t i = 0; i < images.size(); i++) {
 			ImageAttachment ia;
 			ia.extent = { vkswapchain->extent.width, vkswapchain->extent.height, 1 };
 			ia.format = (Format)vkswapchain->image_format;
