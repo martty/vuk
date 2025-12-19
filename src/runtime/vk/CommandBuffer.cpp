@@ -1,9 +1,9 @@
-#include "vuk/RenderGraph.hpp"
 #include "vuk/runtime/CommandBuffer.hpp"
+#include "vuk/RenderGraph.hpp"
+#include "vuk/SyncLowering.hpp"
 #include "vuk/runtime/Stream.hpp"
 #include "vuk/runtime/vk/AllocatorHelpers.hpp"
 #include "vuk/runtime/vk/VkRuntime.hpp"
-#include "vuk/SyncLowering.hpp"
 
 #include <cmath>
 #include <fmt/printf.h>
@@ -190,6 +190,12 @@ namespace vuk {
 	CommandBuffer& CommandBuffer::set_conservative(PipelineRasterizationConservativeStateCreateInfo state) {
 		VUK_EARLY_RET();
 		conservative_state = state;
+		return *this;
+	}
+
+	CommandBuffer& CommandBuffer::set_patch_control_points(uint32_t new_patch_control_points) {
+		VUK_EARLY_RET();
+		patch_control_points = new_patch_control_points;
 		return *this;
 	}
 
@@ -1375,6 +1381,11 @@ namespace vuk {
 				pi.extended_size += sizeof(GraphicsPipelineInstanceCreateInfo::ConservativeState);
 			}
 
+			if (patch_control_points > 0) {
+				records.tessellation_enabled = true;
+				pi.extended_size += sizeof(GraphicsPipelineInstanceCreateInfo::TessellationState);
+			}
+
 			if (ongoing_render_pass->depth_stencil_attachment) {
 				assert(depth_stencil_state && "If a pass has a depth/stencil attachment, you must set the depth/stencil state.");
 
@@ -1509,6 +1520,12 @@ namespace vuk {
 				GraphicsPipelineInstanceCreateInfo::ConservativeState cs{ .conservativeMode = (uint8_t)conservative_state->mode,
 					                                                        .overestimationAmount = conservative_state->overestimationAmount };
 				write(data_ptr, cs);
+			}
+
+			if (records.tessellation_enabled) {
+				GraphicsPipelineInstanceCreateInfo::TessellationState ts{ .patch_control_points = patch_control_points };
+
+				write(data_ptr, ts);
 			}
 
 			if (ongoing_render_pass->depth_stencil_attachment) {

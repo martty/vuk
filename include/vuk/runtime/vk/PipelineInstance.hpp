@@ -37,6 +37,7 @@ namespace vuk {
 			uint32_t line_width_not_1 : 1;
 			uint32_t more_than_one_sample : 1;
 			uint32_t conservative_rasterization_enabled : 1;
+			uint32_t tessellation_enabled : 1;
 		} records = {};
 		uint32_t attachmentCount : std::bit_width(VUK_MAX_COLOR_ATTACHMENTS); // up to VUK_MAX_COLOR_ATTACHMENTS attachments
 		// input assembly state
@@ -87,6 +88,10 @@ namespace vuk {
 		struct ConservativeState {
 			uint8_t conservativeMode : 2;
 			float overestimationAmount;
+		};
+
+		struct TessellationState {
+			uint32_t patch_control_points;
 		};
 
 		struct DepthBias {
@@ -193,7 +198,7 @@ namespace vuk {
 	struct create_info<vuk::RayTracingPipelineInfo> {
 		using type = vuk::RayTracingPipelineInstanceCreateInfo;
 	};
-}
+} // namespace vuk
 
 namespace std {
 	template<>

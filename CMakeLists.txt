@@ -156,7 +156,7 @@ if (NOT TARGET fmt::fmt)
   FetchContent_Declare(
     fmt
     GIT_REPOSITORY https://github.com/fmtlib/fmt
-    GIT_TAG 7f7695524a4bc3c9b7883afcc86ba61421989b7f
+    GIT_TAG 12.1.0
   )
   FetchContent_MakeAvailable(fmt)
 endif()

@@ -765,6 +765,14 @@ namespace vuk {
 			}
 			gpci.pRasterizationState = &rasterization_state;
 
+			// TESSELLATION STATE
+			VkPipelineTessellationStateCreateInfo tessellation_state{ .sType = VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO };
+			if (cinfo.records.tessellation_enabled) {
+				auto ts = read<GraphicsPipelineInstanceCreateInfo::TessellationState>(data_ptr);
+				tessellation_state.patchControlPoints = ts.patch_control_points;
+			}
+			gpci.pTessellationState = &tessellation_state;
+
 			// DEPTH - STENCIL STATE
 			VkPipelineDepthStencilStateCreateInfo depth_stencil_state{ VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO };
 			if (cinfo.records.depth_stencil) {
