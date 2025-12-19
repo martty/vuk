@@ -290,7 +290,7 @@ namespace vuk {
 		float line_width = 1.0f;
 		fixed_vector<VkViewport, VUK_MAX_VIEWPORTS> viewports;
 		fixed_vector<VkRect2D, VUK_MAX_SCISSORS> scissors;
-		uint32_t patch_control_points = 1;
+		uint32_t patch_control_points = 0;
 
 		// Push constants
 		unsigned char push_constant_buffer[VUK_MAX_PUSHCONSTANT_SIZE];
