@@ -2,15 +2,15 @@
 
 #include "glfw.hpp"
 #include "utils.hpp"
-#include "vuk/runtime/vk/Allocator.hpp"
-#include "vuk/runtime/vk/AllocatorHelpers.hpp"
-#include "vuk/runtime/CommandBuffer.hpp"
-#include "vuk/runtime/vk/VkRuntime.hpp"
-#include "vuk/vsl/Core.hpp"
 #include "vuk/RenderGraph.hpp"
 #include "vuk/SampledImage.hpp"
-#include "vuk/runtime/vk/DeviceFrameResource.hpp"
+#include "vuk/runtime/CommandBuffer.hpp"
 #include "vuk/runtime/ThisThreadExecutor.hpp"
+#include "vuk/runtime/vk/Allocator.hpp"
+#include "vuk/runtime/vk/AllocatorHelpers.hpp"
+#include "vuk/runtime/vk/DeviceFrameResource.hpp"
+#include "vuk/runtime/vk/VkRuntime.hpp"
+#include "vuk/vsl/Core.hpp"
 #include <VkBootstrap.h>
 #include <filesystem>
 #include <string>
@@ -115,6 +115,8 @@ int main(int argc, char** argv) {
 	VkPhysicalDeviceVulkan11Features vk11features{ .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES };
 	vk11features.shaderDrawParameters = true;
 	VkPhysicalDeviceFeatures2 vk10features{ .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR };
+	vk10features.features.fillModeNonSolid = true;
+	vk10features.features.tessellationShader = true;
 	vk10features.features.shaderInt64 = true;
 	VkPhysicalDeviceSynchronization2FeaturesKHR sync_feat{ .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES_KHR, .synchronization2 = true };
 	device_builder = device_builder.add_pNext(&vk12features).add_pNext(&vk11features).add_pNext(&sync_feat).add_pNext(&vk10features);

@@ -95,6 +95,8 @@ namespace vuk {
 			VkPhysicalDeviceVulkan11Features vk11features{ .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES };
 			vk11features.shaderDrawParameters = true;
 			VkPhysicalDeviceFeatures2 vk10features{ .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR };
+			vk10features.features.fillModeNonSolid = true;
+			vk10features.features.tessellationShader = true;
 			vk10features.features.shaderInt64 = true;
 			VkPhysicalDeviceSynchronization2FeaturesKHR sync_feat{ .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES_KHR,
 				                                                     .synchronization2 = true };
