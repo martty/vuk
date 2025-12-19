@@ -4,10 +4,10 @@
 #include "vuk/Exception.hpp"
 #include "vuk/FixedVector.hpp"
 #include "vuk/Result.hpp"
+#include "vuk/Types.hpp"
 #include "vuk/runtime/vk/Image.hpp"
 #include "vuk/runtime/vk/PipelineInstance.hpp"
 #include "vuk/runtime/vk/Query.hpp"
-#include "vuk/Types.hpp"
 #include "vuk/vuk_fwd.hpp"
 
 #include <optional>
@@ -290,6 +290,7 @@ namespace vuk {
 		float line_width = 1.0f;
 		fixed_vector<VkViewport, VUK_MAX_VIEWPORTS> viewports;
 		fixed_vector<VkRect2D, VUK_MAX_SCISSORS> scissors;
+		uint32_t patch_control_points = 1;
 
 		// Push constants
 		unsigned char push_constant_buffer[VUK_MAX_PUSHCONSTANT_SIZE];
@@ -358,6 +359,8 @@ namespace vuk {
 		CommandBuffer& set_depth_stencil(PipelineDepthStencilStateCreateInfo depth_stencil_state);
 		/// @brief Set the conservative rasterization state
 		CommandBuffer& set_conservative(PipelineRasterizationConservativeStateCreateInfo conservative_state);
+		/// @brief Set the number of control points per patch for Tessellation pipeline
+		CommandBuffer& set_patch_control_points(uint32_t new_patch_control_points);
 
 		/// @brief Set one color blend state to use for all color attachments
 		CommandBuffer& broadcast_color_blend(PipelineColorBlendAttachmentState color_blend_state);

@@ -4,3 +4,4 @@ build/
 .cache/
 .vscode/
 checks.json
+.clangd
