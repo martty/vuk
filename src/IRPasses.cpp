@@ -40,7 +40,7 @@ namespace vuk {
 		if (acc & (eMemoryRW | eColorRW)) {
 			usage |= ImageUsageFlagBits::eColorAttachment;
 		}
-		if (acc & (eMemoryRW | eFragmentSampled | eComputeSampled | eRayTracingSampled | eVertexSampled)) {
+		if (acc & (eMemoryRW | eFragmentSampled | eComputeSampled | eRayTracingSampled | eVertexSampled | eTessellationSampled)) {
 			usage |= ImageUsageFlagBits::eSampled;
 		}
 		if (acc & (eMemoryRW | eDepthStencilRW)) {

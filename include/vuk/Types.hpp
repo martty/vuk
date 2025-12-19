@@ -5,11 +5,11 @@
 #include "vuk/Hash.hpp"
 #include "vuk/vuk_fwd.hpp"
 
+#include <cassert>
 #include <compare>
 #include <string>
 #include <string_view>
 #include <type_traits>
-#include <cassert>
 
 #define MOV(x) (static_cast<std::remove_reference_t<decltype(x)>&&>(x))
 
@@ -704,7 +704,7 @@ namespace vuk {
 		VkClearValue c;
 	};
 
-		enum Access : uint64_t {
+	enum Access : uint64_t {
 		eNone = 1ULL << 0,       // as initial use: resource available without synchronization, as final use: resource does not need synchronizing
 		eColorRead = 1ULL << 1,  // read as a framebuffer color attachment
 		eColorWrite = 1ULL << 2, // written as a framebuffer color attachment
@@ -739,7 +739,7 @@ namespace vuk {
 		eResolveWrite = 1ULL << 22, // vkCmdResolveImage destination
 		eResolveRW = eResolveRead | eResolveWrite,
 
-		eTransferRead = eCopyRead | eBlitRead | eResolveRead,      // all transfer reads
+		eTransferRead = eCopyRead | eBlitRead | eResolveRead,              // all transfer reads
 		eTransferWrite = eCopyWrite | eBlitWrite | eClear | eResolveWrite, // all transfer writes
 		eTransferRW = eTransferRead | eTransferWrite,
 
@@ -762,9 +762,13 @@ namespace vuk {
 		eMemoryRead = 1ULL << 35,  // any device access that reads
 		eMemoryWrite = 1ULL << 36, // any device access that writes
 		eMemoryRW = eMemoryRead | eMemoryWrite,
-		ePresent = 1ULL << 37 // presented from
+		ePresent = 1ULL << 37, // presented from
+
+		eTessellationSampled = 1ULL << 38,
+		eTessellationRead = 1ULL << 39,
+		eTessellationUniformRead = 1ULL << 40,
 	};
-	
+
 	inline constexpr Access operator|(Access bit0, Access bit1) noexcept {
 		return Access((uint64_t)bit0 | (uint64_t)bit1);
 	}

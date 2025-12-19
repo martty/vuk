@@ -7,8 +7,8 @@
 
 namespace vuk {
 	inline bool is_write_access(Access ia) {
-		constexpr uint64_t write_mask = eColorWrite | eDepthStencilWrite | eFragmentWrite | eTransferWrite | eComputeWrite | eHostWrite |
-		                                eMemoryWrite | eRayTracingWrite | eAccelerationStructureBuildWrite | eClear;
+		constexpr uint64_t write_mask = eColorWrite | eDepthStencilWrite | eFragmentWrite | eTransferWrite | eComputeWrite | eHostWrite | eMemoryWrite |
+		                                eRayTracingWrite | eAccelerationStructureBuildWrite | eClear;
 		return ia & write_mask;
 	}
 
@@ -61,11 +61,11 @@ namespace vuk {
 		if (ia & eDepthStencilRW) {
 			qr.stages |= PipelineStageFlagBits::eEarlyFragmentTests | PipelineStageFlagBits::eLateFragmentTests;
 		}
-		if (ia & (eFragmentUniformRead | eComputeUniformRead | eVertexUniformRead | eRayTracingUniformRead)) {
+		if (ia & (eFragmentUniformRead | eComputeUniformRead | eVertexUniformRead | eRayTracingUniformRead | eTessellationUniformRead)) {
 			qr.access |= AccessFlagBits::eUniformRead;
 			qr.layout = combine_layout(qr.layout, ImageLayout::eGeneral);
 		}
-		if (ia & (eFragmentRead | eComputeRead | eVertexRead | eRayTracingRead)) {
+		if (ia & (eFragmentRead | eComputeRead | eVertexRead | eRayTracingRead | eTessellationRead)) {
 			qr.access |= AccessFlagBits::eShaderStorageRead;
 			qr.layout = combine_layout(qr.layout, ImageLayout::eGeneral);
 		}
@@ -77,13 +77,16 @@ namespace vuk {
 			qr.access |= AccessFlagBits::eShaderStorageWrite;
 			qr.layout = combine_layout(qr.layout, ImageLayout::eGeneral);
 		}
-		if (ia & (eFragmentSampled | eComputeSampled | eRayTracingSampled)) {
+		if (ia & (eFragmentSampled | eComputeSampled | eRayTracingSampled | eTessellationSampled)) {
 			qr.access |= AccessFlagBits::eShaderSampledRead;
 			qr.layout = combine_layout(qr.layout, ImageLayout::eReadOnlyOptimalKHR);
 		}
 
 		if (ia & (eVertexRead | eVertexSampled | eVertexUniformRead)) {
 			qr.stages |= PipelineStageFlagBits::eVertexShader;
+		}
+		if (ia & (eTessellationRead | eTessellationSampled | eTessellationUniformRead)) {
+			qr.stages |= PipelineStageFlagBits::eTessellationControlShader | PipelineStageFlagBits::eTessellationEvaluationShader;
 		}
 		if (ia & (eFragmentRW | eFragmentSampled | eFragmentUniformRead)) {
 			qr.stages |= PipelineStageFlagBits::eFragmentShader;
@@ -246,7 +249,7 @@ namespace vuk {
 	}
 
 	inline bool is_storage_access(Access a) {
-		return (a & (eComputeRW | eVertexRead | eFragmentRW | eRayTracingRW | eHostRW));
+		return (a & (eComputeRW | eVertexRead | eFragmentRW | eRayTracingRW | eHostRW | eTessellationRead));
 	}
 
 	inline bool is_readonly_access(Access a) {
