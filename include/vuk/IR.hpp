@@ -225,6 +225,12 @@ namespace vuk {
 				return "MemW";
 			case eMemoryRW:
 				return "MemRW";
+			case eTessellationRead:
+				return "TessR";
+			case eTessellationSampled:
+				return "TessS";
+			case vuk::eTessellationUniformRead:
+				return "TessU";
 			default:
 				return "<multiple>";
 			}
