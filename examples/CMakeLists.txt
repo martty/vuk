@@ -121,6 +121,7 @@ ADD_EXAMPLE(09_persistent_descriptorset)
 ADD_EXAMPLE(10_baby_renderer)
 ADD_EXAMPLE(11_composition)
 ADD_EXAMPLE(12_rt_pipeline)
+ADD_EXAMPLE(13_tessellation)
 
 # standalone examples
 add_executable(standalone_triangle standalone_triangle.cpp)

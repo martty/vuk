@@ -75,6 +75,8 @@ namespace vuk::extra {
 		vk12features.shaderOutputLayer = true;
 		vk11features.shaderDrawParameters = true;
 		vk10features.features.shaderInt64 = true;
+		vk10features.features.tessellationShader = true;
+		vk10features.features.fillModeNonSolid = true;
 
 		return *this;
 	}
