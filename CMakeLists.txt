@@ -450,7 +450,7 @@ if(VUK_BUILD_TESTS)
 	FetchContent_Declare(
 	  doctest
 	  GIT_REPOSITORY https://github.com/kociap/doctest
-	  GIT_TAG        61b496f2ca72d0b569c2b321eed25348844ff688
+	  GIT_TAG        88b9982182fd670966b37d9271323b0169db6143
 	)
 	FetchContent_Declare(
 	  vk-bootstrap
