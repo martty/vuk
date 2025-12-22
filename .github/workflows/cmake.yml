@@ -90,15 +90,14 @@ jobs:
         submodules: recursive
 
     - name: Install LLVM for MacOS
-        if: ${{ matrix.platform.os == 'macos' }}
-        run: |
-          brew install llvm@${{ env.LLVM_MACOS_VERSION }}
-          LLVM_PATH=$(brew --prefix llvm@${{ env.LLVM_MACOS_VERSION }})
-          echo "LLVM_PATH=$LLVM_PATH" >> $GITHUB_ENV
-          echo "PATH=$LLVM_PATH/bin:$PATH" >> $GITHUB_ENV
-          echo "LDFLAGS=-L$LLVM_PATH/lib/c++ -Wl,-rpath,$LLVM_PATH/lib/c++ $LDFLAGS" >> $GITHUB_ENV
-          echo "CPPFLAGS=-I$LLVM_PATH/include $CPPFLAGS" >> $GITHUB_ENV
-          echo "CXXFLAGS=-stdlib=libc++ $CXXFLAGS" >> $GITHUB_ENV
+      run: |
+        brew install llvm@${{ env.LLVM_MACOS_VERSION }}
+        LLVM_PATH=$(brew --prefix llvm@${{ env.LLVM_MACOS_VERSION }})
+        echo "LLVM_PATH=$LLVM_PATH" >> $GITHUB_ENV
+        echo "PATH=$LLVM_PATH/bin:$PATH" >> $GITHUB_ENV
+        echo "LDFLAGS=-L$LLVM_PATH/lib/c++ -Wl,-rpath,$LLVM_PATH/lib/c++ $LDFLAGS" >> $GITHUB_ENV
+        echo "CPPFLAGS=-I$LLVM_PATH/include $CPPFLAGS" >> $GITHUB_ENV
+        echo "CXXFLAGS=-stdlib=libc++ $CXXFLAGS" >> $GITHUB_ENV
 
     - name: Setup Vulkan SDK
       uses: kociap/setup-vulkan-sdk@v1.0
