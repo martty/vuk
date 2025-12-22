@@ -4,6 +4,8 @@ on: [push, pull_request, workflow_dispatch]
 
 env:
   BUILD_TYPE: Release
+  VULKAN_VERSION: 1.3.296.0
+  LLVM_MACOS_VERSION: 21
 
 jobs:
   linux-build:
@@ -36,7 +38,7 @@ jobs:
     - name: Setup Vulkan SDK
       uses: kociap/setup-vulkan-sdk@v1.0
       with:
-           vulkan-query-version: 1.3.296.0
+           vulkan-query-version: ${{ env.VULKAN_VERSION }}
            vulkan-components: Vulkan-Headers, Vulkan-Loader, shaderc
            vulkan-use-cache: true
 
@@ -64,7 +66,7 @@ jobs:
     - name: Setup Vulkan SDK
       uses: kociap/setup-vulkan-sdk@v1.0
       with:
-           vulkan-query-version: 1.3.296.0
+           vulkan-query-version: ${{ env.VULKAN_VERSION }}
            vulkan-components: Vulkan-Headers, Vulkan-Loader, shaderc
            vulkan-use-cache: true
 
@@ -87,10 +89,20 @@ jobs:
       with:
         submodules: recursive
 
+    - name: Install LLVM for MacOS
+      run: |
+        brew install llvm@${{ env.LLVM_MACOS_VERSION }}
+        LLVM_PATH=$(brew --prefix llvm@${{ env.LLVM_MACOS_VERSION }})
+        echo "LLVM_PATH=$LLVM_PATH" >> $GITHUB_ENV
+        echo "PATH=$LLVM_PATH/bin:$PATH" >> $GITHUB_ENV
+        echo "LDFLAGS=-L$LLVM_PATH/lib/c++ -Wl,-rpath,$LLVM_PATH/lib/c++ $LDFLAGS" >> $GITHUB_ENV
+        echo "CPPFLAGS=-I$LLVM_PATH/include $CPPFLAGS" >> $GITHUB_ENV
+        echo "CXXFLAGS=-stdlib=libc++ $CXXFLAGS" >> $GITHUB_ENV
+
     - name: Setup Vulkan SDK
       uses: kociap/setup-vulkan-sdk@v1.0
       with:
-           vulkan-query-version: 1.3.296.0
+           vulkan-query-version: ${{ env.VULKAN_VERSION }}
            vulkan-components: Vulkan-Headers, Vulkan-Loader, shaderc
            vulkan-use-cache: true
 
@@ -98,6 +110,8 @@ jobs:
       run: |
         cmake -B ${{github.workspace}}/build \
           -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} \
+          -DCMAKE_CXX_COMPILER=clang++ \
+          -DCMAKE_C_COMPILER=clang \
           -DVUK_BUILD_EXAMPLES=ON \
           -DVUK_BUILD_TESTS=ON \
           -DVUK_USE_DXC=OFF
