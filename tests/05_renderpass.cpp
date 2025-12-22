@@ -5,21 +5,23 @@
 
 using namespace vuk;
 
-auto image2buf = make_pass("copy image to buffer", [](CommandBuffer& cbuf, VUK_IA(Access::eTransferRead) src, VUK_BA(Access::eTransferWrite) dst) {
-	BufferImageCopy bc;
-	bc.imageOffset = { 0, 0, 0 };
-	bc.bufferRowLength = 0;
-	bc.bufferImageHeight = 0;
-	bc.imageExtent = src->extent;
-	bc.imageSubresource.aspectMask = format_to_aspect(src->format);
-	bc.imageSubresource.mipLevel = src->base_level;
-	bc.imageSubresource.baseArrayLayer = src->base_layer;
-	assert(src->layer_count == 1); // unsupported yet
-	bc.imageSubresource.layerCount = src->layer_count;
-	bc.bufferOffset = dst->offset;
-	cbuf.copy_image_to_buffer(src, dst, bc);
-	return dst;
-});
+namespace {
+	auto image2buf = make_pass("copy image to buffer", [](CommandBuffer& cbuf, VUK_IA(Access::eTransferRead) src, VUK_BA(Access::eTransferWrite) dst) {
+		BufferImageCopy bc;
+		bc.imageOffset = { 0, 0, 0 };
+		bc.bufferRowLength = 0;
+		bc.bufferImageHeight = 0;
+		bc.imageExtent = src->extent;
+		bc.imageSubresource.aspectMask = format_to_aspect(src->format);
+		bc.imageSubresource.mipLevel = src->base_level;
+		bc.imageSubresource.baseArrayLayer = src->base_layer;
+		assert(src->layer_count == 1); // unsupported yet
+		bc.imageSubresource.layerCount = src->layer_count;
+		bc.bufferOffset = dst->offset;
+		cbuf.copy_image_to_buffer(src, dst, bc);
+		return dst;
+	});
+} // namespace
 
 TEST_CASE("renderpass clear") {
 	{
