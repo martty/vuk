@@ -561,21 +561,21 @@ public:
 		return { std::move(ext_ref) };
 	}
 
-	template<typename T>
-	struct ValueWithLocation : Value<T> {
+	struct NameWithLocation : Name {
 		SourceLocationAtFrame location;
 
-		ValueWithLocation(const Value<T>& value_, VUK_CALLSTACK) : Value<T>(value_), location(VUK_CALL) {}
+		NameWithLocation(const char* name_, VUK_CALLSTACK) : Name(name_), location(VUK_CALL) {}
+		explicit NameWithLocation(Name name_, VUK_CALLSTACK) : Name(name_), location(VUK_CALL) {}
 	};
 
 	template<class T, class... Args>
-	[[nodiscard]] inline Value<T[]> declare_array(Name name, ValueWithLocation<T> arg, Args... args) {
+	[[nodiscard]] inline Value<T[]> declare_array(NameWithLocation name, Value<T> arg, Args... args) {
 		std::vector<std::shared_ptr<ExtNode>> deps;
 		std::array refs = { arg.get_head(), args.get_head()... };
 		deps = { arg.node, args.node... };
 		Ref ref = current_module->make_declare_array(Type::stripped(refs[0].type()), refs);
 		current_module->name_output(ref, name.c_str());
-		current_module->set_source_location(ref.node, arg.location);
+		current_module->set_source_location(ref.node, name.location);
 		return { make_ext_ref(ref, deps) };
 	}
 
