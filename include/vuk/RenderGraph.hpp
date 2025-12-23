@@ -561,14 +561,21 @@ public:
 		return { std::move(ext_ref) };
 	}
 
-	// TODO: due to the pack, we can't do the source_location::current() trick
+	template<typename T>
+	struct ValueWithLocation : Value<T> {
+		SourceLocationAtFrame location;
+
+		ValueWithLocation(const Value<T>& value_, VUK_CALLSTACK) : Value<T>(value_), location(VUK_CALL) {}
+	};
+
 	template<class T, class... Args>
-	[[nodiscard]] inline Value<T[]> declare_array(Name name, Value<T> arg, Args... args) {
+	[[nodiscard]] inline Value<T[]> declare_array(Name name, ValueWithLocation<T> arg, Args... args) {
 		std::vector<std::shared_ptr<ExtNode>> deps;
 		std::array refs = { arg.get_head(), args.get_head()... };
 		deps = { arg.node, args.node... };
 		Ref ref = current_module->make_declare_array(Type::stripped(refs[0].type()), refs);
 		current_module->name_output(ref, name.c_str());
+		current_module->set_source_location(ref.node, arg.location);
 		return { make_ext_ref(ref, deps) };
 	}
 
