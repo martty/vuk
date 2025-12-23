@@ -4,17 +4,18 @@ find_package(Doxygen REQUIRED)
 get_target_property(VUK_PUBLIC_HEADER_DIR vuk INTERFACE_INCLUDE_DIRECTORIES)
 file(GLOB_RECURSE VUK_PUBLIC_HEADERS ${VUK_PUBLIC_HEADER_DIR}/*.hpp)
 
-#This will be the main output of our command
-set(DOXYGEN_INDEX_FILE ${CMAKE_CURRENT_SOURCE_DIR}/html/index.html)
+file(STRINGS doxy_dirs.txt DOXYGEN_INPUT_DIR_LIST)
 
-set(DOXYGEN_INPUT_DIR_LIST   ${PROJECT_SOURCE_DIR}/include/vuk
-                        ${PROJECT_SOURCE_DIR}/include/vuk/runtime
-                        ${PROJECT_SOURCE_DIR}/include/vuk/runtime/vk
-                        ${PROJECT_SOURCE_DIR}/include/vuk/vsl
-                        ${PROJECT_SOURCE_DIR}/include/vuk/extra)
-list(JOIN DOXYGEN_INPUT_DIR_LIST " "DOXYGEN_INPUT_DIR)
+# Convert relative paths to absolute paths
+set(DOXYGEN_INPUT_DIR_LIST_ABS)
+foreach(dir ${DOXYGEN_INPUT_DIR_LIST})
+    get_filename_component(abs_dir "${dir}" ABSOLUTE)
+    list(APPEND DOXYGEN_INPUT_DIR_LIST_ABS "${abs_dir}")
+endforeach()
+
+list(JOIN DOXYGEN_INPUT_DIR_LIST_ABS " " DOXYGEN_INPUT_DIR)
 set(DOXYGEN_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/doxygen)
-set(DOXYGEN_INDEX_FILE ${DOXYGEN_OUTPUT_DIR}/html/index.html)
+set(DOXYGEN_INDEX_FILE ${DOXYGEN_OUTPUT_DIR}/xml/index.xml)
 set(DOXYFILE_IN ${CMAKE_CURRENT_SOURCE_DIR}/Doxyfile.in)
 set(DOXYFILE_OUT ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile)
 
@@ -49,13 +50,13 @@ add_custom_command(OUTPUT ${SPHINX_INDEX_FILE}
                    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
                    DEPENDS
                    # Other docs files you want to track should go here (or in some variable)
-                   ${CMAKE_CURRENT_SOURCE_DIR}/index.rst
-				   ${CMAKE_CURRENT_SOURCE_DIR}/topics/runtime.rst
-				   ${CMAKE_CURRENT_SOURCE_DIR}/topics/allocators.rst
-				   ${CMAKE_CURRENT_SOURCE_DIR}/topics/rendergraph.rst
-				   ${CMAKE_CURRENT_SOURCE_DIR}/topics/commandbuffer.rst
-                   ${CMAKE_CURRENT_SOURCE_DIR}/topics/vsl.rst
-                   ${CMAKE_CURRENT_SOURCE_DIR}/topics/extra.rst
+                   index.rst
+				   topics/runtime.rst
+				   topics/allocators.rst
+				   topics/rendergraph.rst
+				   topics/commandbuffer.rst
+                   topics/vsl.rst
+                   topics/extra.rst
                    ${DOXYGEN_INDEX_FILE}
                    MAIN_DEPENDENCY ${SPHINX_SOURCE}/conf.py
                    COMMENT "Generating documentation with Sphinx")
