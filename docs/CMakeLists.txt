@@ -7,7 +7,12 @@ file(GLOB_RECURSE VUK_PUBLIC_HEADERS ${VUK_PUBLIC_HEADER_DIR}/*.hpp)
 #This will be the main output of our command
 set(DOXYGEN_INDEX_FILE ${CMAKE_CURRENT_SOURCE_DIR}/html/index.html)
 
-set(DOXYGEN_INPUT_DIR ${PROJECT_SOURCE_DIR}/include/vuk\ ${PROJECT_SOURCE_DIR}/include/vuk/resources)
+set(DOXYGEN_INPUT_DIR_LIST   ${PROJECT_SOURCE_DIR}/include/vuk
+                        ${PROJECT_SOURCE_DIR}/include/vuk/runtime
+                        ${PROJECT_SOURCE_DIR}/include/vuk/runtime/vk
+                        ${PROJECT_SOURCE_DIR}/include/vuk/vsl
+                        ${PROJECT_SOURCE_DIR}/include/vuk/extra)
+list(JOIN DOXYGEN_INPUT_DIR_LIST " "DOXYGEN_INPUT_DIR)
 set(DOXYGEN_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/doxygen)
 set(DOXYGEN_INDEX_FILE ${DOXYGEN_OUTPUT_DIR}/html/index.html)
 set(DOXYFILE_IN ${CMAKE_CURRENT_SOURCE_DIR}/Doxyfile.in)
@@ -49,6 +54,8 @@ add_custom_command(OUTPUT ${SPHINX_INDEX_FILE}
 				   ${CMAKE_CURRENT_SOURCE_DIR}/topics/allocators.rst
 				   ${CMAKE_CURRENT_SOURCE_DIR}/topics/rendergraph.rst
 				   ${CMAKE_CURRENT_SOURCE_DIR}/topics/commandbuffer.rst
+                   ${CMAKE_CURRENT_SOURCE_DIR}/topics/vsl.rst
+                   ${CMAKE_CURRENT_SOURCE_DIR}/topics/extra.rst
                    ${DOXYGEN_INDEX_FILE}
                    MAIN_DEPENDENCY ${SPHINX_SOURCE}/conf.py
                    COMMENT "Generating documentation with Sphinx")

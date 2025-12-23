@@ -2,14 +2,14 @@
 
 #include "vuk/Buffer.hpp"
 #include "vuk/Hash.hpp"
-#include "vuk/IR.hpp"
 #include "vuk/ImageAttachment.hpp"
+#include "vuk/IR.hpp"
 #include "vuk/Result.hpp"
-#include "vuk/SourceLocation.hpp"
-#include "vuk/Value.hpp"
 #include "vuk/runtime/vk/Image.hpp"
 #include "vuk/runtime/vk/Pipeline.hpp"
 #include "vuk/runtime/vk/VkSwapchain.hpp"
+#include "vuk/SourceLocation.hpp"
+#include "vuk/Value.hpp"
 #include "vuk/vuk_fwd.hpp"
 
 #include <deque>
@@ -417,6 +417,11 @@ public:
 		}
 	};
 
+	/// @brief Turn a lambda into a callable rendergraph computation (a pass)
+	/// @tparam F Lambda type
+	/// @param name Debug name for the pass
+	/// @param body Callback lambda (body of the pass)
+	/// @param scheduling_info Queue scheduling constraints
 	template<class F>
 	[[nodiscard]] auto make_pass(Name name, F&& body, SchedulingInfo scheduling_info = SchedulingInfo(DomainFlagBits::eAny), VUK_CALLSTACK) {
 		using traits = closure_traits<decltype(&F::operator())>;
@@ -425,6 +430,7 @@ public:
 		    name, std::forward<F>(body), scheduling_info, VUK_CALL);
 	}
 
+	/// @brief Turn a compute pipeline create info into a callable compute pass
 	inline auto lift_compute(PipelineBaseCreateInfo pbci, VUK_CALLSTACK) {
 		return [pbci, inner_scope = VUK_CALL]<class... T>(size_t size_x, size_t size_y, size_t size_z, Value<T>... args) mutable { // no callstack for these :/
 			Node* node = current_module->make_call(current_module->make_constant(pbci),
@@ -438,6 +444,7 @@ public:
 		};
 	}
 
+	/// @brief Turn a compute pipeline into a callable compute pass
 	inline auto lift_compute(PipelineBaseInfo* compute_pipeline, VUK_CALLSTACK) {
 		auto& flat_bindings = compute_pipeline->reflection_info.flat_bindings;
 

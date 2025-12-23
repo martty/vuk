@@ -4,10 +4,10 @@
 #include "vuk/Exception.hpp"
 #include "vuk/FixedVector.hpp"
 #include "vuk/Result.hpp"
-#include "vuk/Types.hpp"
 #include "vuk/runtime/vk/Image.hpp"
 #include "vuk/runtime/vk/PipelineInstance.hpp"
 #include "vuk/runtime/vk/Query.hpp"
+#include "vuk/Types.hpp"
 #include "vuk/vuk_fwd.hpp"
 
 #include <optional>
@@ -15,6 +15,62 @@
 
 namespace vuk {
 	class Runtime;
+
+	/// @brief Specifies a gap or ignored region in a packed vertex buffer layout
+	///
+	/// Used with Packed to skip over unused data in vertex buffers, allowing flexible
+	/// vertex layouts without requiring data to be tightly packed or reordered.
+	struct Ignore {
+		/// @brief Skip a number of bytes in the vertex buffer
+		Ignore(size_t bytes) : format(Format::eUndefined), bytes((uint32_t)bytes) {}
+		/// @brief Skip the size of a format in the vertex buffer
+		Ignore(Format format) : format(format) {}
+		Format format;
+		uint32_t bytes = 0;
+
+		uint32_t to_size();
+	};
+
+	/// @brief Union type representing either a vertex attribute format or an ignored region
+	///
+	/// Used internally by Packed to build vertex input descriptions with optional gaps.
+	struct FormatOrIgnore {
+		/// @brief Construct from a vertex attribute format
+		FormatOrIgnore(Format format);
+		/// @brief Construct from an Ignore specification
+		FormatOrIgnore(Ignore ign);
+
+		bool ignore;
+		Format format;
+		uint32_t size;
+	};
+
+	/// @brief Describes a packed vertex buffer layout with optional gaps
+	///
+	/// Used with bind_vertex_buffer() to describe vertex attributes that are tightly
+	/// or loosely packed in a buffer. Supports interleaved attributes and ignored regions.
+	///
+	/// Example:
+	/// @code
+	/// // Vertex buffer with position (vec3), skip 4 bytes, then color (vec4)
+	/// command_buffer.bind_vertex_buffer(0, vertex_buffer, 0,
+	///     Packed{ Format::eR32G32B32Sfloat, Ignore{4}, Format::eR32G32B32A32Sfloat });
+	///
+	/// // Tightly packed position and UV coordinates
+	/// command_buffer.bind_vertex_buffer(0, vertex_buffer, 0,
+	///     Packed{ Format::eR32G32B32Sfloat, Format::eR32G32Sfloat });
+	/// @endcode
+	struct Packed {
+		Packed() {}
+		/// @brief Constructs a Packed object from a list of Formats or Ignore elements.
+		Packed(std::initializer_list<FormatOrIgnore> ilist) : list(ilist) {}
+		fixed_vector<FormatOrIgnore, VUK_MAX_ATTRIBUTES> list;
+	};
+
+	enum class VertexInputRate {
+		eVertex = VK_VERTEX_INPUT_RATE_VERTEX,
+		eInstance = VK_VERTEX_INPUT_RATE_INSTANCE,
+	};
 
 	struct DispatchIndirectCommand {
 		uint32_t x = {};
@@ -35,35 +91,6 @@ namespace vuk {
 	};
 	static_assert(sizeof(DispatchIndirectCommand) == sizeof(VkDispatchIndirectCommand), "struct and wrapper have different size!");
 	static_assert(std::is_standard_layout_v<DispatchIndirectCommand>, "struct wrapper is not a standard layout!");
-
-	struct Ignore {
-		Ignore(size_t bytes) : format(Format::eUndefined), bytes((uint32_t)bytes) {}
-		Ignore(Format format) : format(format) {}
-		Format format;
-		uint32_t bytes = 0;
-
-		uint32_t to_size();
-	};
-
-	struct FormatOrIgnore {
-		FormatOrIgnore(Format format);
-		FormatOrIgnore(Ignore ign);
-
-		bool ignore;
-		Format format;
-		uint32_t size;
-	};
-
-	struct Packed {
-		Packed() {}
-		Packed(std::initializer_list<FormatOrIgnore> ilist) : list(ilist) {}
-		fixed_vector<FormatOrIgnore, VUK_MAX_ATTRIBUTES> list;
-	};
-
-	enum class VertexInputRate {
-		eVertex = VK_VERTEX_INPUT_RATE_VERTEX,
-		eInstance = VK_VERTEX_INPUT_RATE_INSTANCE,
-	};
 
 	struct DrawIndirectCommand {
 		uint32_t vertexCount = {};

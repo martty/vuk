@@ -1,10 +1,10 @@
 #pragma once
 
-#include "vuk/IR.hpp"
 #include "vuk/ImageAttachment.hpp"
-#include "vuk/Types.hpp"
+#include "vuk/IR.hpp"
 #include "vuk/runtime/vk/Allocator.hpp"
 #include "vuk/runtime/vk/VkRuntime.hpp"
+#include "vuk/Types.hpp"
 #include "vuk/vuk_fwd.hpp"
 
 #include <memory>
@@ -12,16 +12,20 @@
 #include <variant>
 
 namespace vuk {
+	/// @brief Base class for typed Value, provides execution methods
 	class UntypedValue {
 	public:
 		UntypedValue() = default;
 		UntypedValue(ExtRef extref) : node(std::move(extref.node)), index(extref.index) {}
 
-		/// @brief Name the value currently referenced by this Value
+		/// @brief Set a debug name for this Value
+		/// @param name Debug name to assign
 		void set_name(std::string_view name) noexcept {
 			current_module->name_output(get_head(), name);
 		}
 
+		/// @brief Get the internal IR reference for this Value
+		/// @return Reference to the IR node
 		Ref get_head() const noexcept {
 			return { node->get_node(), index };
 		}
@@ -31,11 +35,22 @@ namespace vuk {
 			node = std::make_shared<ExtNode>(Ref{ node->get_node(), index }, node, access, domain); // previous extnode is a dep
 		}
 
-		/// @brief Submit Value for execution
+		/// @brief Submit the render graph for execution without waiting
+		/// @param allocator Allocator to use for resource allocation
+		/// @param compiler Compiler to use for graph compilation
+		/// @param options Optional compilation options
+		/// @return Result indicating success or error
 		Result<void> submit(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options = {});
-		/// @brief Polls for the status of this Value.
+
+		/// @brief Poll the execution status of this Value
+		/// @return Current status of execution (pending, ready, etc.)
 		[[nodiscard]] Result<Signal::Status> poll();
-		/// @brief Submit this Value and waits for it the be ready on the host.
+
+		/// @brief Submit the render graph and wait for completion
+		/// @param allocator Allocator to use for resource allocation
+		/// @param compiler Compiler to use for graph compilation
+		/// @param options Optional compilation options
+		/// @return Result indicating success or error
 		Result<void> wait(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options = {});
 
 		std::shared_ptr<ExtNode> node;
@@ -44,11 +59,17 @@ namespace vuk {
 		size_t index;
 	};
 
+	/// @brief Represents a GPU resource that will be available after some work completes
+	/// @tparam T Type of the resource (Buffer, ImageAttachment, etc.)
 	template<class T>
 	class Value : public UntypedValue {
 	public:
 		using UntypedValue::UntypedValue;
 
+		/// @brief Internal: Transmute this Value to a different type
+		/// @tparam U New type for the Value
+		/// @param new_head New IR reference
+		/// @return Value with new type
 		template<class U>
 		Value<U> transmute(Ref new_head) noexcept {
 			node = std::make_shared<ExtNode>(new_head.node, node);
@@ -56,13 +77,19 @@ namespace vuk {
 			return *reinterpret_cast<Value<U>*>(this); // TODO: not cool
 		}
 
+		/// @brief Access the underlying resource (only after declare or wait/get)
+		/// @return Pointer to the resource
 		T* operator->() noexcept {
 			auto v = eval(get_head());
 			assert(v.holds_value());
 			return (T*)v->value;
 		}
 
-		/// @brief Wait and retrieve the result of the Value on the host
+		/// @brief Submit, wait, and retrieve the resource value on the host
+		/// @param allocator Allocator to use for resource allocation
+		/// @param compiler Compiler to use for graph compilation
+		/// @param options Optional compilation options
+		/// @return Result containing the resource, or an error
 		[[nodiscard]] Result<T> get(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options = {})
 		  requires(!std::is_array_v<T>)
 		{
@@ -73,6 +100,11 @@ namespace vuk {
 			}
 		}
 
+		/// @brief Mark this Value as released for use outside the render graph
+		/// @tparam U Type of the returned Value (defaults to T)
+		/// @param access The access pattern for future use
+		/// @param domain The domain where the resource will be used
+		/// @return New Value representing the released resource
 		template<class U = T>
 		Value<U> as_released(Access access = Access::eNone, DomainFlagBits domain = DomainFlagBits::eAny) {
 			release(access, domain);
@@ -80,6 +112,9 @@ namespace vuk {
 		}
 
 		// Image inferences
+
+		/// @brief Infer extent (width, height, depth) from another image
+		/// @param src Source image to copy extent from
 		void same_extent_as(const Value<ImageAttachment>& src)
 		  requires std::is_same_v<T, ImageAttachment>
 		{
@@ -89,7 +124,8 @@ namespace vuk {
 			set_with_extract(get_head(), src.get_head(), 2);
 		}
 
-		/// @brief Inference target has the same width & height as the source
+		/// @brief Infer 2D extent (width, height) from another image
+		/// @param src Source image to copy 2D extent from
 		void same_2D_extent_as(const Value<ImageAttachment>& src)
 		  requires std::is_same_v<T, ImageAttachment>
 		{
@@ -98,7 +134,8 @@ namespace vuk {
 			set_with_extract(get_head(), src.get_head(), 1);
 		}
 
-		/// @brief Inference target has the same format as the source
+		/// @brief Infer format from another image
+		/// @param src Source image to copy format from
 		void same_format_as(const Value<ImageAttachment>& src)
 		  requires std::is_same_v<T, ImageAttachment>
 		{
@@ -106,7 +143,8 @@ namespace vuk {
 			set_with_extract(get_head(), src.get_head(), 3);
 		}
 
-		/// @brief Inference target has the same shape(extent, layers, levels) as the source
+		/// @brief Infer shape (extent, layers, mip levels) from another image
+		/// @param src Source image to copy shape from
 		void same_shape_as(const Value<ImageAttachment>& src)
 		  requires std::is_same_v<T, ImageAttachment>
 		{
@@ -117,7 +155,8 @@ namespace vuk {
 			}
 		}
 
-		/// @brief Inference target is similar to(same shape, same format, same sample count) the source
+		/// @brief Infer all properties (shape, format, sample count) from another image
+		/// @param src Source image to copy properties from
 		void similar_to(const Value<ImageAttachment>& src)
 		  requires std::is_same_v<T, ImageAttachment>
 		{
@@ -128,6 +167,10 @@ namespace vuk {
 
 		// Buffer inferences
 
+		/// @brief Create a subrange view of this buffer
+		/// @param new_offset Offset in bytes from the start of the buffer
+		/// @param new_size Size of the subrange in bytes
+		/// @return Value representing the buffer subrange
 		Value<Buffer> subrange(uint64_t new_offset, uint64_t new_size)
 		  requires std::is_same_v<T, Buffer>
 		{
@@ -136,6 +179,8 @@ namespace vuk {
 			return Value(ExtRef(std::make_shared<ExtNode>(item.node, node), item));
 		}
 
+		/// @brief Infer buffer size from another buffer
+		/// @param src Source buffer to copy size from
 		void same_size(const Value<Buffer>& src)
 		  requires std::is_same_v<T, Buffer>
 		{
@@ -143,6 +188,8 @@ namespace vuk {
 			set_with_extract(get_head(), src.get_head(), 0);
 		}
 
+		/// @brief Get the size of this buffer as a Value
+		/// @return Value<uint64_t> representing the buffer size
 		Value<uint64_t> get_size()
 		  requires std::is_same_v<T, Buffer>
 		{
@@ -150,6 +197,8 @@ namespace vuk {
 			return { ExtRef{ std::make_shared<ExtNode>(extract.node, node), extract } };
 		}
 
+		/// @brief Set the size of this buffer from another Value
+		/// @param arg Value containing the size to set
 		void set_size(Value<uint64_t> arg)
 		  requires std::is_same_v<T, Buffer>
 		{
@@ -157,6 +206,9 @@ namespace vuk {
 			current_module->set_value(get_head(), 0, arg.get_head());
 		}
 
+		/// @brief Array subscript operator for array-typed Values
+		/// @param index Index into the array
+		/// @return Value representing the array element
 		auto operator[](size_t index)
 		  requires std::is_array_v<T>
 		{
@@ -165,6 +217,9 @@ namespace vuk {
 			return Value<std::remove_reference_t<decltype(std::declval<T>()[0])>>(ExtRef(std::make_shared<ExtNode>(item.node, node), item));
 		}
 
+		/// @brief Get a specific mip level of this image
+		/// @param mip Mip level to extract
+		/// @return Value representing the mip level
 		auto mip(uint32_t mip)
 		  requires std::is_same_v<T, ImageAttachment>
 		{
@@ -173,6 +228,9 @@ namespace vuk {
 			return Value(ExtRef(std::make_shared<ExtNode>(item.node, node), item));
 		}
 
+		/// @brief Get a specific array layer of this image
+		/// @param layer Array layer to extract
+		/// @return Value representing the array layer
 		auto layer(uint32_t layer)
 		  requires std::is_same_v<T, ImageAttachment>
 		{
@@ -185,6 +243,8 @@ namespace vuk {
 			current_module->set_value(construct, index, current_module->make_extract(src_composite, index));
 		}
 	};
+
+	// Arithmetic operators for Value<uint64_t>
 
 	inline Value<uint64_t> operator+(Value<uint64_t> a, uint64_t b) {
 		Ref ref = current_module->make_math_binary_op(Node::BinOp::ADD, a.get_head(), current_module->make_constant(b));
@@ -241,10 +301,28 @@ namespace vuk {
 		return std::move(a).transmute<uint64_t>(ref);
 	}
 
+	/// @brief Submit multiple Values for execution
+	/// @param allocator Allocator to use for resource allocation
+	/// @param compiler Compiler to use for graph compilation
+	/// @param values Span of Values to submit
+	/// @param options Optional compilation options
+	/// @return Result indicating success or error
 	Result<void> submit(Allocator& allocator, Compiler& compiler, std::span<UntypedValue> values, RenderGraphCompileOptions options);
 
+	/// @brief Wait for multiple Values to complete execution
+	/// @param alloc Allocator to use for resource allocation
+	/// @param compiler Compiler to use for graph compilation
+	/// @param values Span of Values to wait for
+	/// @param options Optional compilation options
+	/// @return Result indicating success or error
 	Result<void> wait_for_values_explicit(Allocator& alloc, Compiler& compiler, std::span<UntypedValue> values, RenderGraphCompileOptions options = {});
 
+	/// @brief Wait for multiple Values to complete execution (variadic)
+	/// @tparam Args Types of the Values
+	/// @param alloc Allocator to use for resource allocation
+	/// @param compiler Compiler to use for graph compilation
+	/// @param futs Values to wait for
+	/// @return Result indicating success or error
 	template<class... Args>
 	Result<void> wait_for_values(Allocator& alloc, Compiler& compiler, Args&&... futs) {
 		auto cbs = std::array{ futs... };

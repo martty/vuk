@@ -704,71 +704,131 @@ namespace vuk {
 		VkClearValue c;
 	};
 
+	/// @brief Access patterns for GPU resources
+	///
+	/// These flags specify how a resource will be accessed in a render pass.
+	/// Vuk uses these to determine synchronization requirements, image layout transitions,
+	/// and execution dependencies automatically.
 	enum Access : uint64_t {
-		eNone = 1ULL << 0,       // as initial use: resource available without synchronization, as final use: resource does not need synchronizing
-		eColorRead = 1ULL << 1,  // read as a framebuffer color attachment
-		eColorWrite = 1ULL << 2, // written as a framebuffer color attachment
+		/// No access - resource available without synchronization (initial) or doesn't need sync (final)
+		eNone = 1ULL << 0,
+		/// Read as a framebuffer color attachment
+		eColorRead = 1ULL << 1,
+		/// Written as a framebuffer color attachment
+		eColorWrite = 1ULL << 2,
+		/// Read and write as a framebuffer color attachment
 		eColorRW = eColorRead | eColorWrite,
-		eDepthStencilRead = 1ULL << 3,  // read as a framebuffer depth attachment
-		eDepthStencilWrite = 1ULL << 4, // written as a framebuffer depth attachment
+		/// Read as a framebuffer depth/stencil attachment
+		eDepthStencilRead = 1ULL << 3,
+		/// Written as a framebuffer depth/stencil attachment
+		eDepthStencilWrite = 1ULL << 4,
+		/// Read and write as a framebuffer depth/stencil attachment
 		eDepthStencilRW = eDepthStencilWrite | eDepthStencilRead,
-		eVertexSampled = 1ULL << 5,      // sampled in a vertex shader
-		eVertexRead = 1ULL << 6,         // read from an image or buffer in a vertex shader
-		eAttributeRead = 1ULL << 7,      // read from an attribute in a vertex shader
-		eIndexRead = 1ULL << 8,          // read from an index buffer for indexed rendering
-		eIndirectRead = 1ULL << 9,       // read from an indirect buffer for indirect rendering
-		eVertexUniformRead = 1ULL << 10, // read from a uniform buffer in a vertex shader
-		eFragmentSampled = 1ULL << 11,   // sampled in a fragment shader
-		eFragmentRead = 1ULL << 12,      // read from an image or buffer in a fragment shader
-		eFragmentWrite = 1ULL << 13,     // written using image store or buffer write in a fragment shader
+		/// Sampled in a vertex shader
+		eVertexSampled = 1ULL << 5,
+		/// Read from an image or buffer in a vertex shader
+		eVertexRead = 1ULL << 6,
+		/// Read from a vertex attribute buffer
+		eAttributeRead = 1ULL << 7,
+		/// Read from an index buffer for indexed rendering
+		eIndexRead = 1ULL << 8,
+		/// Read from an indirect buffer for indirect rendering
+		eIndirectRead = 1ULL << 9,
+		/// Read from a uniform buffer in a vertex shader
+		eVertexUniformRead = 1ULL << 10,
+		/// Sampled in a fragment shader
+		eFragmentSampled = 1ULL << 11,
+		/// Read from an image or buffer in a fragment shader
+		eFragmentRead = 1ULL << 12,
+		/// Written using image store or buffer write in a fragment shader
+		eFragmentWrite = 1ULL << 13,
+		/// Read and write in a fragment shader
 		eFragmentRW = eFragmentRead | eFragmentWrite,
-		eFragmentUniformRead = 1ULL << 14, // read from a uniform buffer in a fragment shader
+		/// Read from a uniform buffer in a fragment shader
+		eFragmentUniformRead = 1ULL << 14,
 
 		// Transfer operations split into read/write and combined RW
-		eCopyRead = 1ULL << 15,  // vkCmdCopy* source
-		eCopyWrite = 1ULL << 16, // vkCmdCopy* destination
+		/// vkCmdCopy* source
+		eCopyRead = 1ULL << 15,
+		/// vkCmdCopy* destination
+		eCopyWrite = 1ULL << 16,
+		/// vkCmdCopy* source and destination
 		eCopyRW = eCopyRead | eCopyWrite,
 
-		eBlitRead = 1ULL << 17,  // vkCmdBlitImage source
-		eBlitWrite = 1ULL << 18, // vkCmdBlitImage destination
+		/// vkCmdBlitImage source
+		eBlitRead = 1ULL << 17,
+		/// vkCmdBlitImage destination
+		eBlitWrite = 1ULL << 18,
+		/// vkCmdBlitImage source and destination
 		eBlitRW = eBlitRead | eBlitWrite,
 
-		eClear = 1ULL << 20, // vkCmdClear* destination
+		/// vkCmdClear* destination
+		eClear = 1ULL << 20,
 
-		eResolveRead = 1ULL << 21,  // vkCmdResolveImage source
-		eResolveWrite = 1ULL << 22, // vkCmdResolveImage destination
+		/// vkCmdResolveImage source
+		eResolveRead = 1ULL << 21,
+		/// vkCmdResolveImage destination
+		eResolveWrite = 1ULL << 22,
+		/// vkCmdResolveImage source and destination
 		eResolveRW = eResolveRead | eResolveWrite,
 
-		eTransferRead = eCopyRead | eBlitRead | eResolveRead,              // all transfer reads
-		eTransferWrite = eCopyWrite | eBlitWrite | eClear | eResolveWrite, // all transfer writes
+		/// All transfer read operations
+		eTransferRead = eCopyRead | eBlitRead | eResolveRead,
+		/// All transfer write operations
+		eTransferWrite = eCopyWrite | eBlitWrite | eClear | eResolveWrite,
+		/// All transfer operations
 		eTransferRW = eTransferRead | eTransferWrite,
 
-		eComputeRead = 1ULL << 23,  // read from an image or buffer in a compute shader
-		eComputeWrite = 1ULL << 24, // written using image store or buffer write in a compute shader
+		/// Read from an image or buffer in a compute shader
+		eComputeRead = 1ULL << 23,
+		/// Written using image store or buffer write in a compute shader
+		eComputeWrite = 1ULL << 24,
+		/// Read and write in a compute shader
 		eComputeRW = eComputeRead | eComputeWrite,
-		eComputeSampled = 1ULL << 25,     // sampled in a compute shader
-		eComputeUniformRead = 1ULL << 26, // read from a uniform buffer in a compute shader
-		eRayTracingRead = 1ULL << 27,     // read from an image or buffer in a ray tracing shader
-		eRayTracingWrite = 1ULL << 28,    // written using image store or buffer write in a ray tracing shader
+		/// Sampled in a compute shader
+		eComputeSampled = 1ULL << 25,
+		/// Read from a uniform buffer in a compute shader
+		eComputeUniformRead = 1ULL << 26,
+		/// Read from an image or buffer in a ray tracing shader
+		eRayTracingRead = 1ULL << 27,
+		/// Written using image store or buffer write in a ray tracing shader
+		eRayTracingWrite = 1ULL << 28,
+		/// Read and write in a ray tracing shader
 		eRayTracingRW = eRayTracingRead | eRayTracingWrite,
-		eRayTracingSampled = 1ULL << 29,               // sampled in a ray tracing shader
-		eRayTracingUniformRead = 1ULL << 30,           // read from a uniform buffer in a compute shader
-		eAccelerationStructureBuildRead = 1ULL << 31,  // read during acceleration structure build
-		eAccelerationStructureBuildWrite = 1ULL << 32, // written during acceleration structure build
+		/// Sampled in a ray tracing shader
+		eRayTracingSampled = 1ULL << 29,
+		/// Read from a uniform buffer in a ray tracing shader
+		eRayTracingUniformRead = 1ULL << 30,
+		/// Read during acceleration structure build
+		eAccelerationStructureBuildRead = 1ULL << 31,
+		/// Written during acceleration structure build
+		eAccelerationStructureBuildWrite = 1ULL << 32,
+		/// Read and write during acceleration structure build
 		eAccelerationStructureBuildRW = eAccelerationStructureBuildRead | eAccelerationStructureBuildWrite,
-		eHostRead = 1ULL << 33,  // read by the host
-		eHostWrite = 1ULL << 34, // written by the host
+		/// Read by the host CPU
+		eHostRead = 1ULL << 33,
+		/// Written by the host CPU
+		eHostWrite = 1ULL << 34,
+		/// Read and write by the host CPU
 		eHostRW = eHostRead | eHostWrite,
-		eMemoryRead = 1ULL << 35,  // any device access that reads
-		eMemoryWrite = 1ULL << 36, // any device access that writes
+		/// Any device access that reads
+		eMemoryRead = 1ULL << 35,
+		/// Any device access that writes
+		eMemoryWrite = 1ULL << 36,
+		/// Any device access (read or write)
 		eMemoryRW = eMemoryRead | eMemoryWrite,
-		ePresent = 1ULL << 37, // presented from
+		/// Presented to swapchain
+		ePresent = 1ULL << 37,
 
+		/// Sampled in a tessellation shader
 		eTessellationSampled = 1ULL << 38,
+		/// Read from an image or buffer in a tessellation shader
 		eTessellationRead = 1ULL << 39,
+		/// Read from a uniform buffer in a tessellation shader
 		eTessellationUniformRead = 1ULL << 40,
 	};
 
+	/// @brief Combine two Access flags
 	inline constexpr Access operator|(Access bit0, Access bit1) noexcept {
 		return Access((uint64_t)bit0 | (uint64_t)bit1);
 	}

@@ -5,7 +5,7 @@
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
 
 # -- Path setup --------------------------------------------------------------
-
+ 
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
@@ -15,6 +15,7 @@
 # sys.path.insert(0, os.path.abspath('.'))
 
 import subprocess, os
+from datetime import datetime
 
 def configureDoxyfile(input_dir, output_dir):
     with open('Doxyfile.in', 'r') as file :
@@ -32,7 +33,7 @@ read_the_docs_build = os.environ.get('READTHEDOCS', None) == 'True'
 # -- Project information -----------------------------------------------------
 
 project = 'vuk'
-copyright = '2022, Marcell Kiss'
+copyright = f'{datetime.now().year}, Marcell Kiss & contributors'
 author = 'Marcell Kiss'
 
 

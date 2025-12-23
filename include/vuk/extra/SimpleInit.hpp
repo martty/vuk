@@ -10,16 +10,26 @@
 namespace vuk::extra {
 	/// @brief Wrapper around vuk::Runtime that manages Vulkan instance, device, swapchain and superframe resources
 	struct SimpleApp {
+		/// @brief Vulkan instance created by vk-bootstrap
 		vkb::Instance vkbinstance;
+		/// @brief Vulkan logical device created by vk-bootstrap
 		vkb::Device vkbdevice;
 
+		/// @brief Major version of the Vulkan API requested during instance creation
 		uint32_t vk_api_major_version;
+		/// @brief Minor version of the Vulkan API requested during instance creation
 		uint32_t vk_api_minor_version;
+		/// @brief Actual Vulkan API version supported by the physical device
 		uint32_t vk_device_version;
+		/// @brief Vulkan surface for presentation, VK_NULL_HANDLE if headless
 		VkSurfaceKHR surface = VK_NULL_HANDLE;
+		/// @brief Vuk runtime managing executors, caches, and resources
 		std::optional<Runtime> runtime;
+		/// @brief Superframe resource managing per-frame resources across multiple frames in flight
 		std::optional<DeviceSuperFrameResource> superframe_resource;
+		/// @brief Allocator tied to the superframe resource for per-frame allocations
 		std::optional<Allocator> superframe_allocator;
+		/// @brief Swapchain for presenting to the surface, empty if headless
 		std::optional<vuk::Swapchain> swapchain = {};
 
 		/// @brief Create or recreate the swapchain

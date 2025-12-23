@@ -6,8 +6,6 @@ Management of GPU resources is an important part of any renderer. vuk provides a
 Overview
 --------
 
-.. doxygenclass:: vuk::Allocator
-
 .. doxygenstruct:: vuk::DeviceResource
 
 To facilitate ownership, a RAII wrapper type is provided, that wraps an Allocator and a payload:
@@ -29,7 +27,7 @@ Helpers
 -------
 Allocator provides functions that can perform bulk allocation (to reduce overhead for repeated calls) and return resources directly. However, usually it is more convenient to allocate a single resource and immediately put it into a RAII wrapper to prevent forgetting to deallocate it.
 
-.. doxygenfile:: include/vuk/AllocatorHelpers.hpp
+.. doxygenfile:: include/vuk/runtime/vk/AllocatorHelpers.hpp
 
 
 Reference
