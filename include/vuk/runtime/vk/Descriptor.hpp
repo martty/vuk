@@ -3,8 +3,8 @@
 #include "vuk/Bitset.hpp"
 #include "vuk/Config.hpp"
 #include "vuk/Hash.hpp"
+#include "vuk/runtime/vk/Allocation.hpp"
 #include "vuk/Types.hpp"
-#include "vuk/runtime/vk/Image.hpp"
 #include "vuk/vuk_fwd.hpp"
 
 #include <array>
@@ -86,19 +86,24 @@ namespace vuk {
 
 	struct DescriptorImageInfo {
 		VkDescriptorImageInfo dii;
-		decltype(ImageView::id) image_view_id;
+		uint64_t image_view_id;
 		decltype(Sampler::id) sampler_id;
 
-		DescriptorImageInfo(Sampler s, ImageView iv, ImageLayout il) : dii{ s.payload, iv.payload, (VkImageLayout)il }, image_view_id(iv.id), sampler_id(s.id) {}
+		DescriptorImageInfo(Sampler s, ImageView<> iv, ImageLayout il) :
+		    dii{ s.payload, iv->api_view, (VkImageLayout)il },
+		    image_view_id(iv->id),
+		    sampler_id(s.id) {}
+
+		DescriptorImageInfo(Sampler s) : dii{ s.payload, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_UNDEFINED }, image_view_id(0), sampler_id(s.id) {}
 
 		void set_sampler(Sampler s) {
 			dii.sampler = s.payload;
 			sampler_id = s.id;
 		}
 
-		void set_image_view(ImageView iv) {
-			dii.imageView = iv.payload;
-			image_view_id = iv.id;
+		void set_image_view(ImageView<> iv) {
+			dii.imageView = iv->api_view;
+			image_view_id = iv->id;
 		}
 
 		bool operator==(const DescriptorImageInfo& o) const noexcept {
@@ -246,12 +251,12 @@ namespace vuk {
 
 		// all of the update_ functions are thread safe
 
-		void update_combined_image_sampler(unsigned binding, unsigned array_index, ImageView iv, Sampler sampler, ImageLayout layout);
-		void update_storage_image(unsigned binding, unsigned array_index, ImageView iv);
+		void update_combined_image_sampler(unsigned binding, unsigned array_index, ImageView<> iv, Sampler sampler, ImageLayout layout);
+		void update_storage_image(unsigned binding, unsigned array_index, ImageView<> iv);
 		void update_uniform_buffer(unsigned binding, unsigned array_index, Buffer<> buf);
 		void update_storage_buffer(unsigned binding, unsigned array_index, Buffer<> buf);
 		void update_sampler(unsigned binding, unsigned array_index, Sampler sampler);
-		void update_sampled_image(unsigned binding, unsigned array_index, ImageView iv, ImageLayout layout);
+		void update_sampled_image(unsigned binding, unsigned array_index, ImageView<> iv, ImageLayout layout);
 		void update_acceleration_structure(unsigned binding, unsigned array_index, VkAccelerationStructureKHR as);
 
 		// non-thread safe

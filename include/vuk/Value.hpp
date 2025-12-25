@@ -16,7 +16,7 @@ namespace vuk {
 	struct SyncHelper;
 
 	template<>
-	struct erased_tuple_adaptor<ImageAttachment>;
+	class erased_tuple_adaptor<Extent3D>;
 
 	template<class T>
 	struct is_value : std::false_type {};
@@ -62,6 +62,9 @@ namespace vuk {
 		/// @param options Optional compilation options
 		/// @return Result indicating success or error
 		Result<void> wait(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options = {});
+
+		/// @brief Dump the IR graph reachable from this Value
+		void dump_ir() const;
 
 		std::shared_ptr<ExtNode> node;
 
@@ -131,6 +134,8 @@ namespace vuk {
 		auto operator->() noexcept
 		  requires(erased_tuple_adaptor<T>::value)
 		{
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-value"
 			return std::apply(
 			    [head = get_head(), this](auto... a) {
 				    size_t i = 0;
@@ -142,6 +147,7 @@ namespace vuk {
 					  }((a, head), i++)... };
 			    },
 			    erased_tuple_adaptor<T>::member_types);
+#pragma clang diagnostic pop
 		}
 
 		/// @brief Submit, wait, and retrieve the resource value on the host
@@ -329,40 +335,31 @@ namespace vuk {
 	
 	// Arithmetic operators for Value<uint64_t>
 
-	template<>
-	struct Value<ImageAttachment> : ValueBase<ImageAttachment> {
-		Value<Image> image = {};
-		Value<ImageView> image_view = {};
-
-		Value<ImageCreateFlags> image_flags = {};
-		Value<ImageType> image_type = ImageType::e2D;
-		Value<ImageTiling> tiling = ImageTiling::eOptimal;
-		Value<ImageUsageFlags> usage = {};
-		Value<Extent3D> extent = {};
-		Value<Format> format = Format::eUndefined;
-		Value<Samples> sample_count = Samples::eInfer;
-		Value<bool> allow_srgb_unorm_mutable = false;
-		Value<ImageViewCreateFlags> image_view_flags = {};
-		Value<ImageViewType> view_type = ImageViewType::eInfer;
-		Value<ComponentMapping> components = {};
-		Value<ImageLayout> layout = ImageLayout::eUndefined;
-
+	template<Format f>
+	struct Value<ImageView<f>> : ValueBase<ImageView<f>> {
 		Value<uint32_t> base_level = VK_REMAINING_MIP_LEVELS;
 		Value<uint32_t> level_count = VK_REMAINING_MIP_LEVELS;
 
 		Value<uint32_t> base_layer = VK_REMAINING_ARRAY_LAYERS;
 		Value<uint32_t> layer_count = VK_REMAINING_ARRAY_LAYERS;
 
-		Value<ImageAttachment>() = default;
+		Value<Format> format = f;
+		Value<Extent3D> extent;
 
-		Value<ImageAttachment>(Ref ref) : ValueBase<ImageAttachment>(ref) {
-			/* ptr = Value<vuk::ptr<BufferLike<Type>>>(current_module->make_extract(this->get_head(), 0));
-			sz_bytes = Value<size_t>(current_module->make_extract(this->get_head(), 1));*/
+		Value<ImageView<f>>() = default;
+
+		Value<ImageView<f>>(Ref ref) : ValueBase<ImageView<f>>(ref) {
+			format = Value<Format>(current_module->make_extract(current_module->make_get_iv_meta(this->get_head()), 4));
 		}
 
-		Value<ImageAttachment>(ExtRef extref) : Value<ImageAttachment>(Ref(extref.node->get_node(), extref.index)) {}
+		Value<ImageView<f>>(ExtRef extref) : Value<ImageView<f>>(Ref(extref.node->get_node(), extref.index)) {}
+
+		Value<ImageViewEntry> get_meta() {
+			return Value<ImageViewEntry>(current_module->make_get_iv_meta(this->get_head()));
+		}
+
 		// Image inferences
-		void same_extent_as(const Value<ImageAttachment>& src) {
+		void same_extent_as(const Value<ImageView<f>>& src) {
 			this->node->deps.push_back(src.node);
 			this->set_with_extract(this->get_head(), src.get_head(), 0);
 			this->set_with_extract(this->get_head(), src.get_head(), 1);
@@ -370,20 +367,20 @@ namespace vuk {
 		}
 
 		/// @brief Inference target has the same width & height as the source
-		void same_2D_extent_as(const Value<ImageAttachment>& src) {
+		void same_2D_extent_as(const Value<ImageView<f>>& src) {
 			this->node->deps.push_back(src.node);
 			this->set_with_extract(this->get_head(), src.get_head(), 0);
 			this->set_with_extract(this->get_head(), src.get_head(), 1);
 		}
 
 		/// @brief Inference target has the same format as the source
-		void same_format_as(const Value<ImageAttachment>& src) {
+		void same_format_as(const Value<ImageView<f>>& src) {
 			this->node->deps.push_back(src.node);
 			this->set_with_extract(this->get_head(), src.get_head(), 3);
 		}
 
 		/// @brief Inference target has the same shape(extent, layers, levels) as the source
-		void same_shape_as(const Value<ImageAttachment>& src) {
+		void same_shape_as(const Value<ImageView<f>>& src) {
 			same_extent_as(src);
 
 			for (auto i = 6; i < 10; i++) { /* 6 - 9 : layers, levels */
@@ -392,19 +389,19 @@ namespace vuk {
 		}
 
 		/// @brief Inference target is similar to(same shape, same format, same sample count) the source
-		void similar_to(const Value<ImageAttachment>& src) {
+		void similar_to(const Value<ImageView<f>>& src) {
 			same_shape_as(src);
 			same_format_as(src);
 			this->set_with_extract(this->get_head(), src.get_head(), 4);
 		}
 
-		Value<ImageAttachment> mip(uint32_t mip) {
+		Value<ImageView<f>> mip(uint32_t mip) {
 			Ref item = current_module->make_slice(
 			    this->get_head(), Node::NamedAxis::MIP, current_module->make_constant<uint64_t>(mip), current_module->make_constant<uint64_t>(1u));
 			return Value(item);
 		}
 
-		Value<ImageAttachment> layer(uint32_t layer) {
+		Value<ImageView<f>> layer(uint32_t layer) {
 			Ref item = current_module->make_slice(
 			    this->get_head(), Node::NamedAxis::LAYER, current_module->make_constant<uint64_t>(layer), current_module->make_constant<uint64_t>(1u));
 			return Value(item);

@@ -91,22 +91,23 @@ namespace vuk {
 				return;
 			}
 			memcpy(dst, composite_v, t->size);
-			if (t->hash_value == current_module->types.builtin_image) {
-				if (axis == Node::NamedAxis::MIP) {
-					auto& sliced = *static_cast<ImageAttachment*>(dst);
-					sliced.base_level += start;
-					if (count != Range::REMAINING) {
-						sliced.level_count = count;
-					}
+			if (t->is_imageview()) {
+				assert(false);
+				/*/ if (axis == Node::NamedAxis::MIP) {
+				  auto& sliced = *static_cast<ImageAttachment*>(dst);
+				  sliced.base_level += start;
+				  if (count != Range::REMAINING) {
+				    sliced.level_count = count;
+				  }
 				} else if (axis == Node::NamedAxis::LAYER) {
-					auto& sliced = *static_cast<ImageAttachment*>(dst);
-					sliced.base_layer += start;
-					if (count != Range::REMAINING) {
-						sliced.layer_count = count;
-					}
+				  auto& sliced = *static_cast<ImageAttachment*>(dst);
+				  sliced.base_layer += start;
+				  if (count != Range::REMAINING) {
+				    sliced.layer_count = count;
+				  }
 				} else {
-					assert(0);
-				}
+				  assert(0);
+				}*/
 			} else if (t->is_bufferlike_view()) {
 				if (axis == 0) {
 					auto& sliced = *static_cast<Buffer<>*>(dst);

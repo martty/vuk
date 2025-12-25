@@ -4,6 +4,7 @@
 #include "vuk/Result.hpp"
 #include "vuk/runtime/vk/Address.hpp"
 #include "vuk/runtime/vk/Image.hpp"
+#include "vuk/runtime/vk/Allocation.hpp"
 #include "vuk/SourceLocation.hpp"
 #include "vuk/SyncPoint.hpp"
 #include "vuk/vuk_fwd.hpp"
@@ -58,20 +59,16 @@ namespace vuk {
 		virtual Result<void, AllocateException> allocate_memory(std::span<ptr_base> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) = 0;
 		virtual void deallocate_memory(std::span<const ptr_base> dst) = 0;
 
-		virtual Result<void, AllocateException> allocate_memory_views(std::span<generic_view_base> dst, std::span<const BVCI> cis, SourceLocationAtFrame loc) = 0;
-		virtual void deallocate_memory_views(std::span<const generic_view_base> dst) = 0;
-
 		virtual Result<void, AllocateException>
 		allocate_framebuffers(std::span<VkFramebuffer> dst, std::span<const FramebufferCreateInfo> cis, SourceLocationAtFrame loc) = 0;
 		virtual void deallocate_framebuffers(std::span<const VkFramebuffer> dst) = 0;
 
-		virtual Result<void, AllocateException> allocate_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc) = 0;
-		virtual void deallocate_images(std::span<const Image> dst) = 0;
-		virtual void set_image_allocation_name(Image& dst, Name name) = 0;
+		virtual Result<void, AllocateException> allocate_images(std::span<Image<>> dst, std::span<const ICI> cis, SourceLocationAtFrame loc) = 0;
+		virtual void deallocate_images(std::span<const Image<>> dst) = 0;
+		virtual void set_image_allocation_name(Image<>& dst, Name name) = 0;
 
-		virtual Result<void, AllocateException>
-		allocate_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc) = 0;
-		virtual void deallocate_image_views(std::span<const ImageView> src) = 0;
+		virtual Result<void, AllocateException> allocate_image_views(std::span<ImageView<>> dst, std::span<const IVCI> cis, SourceLocationAtFrame loc) = 0;
+		virtual void deallocate_image_views(std::span<const ImageView<>> src) = 0;
 
 		virtual Result<void, AllocateException> allocate_persistent_descriptor_sets(std::span<PersistentDescriptorSet> dst,
 		                                                                            std::span<const PersistentDescriptorSetCreateInfo> cis,
@@ -243,23 +240,11 @@ namespace vuk {
 		/// @param src Span of buffers to be deallocated
 		void deallocate(std::span<const ptr_base> src);
 
-		/// @brief Allocate buffers from this Allocator
-		/// @param dst Destination span to place allocated buffers into
-		/// @param cis Per-element construction info
-		/// @param loc Source location information
-		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
-		Result<void, AllocateException>
-		allocate_memory_views(std::span<generic_view_base> dst, std::span<const BVCI> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
-
-		/// @brief Deallocate buffers previously allocated from this Allocator
-		/// @param src Span of buffers to be deallocated
-		void deallocate(std::span<const generic_view_base> src);
-
 		/// @brief Set name of the underlying VMA allocation
 		/// @param dst Destination buffer
 		/// @param name Name of the allocation
-		//void set_allocation_name(Buffer& dst, Name name);
-		
+		// void set_allocation_name(Buffer& dst, Name name);
+
 		/// @brief Allocate framebuffers from this Allocator
 		/// @param dst Destination span to place allocated framebuffers into
 		/// @param cis Per-element construction info
@@ -285,43 +270,41 @@ namespace vuk {
 		/// @param cis Per-element construction info
 		/// @param loc Source location information
 		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
-		Result<void, AllocateException> allocate(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
+		Result<void, AllocateException> allocate(std::span<Image<>> dst, std::span<const ICI> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
 		/// @brief Allocate images from this Allocator
 		/// @param dst Destination span to place allocated images into
 		/// @param cis Per-element construction info
 		/// @param loc Source location information
 		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
-		Result<void, AllocateException> allocate_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
+		Result<void, AllocateException> allocate_images(std::span<Image<>> dst, std::span<const ICI> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
 		/// @brief Deallocate images previously allocated from this Allocator
 		/// @param src Span of images to be deallocated
-		void deallocate(std::span<const Image> src);
+		void deallocate(std::span<const Image<>> src);
 
 		/// @brief Set name of the underlying VMA allocation
 		/// @param dst Destination image
 		/// @param name Name of the allocation
-		void set_allocation_name(Image& dst, Name name);
+		void set_allocation_name(Image<>& dst, Name name);
 
 		/// @brief Allocate image views from this Allocator
 		/// @param dst Destination span to place allocated image views into
 		/// @param cis Per-element construction info
 		/// @param loc Source location information
 		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
-		Result<void, AllocateException>
-		allocate(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
+		Result<void, AllocateException> allocate(std::span<ImageView<>> dst, std::span<const IVCI> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
 		/// @brief Allocate image views from this Allocator
 		/// @param dst Destination span to place allocated image views into
 		/// @param cis Per-element construction info
 		/// @param loc Source location information
 		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
-		Result<void, AllocateException>
-		allocate_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
+		Result<void, AllocateException> allocate_image_views(std::span<ImageView<>> dst, std::span<const IVCI> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
 
 		/// @brief Deallocate image views previously allocated from this Allocator
 		/// @param src Span of image views to be deallocated
-		void deallocate(std::span<const ImageView> src);
+		void deallocate(std::span<const ImageView<>> src);
 
 		/// @brief Allocate persistent descriptor sets from this Allocator
 		/// @param dst Destination span to place allocated persistent descriptor sets into
@@ -682,11 +665,17 @@ namespace vuk {
 	  requires(!Container<T>)
 	{
 		if constexpr (std::is_base_of_v<ptr_base, T>) {
-			allocator.deallocate(std::span<const ptr_base>{ static_cast<const ptr_base*>(&src), 1 });
-		} else if constexpr (std::is_base_of_v<generic_view_base, T>) {
-			allocator.deallocate(std::span<const generic_view_base>{ static_cast<const generic_view_base*>(&src), 1 });
+			if constexpr (T::imagelike) {
+				allocator.deallocate(std::span<const Image<>>{ static_cast<const Image<>*>(&src), 1 });
+			} else {
+				allocator.deallocate(std::span<const ptr_base>{ static_cast<const ptr_base*>(&src), 1 });
+			}
 		} else if constexpr (is_view<T>) { // TODO: PAV: check if deallocated view matches pointer implicit view
-			allocator.deallocate(std::span<const ptr_base>{ static_cast<const ptr_base*>(&src.ptr), 1 });
+			if constexpr (is_bufferlike_view<T>) {
+				allocator.deallocate(std::span<const ptr_base>{ static_cast<const ptr_base*>(&src.ptr), 1 });
+			} else {
+				allocator.deallocate(std::span<const T>{ &src, 1 });
+			}
 		} else {
 			allocator.deallocate(std::span<const T>{ &src, 1 });
 		}

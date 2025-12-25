@@ -223,7 +223,7 @@ namespace vuk {
 	template class Cache<vuk::ShaderModule>;
 	template struct CacheImpl<vuk::ShaderModule>;
 	template class Cache<vuk::ImageWithIdentity>;
-	template class Cache<vuk::ImageView>;
+	template class Cache<vuk::ImageView<>>;
 
 	template class Cache<vuk::DescriptorPool>;
 } // namespace vuk

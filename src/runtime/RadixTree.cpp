@@ -174,5 +174,4 @@ namespace vuk {
 	template class RadixTree<bool>;
 	template class RadixTree<void*>;
 	template class RadixTree<AllocationEntry>;
-	template class RadixTree<ViewEntry>;
 } // namespace vuk

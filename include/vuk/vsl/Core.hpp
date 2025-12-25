@@ -74,28 +74,28 @@ namespace vuk {
 	/// @brief Fill an image with host data
 	/// @param allocator Allocator to use for temporary allocations
 	/// @param copy_domain The domain where the copy should happen
-	/// @param image ImageAttachment to fill
+	/// @param image ImageView<> to fill
 	/// @param src_data pointer to source data
-	inline Value<ImageAttachment>
-	host_data_to_image(Allocator& allocator, DomainFlagBits copy_domain, ImageAttachment image, const void* src_data, VUK_CALLSTACK) {
-		size_t alignment = format_to_texel_block_size(image.format);
-		size_t size = compute_image_size(image.format, image.extent);
+	inline Value<ImageView<>> host_data_to_image(Allocator& allocator, DomainFlagBits copy_domain, ImageView<> image, const void* src_data, VUK_CALLSTACK) {
+		auto& ve = image.get_meta();
+		size_t alignment = format_to_texel_block_size(ve.format);
+		size_t size = compute_image_size(ve.format, ve.extent);
 		auto src = *allocate_buffer(allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
 		::memcpy(&src[0], src_data, size);
 		BufferImageCopy bc;
 		bc.imageOffset = { 0, 0, 0 };
 		bc.bufferRowLength = 0;
 		bc.bufferImageHeight = 0;
-		bc.imageExtent = image.extent;
-		bc.imageSubresource.aspectMask = format_to_aspect(image.format);
-		bc.imageSubresource.mipLevel = image.base_level;
-		bc.imageSubresource.baseArrayLayer = image.base_layer;
-		assert(image.layer_count == 1); // unsupported yet
-		bc.imageSubresource.layerCount = image.layer_count;
+		bc.imageExtent = ve.extent;
+		bc.imageSubresource.aspectMask = format_to_aspect(ve.format);
+		bc.imageSubresource.mipLevel = ve.base_level;
+		bc.imageSubresource.baseArrayLayer = ve.base_layer;
+		assert(ve.layer_count == 1); // unsupported yet
+		bc.imageSubresource.layerCount = ve.layer_count;
 		bc.bufferOffset = allocator.get_context().ptr_to_buffer_offset(src->ptr).offset;
 
 		auto srcbuf = acquire("src", *src, Access::eNone, VUK_CALL);
-		auto dst = declare_ia("dst", image, VUK_CALL);
+		auto dst = discard("dst", image, VUK_CALL);
 		auto image_upload = make_pass("image upload", [bc](CommandBuffer& command_buffer, VUK_BA(Access::eTransferRead) src, VUK_IA(Access::eTransferWrite) dst) {
 			command_buffer.copy_buffer_to_image(src, dst, bc);
 			return dst;
@@ -119,35 +119,24 @@ namespace vuk {
 		return { std::move(buf), host_data_to_buffer(allocator, domain, buf.get(), data, VUK_CALL) };
 	}
 
-	inline std::pair<Unique<Image>, Value<ImageAttachment>>
-	create_image_with_data(Allocator& allocator, DomainFlagBits copy_domain, ImageAttachment& ia, const void* data, VUK_CALLSTACK) {
-		auto image = allocate_image(allocator, ia, VUK_CALL);
-		ia.image = **image;
-		return { std::move(*image), host_data_to_image(allocator, copy_domain, ia, data, VUK_CALL) };
+	inline std::pair<Unique<ImageView<>>, Value<ImageView<>>>
+	create_image_with_data(Allocator& allocator, DomainFlagBits copy_domain, ICI ici, const void* data, VUK_CALLSTACK) {
+		auto result = allocate_image(allocator, ici, VUK_CALL);
+		if (!result) {
+			return { Unique<ImageView<>>{ allocator }, Value<ImageView<>>{} };
+		}
+		auto& image = *result;
+		auto view = Unique<ImageView<>>(allocator, image->default_view());
+		return { std::move(view), host_data_to_image(allocator, copy_domain, image->default_view(), data, VUK_CALL) };
 	}
 
 	template<class T>
-	std::pair<Unique<Image>, Value<ImageAttachment>>
-	create_image_with_data(Allocator& allocator, DomainFlagBits copy_domain, ImageAttachment& ia, std::span<T> data, VUK_CALLSTACK) {
-		return create_image_with_data(allocator, copy_domain, ia, data.data(), VUK_CALL);
+	std::pair<Unique<ImageView<>>, Value<ImageView<>>>
+	create_image_with_data(Allocator& allocator, DomainFlagBits copy_domain, ICI ici, std::span<T> data, VUK_CALLSTACK) {
+		return create_image_with_data(allocator, copy_domain, ici, data.data(), VUK_CALL);
 	}
 
-	inline std::tuple<Unique<Image>, Unique<ImageView>, Value<ImageAttachment>>
-	create_image_and_view_with_data(Allocator& allocator, DomainFlagBits copy_domain, ImageAttachment& ia, const void* data, VUK_CALLSTACK) {
-		auto image = allocate_image(allocator, ia, VUK_CALL);
-		ia.image = **image;
-		auto view = allocate_image_view(allocator, ia, VUK_CALL);
-		ia.image_view = **view;
-		return { std::move(*image), std::move(*view), host_data_to_image(allocator, copy_domain, ia, data, VUK_CALL) };
-	}
-
-	template<class T>
-	std::tuple<Unique<Image>, Unique<ImageView>, Value<ImageAttachment>>
-	create_image_and_view_with_data(Allocator& allocator, DomainFlagBits copy_domain, ImageAttachment ia, std::span<T> data, VUK_CALLSTACK) {
-		return create_image_and_view_with_data(allocator, copy_domain, ia, data.data(), VUK_CALL);
-	}
-
-	inline Value<ImageAttachment> clear_image(Value<ImageAttachment> in, Clear clear_value, VUK_CALLSTACK) {
+	inline Value<ImageView<>> clear_image(Value<ImageView<>> in, Clear clear_value, VUK_CALLSTACK) {
 		auto clear = make_pass(
 		    "clear image",
 		    [=](CommandBuffer& cbuf, VUK_IA(Access::eClear) dst) {
@@ -159,10 +148,13 @@ namespace vuk {
 		return clear(std::move(in), VUK_CALL);
 	}
 
-	inline Value<ImageAttachment> blit_image(Value<ImageAttachment> src, Value<ImageAttachment> dst, Filter filter, VUK_CALLSTACK) {
+	inline Value<ImageView<>> blit_image(Value<ImageView<>> src, Value<ImageView<>> dst, Filter filter, VUK_CALLSTACK) {
 		auto blit = make_pass(
 		    "blit image",
 		    [=](CommandBuffer& cbuf, VUK_IA(Access::eBlitRead) src, VUK_IA(Access::eBlitWrite) dst) {
+			    auto& src_ve = src->get_meta();
+			    auto& dst_ve = dst->get_meta();
+
 			    ImageBlit region = {};
 			    region.srcOffsets[0] = Offset3D{};
 			    auto src_extent = src->base_mip_extent();
@@ -170,16 +162,16 @@ namespace vuk {
 			    region.dstOffsets[0] = Offset3D{};
 			    auto dst_extent = dst->base_mip_extent();
 			    region.dstOffsets[1] = Offset3D{ (int32_t)dst_extent.width, (int32_t)dst_extent.height, (int32_t)dst_extent.depth };
-			    region.srcSubresource.aspectMask = format_to_aspect(src->format);
-			    region.srcSubresource.baseArrayLayer = src->base_layer;
-			    region.srcSubresource.layerCount = src->layer_count;
-			    region.srcSubresource.mipLevel = src->base_level;
-			    assert(src->level_count == 1);
-			    region.dstSubresource.baseArrayLayer = dst->base_layer;
-			    region.dstSubresource.layerCount = dst->layer_count;
-			    region.dstSubresource.mipLevel = dst->base_level;
-			    assert(dst->level_count == 1);
-			    region.dstSubresource.aspectMask = format_to_aspect(dst->format);
+			    region.srcSubresource.aspectMask = format_to_aspect(src_ve.format);
+			    region.srcSubresource.baseArrayLayer = src_ve.base_layer;
+			    region.srcSubresource.layerCount = src_ve.layer_count;
+			    region.srcSubresource.mipLevel = src_ve.base_level;
+			    assert(src_ve.level_count == 1);
+			    region.dstSubresource.baseArrayLayer = dst_ve.base_layer;
+			    region.dstSubresource.layerCount = dst_ve.layer_count;
+			    region.dstSubresource.mipLevel = dst_ve.base_level;
+			    assert(dst_ve.level_count == 1);
+			    region.dstSubresource.aspectMask = format_to_aspect(dst_ve.format);
 
 			    cbuf.blit_image(src, dst, region, filter);
 			    return dst;
@@ -190,18 +182,20 @@ namespace vuk {
 	}
 
 	template<class T>
-	inline Value<Buffer<T>> copy(Value<ImageAttachment> src, Value<Buffer<T>> dst, VUK_CALLSTACK) {
+	inline Value<Buffer<T>> copy(Value<ImageView<>> src, Value<Buffer<T>> dst, VUK_CALLSTACK) {
 		auto image2buf = make_pass("copy image to buffer", [](CommandBuffer& cbuf, VUK_IA(Access::eCopyRead) src, VUK_ARG(Buffer<T>, Access::eCopyWrite) dst) {
+			auto& src_ve = src->get_meta();
+
 			BufferImageCopy bc;
 			bc.imageOffset = { 0, 0, 0 };
 			bc.bufferRowLength = 0;
 			bc.bufferImageHeight = 0;
 			bc.imageExtent = src->base_mip_extent();
-			bc.imageSubresource.aspectMask = format_to_aspect(src->format);
-			bc.imageSubresource.mipLevel = src->base_level;
-			bc.imageSubresource.baseArrayLayer = src->base_layer;
-			assert(src->layer_count == 1); // unsupported yet
-			bc.imageSubresource.layerCount = src->layer_count;
+			bc.imageSubresource.aspectMask = format_to_aspect(src_ve.format);
+			bc.imageSubresource.mipLevel = src_ve.base_level;
+			bc.imageSubresource.baseArrayLayer = src_ve.base_layer;
+			assert(src_ve.layer_count == 1); // unsupported yet
+			bc.imageSubresource.layerCount = src_ve.layer_count;
 			bc.bufferOffset = cbuf.get_context().ptr_to_buffer_offset(dst->ptr).offset; // TODO: PAV: bad
 			cbuf.copy_image_to_buffer(src, dst->to_byte_view(), bc);
 			return dst;
@@ -231,18 +225,20 @@ namespace vuk {
 	}
 
 	template<class T>
-	inline Value<ImageAttachment> copy(Value<Buffer<T>> src, Value<ImageAttachment> dst, VUK_CALLSTACK) {
+	inline Value<ImageView<>> copy(Value<Buffer<T>> src, Value<ImageView<>> dst, VUK_CALLSTACK) {
 		auto buf2img = make_pass("copy buffer to image", [](CommandBuffer& cbuf, VUK_ARG(Buffer<T>, Access::eCopyRead) src, VUK_IA(Access::eCopyWrite) dst) {
+			auto& dst_ve = dst->get_meta();
+
 			BufferImageCopy bc;
 			bc.imageOffset = { 0, 0, 0 };
 			bc.bufferRowLength = 0;
 			bc.bufferImageHeight = 0;
 			bc.imageExtent = dst->base_mip_extent();
-			bc.imageSubresource.aspectMask = format_to_aspect(dst->format);
-			bc.imageSubresource.mipLevel = dst->base_level;
-			bc.imageSubresource.baseArrayLayer = dst->base_layer;
-			assert(dst->layer_count == 1); // unsupported yet
-			bc.imageSubresource.layerCount = dst->layer_count;
+			bc.imageSubresource.aspectMask = format_to_aspect(dst_ve.format);
+			bc.imageSubresource.mipLevel = dst_ve.base_level;
+			bc.imageSubresource.baseArrayLayer = dst_ve.base_layer;
+			assert(dst_ve.layer_count == 1); // unsupported yet
+			bc.imageSubresource.layerCount = dst_ve.layer_count;
 			bc.bufferOffset = cbuf.get_context().ptr_to_buffer_offset(src.ptr).offset; // TODO: PAV: bad
 			cbuf.copy_buffer_to_image(src, dst, bc);
 			return dst;
@@ -251,24 +247,27 @@ namespace vuk {
 		return buf2img(src, dst, VUK_CALL);
 	}
 
-	inline Value<ImageAttachment> copy(Value<ImageAttachment> src, Value<ImageAttachment> dst, VUK_CALLSTACK) {
+	inline Value<ImageView<>> copy(Value<ImageView<>> src, Value<ImageView<>> dst, VUK_CALLSTACK) {
 		auto img2img = make_pass("copy image to image", [](CommandBuffer& cbuf, VUK_IA(Access::eCopyRead) src, VUK_IA(Access::eCopyWrite) dst) {
-			assert(src->level_count == dst->level_count);
+			auto& src_ve = src->get_meta();
+			auto& dst_ve = dst->get_meta();
+
+			assert(src_ve.level_count == dst_ve.level_count);
 
 			ImageCopy bc;
 			bc.imageExtent = dst->base_mip_extent();
 			bc.srcOffsets = {};
-			bc.srcSubresource.aspectMask = format_to_aspect(src->format);
-			bc.srcSubresource.baseArrayLayer = src->base_layer;
-			bc.srcSubresource.layerCount = src->layer_count;
+			bc.srcSubresource.aspectMask = format_to_aspect(src_ve.format);
+			bc.srcSubresource.baseArrayLayer = src_ve.base_layer;
+			bc.srcSubresource.layerCount = src_ve.layer_count;
 			bc.dstOffsets = {};
-			bc.dstSubresource.aspectMask = format_to_aspect(dst->format);
-			bc.dstSubresource.baseArrayLayer = dst->base_layer;
-			bc.dstSubresource.layerCount = dst->layer_count;
+			bc.dstSubresource.aspectMask = format_to_aspect(dst_ve.format);
+			bc.dstSubresource.baseArrayLayer = dst_ve.base_layer;
+			bc.dstSubresource.layerCount = dst_ve.layer_count;
 
-			for (uint32_t i = 0; i < src->level_count; i++) {
-				bc.srcSubresource.mipLevel = src->base_level + i;
-				bc.dstSubresource.mipLevel = dst->base_level + i;
+			for (uint32_t i = 0; i < src_ve.level_count; i++) {
+				bc.srcSubresource.mipLevel = src_ve.base_level + i;
+				bc.dstSubresource.mipLevel = dst_ve.base_level + i;
 				cbuf.copy_image(src, dst, bc);
 			}
 
@@ -278,7 +277,7 @@ namespace vuk {
 		return img2img(src, dst, VUK_CALL);
 	}
 
-	inline Value<ImageAttachment> resolve_into(Value<ImageAttachment> src, Value<ImageAttachment> dst, VUK_CALLSTACK) {
+	inline Value<ImageView<>> resolve_into(Value<ImageView<>> src, Value<ImageView<>> dst, VUK_CALLSTACK) {
 		src.same_format_as(dst);
 		src.same_shape_as(dst);
 		// TODO: set dst as single sampled
@@ -294,11 +293,12 @@ namespace vuk {
 		return resolve(std::move(src), std::move(dst), VUK_CALL);
 	}
 
-	/// @brief Generate mips for given ImageAttachment
-	/// @param image input Future of ImageAttachment
+	/// @brief Generate mips for given ImageView<>
+
+	/// @param image input Future of ImageView<>
 	/// @param base_mip source mip level
 	/// @param num_mips number of mip levels to generate
-	inline Value<ImageAttachment> generate_mips(Value<ImageAttachment> image, uint32_t base_mip, uint32_t num_mips) {
+	inline Value<ImageView<>> generate_mips(Value<ImageView<>> image, uint32_t base_mip, uint32_t num_mips) {
 		for (uint32_t mip_level = base_mip + 1; mip_level < (base_mip + num_mips + 1); mip_level++) {
 			blit_image(image.mip(mip_level - 1), image.mip(mip_level), Filter::eLinear);
 		}

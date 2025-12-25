@@ -14,7 +14,7 @@
       "variables": [
         {
           "name": "VUK_BUILD_EXAMPLES",
-          "value": "True",
+          "value": "False",
           "type": "BOOL"
         },
         {

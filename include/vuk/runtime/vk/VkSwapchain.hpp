@@ -1,7 +1,7 @@
 #pragma once
 
-#include "vuk/runtime/vk/Allocator.hpp"
 #include "vuk/Config.hpp"
+#include "vuk/runtime/vk/Allocator.hpp"
 #include "vuk/Types.hpp"
 #include "vuk/vuk_fwd.hpp"
 
@@ -60,8 +60,6 @@ namespace vuk {
 		eSharedContinuousRefresh = VK_PRESENT_MODE_SHARED_CONTINUOUS_REFRESH_KHR
 	};
 
-	struct ImageAttachment;
-
 	struct Swapchain {
 		Swapchain(Allocator allocator, size_t image_count);
 		Swapchain(Allocator allocator,
@@ -84,7 +82,7 @@ namespace vuk {
 		VkSwapchainKHR swapchain = VK_NULL_HANDLE;
 		VkSurfaceKHR surface = VK_NULL_HANDLE;
 
-		std::vector<ImageAttachment> images;
+		std::vector<ImageView<>> images;
 		uint32_t image_index;
 		std::vector<VkSemaphore> semaphores; /* render_complete_0 render_complete_1 ... */
 		VkResult acquire_result;

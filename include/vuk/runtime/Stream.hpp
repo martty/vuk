@@ -20,7 +20,7 @@ namespace vuk {
 			dependent_signals.push_back(signal);
 		}
 
-		virtual void synch_image(ImageAttachment& img_att, Subrange::Image subrange, StreamResourceUse src_use, StreamResourceUse dst_use, void* tag) = 0;
+		virtual void synch_image(ImageView<> img_att, Subrange::Image subrange, StreamResourceUse src_use, StreamResourceUse dst_use, void* tag) = 0;
 		virtual void synch_memory(StreamResourceUse src_use, StreamResourceUse dst_use, void* tag) = 0;
 
 		struct SubmitResult {
@@ -29,4 +29,4 @@ namespace vuk {
 
 		virtual Result<SubmitResult> submit() = 0;
 	};
-}
+} // namespace vuk

@@ -3,7 +3,7 @@ R"(
 
 // cribbed from https://gitlab.freedesktop.org/mesa/mesa/-/blob/main/src/vulkan/runtime/bvh/vk_build_helpers.h
 /*
- * Copyright © 2022 Konstantin Seurer
+ * Copyright 2022 Konstantin Seurer
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),

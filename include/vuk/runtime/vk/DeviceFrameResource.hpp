@@ -50,14 +50,13 @@ namespace vuk {
 
 		void deallocate_framebuffers(std::span<const VkFramebuffer> src) override; // noop
 
-		Result<void, AllocateException> allocate_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc) override;
+		Result<void, AllocateException> allocate_images(std::span<Image<>> dst, std::span<const ICI> cis, SourceLocationAtFrame loc) override;
 
-		void deallocate_images(std::span<const Image> src) override; // noop
+		void deallocate_images(std::span<const Image<>> src) override; // noop
 
-		Result<void, AllocateException>
-		allocate_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc) override;
+		Result<void, AllocateException> allocate_image_views(std::span<ImageView<>> dst, std::span<const IVCI> cis, SourceLocationAtFrame loc) override;
 
-		void deallocate_image_views(std::span<const ImageView> src) override; // noop
+		void deallocate_image_views(std::span<const ImageView<>> src) override; // noop
 
 		Result<void, AllocateException> allocate_persistent_descriptor_sets(std::span<PersistentDescriptorSet> dst,
 		                                                                    std::span<const PersistentDescriptorSetCreateInfo> cis,
@@ -141,7 +140,7 @@ namespace vuk {
 	/// Allocations from this resource are tied to the "multi-frame" - all allocations recycled when a DeviceMultiFrameResource is recycled.
 	/// All resources allocated are also deallocated at recycle time - it is not necessary (but not an error) to deallocate them.
 	struct DeviceMultiFrameResource final : DeviceFrameResource {
-		Result<void, AllocateException> allocate_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc) override;
+		Result<void, AllocateException> allocate_images(std::span<Image<>> dst, std::span<const ICI> cis, SourceLocationAtFrame loc) override;
 
 		DeviceMultiFrameResource(VkDevice device, DeviceSuperFrameResource& upstream, uint32_t frame_lifetime);
 
@@ -191,19 +190,19 @@ namespace vuk {
 
 		void deallocate_framebuffers(std::span<const VkFramebuffer> src) override;
 
-		void deallocate_images(std::span<const Image> src) override;
+		void deallocate_images(std::span<const Image<>> src) override;
 
-		Result<void, AllocateException> allocate_cached_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc);
+		Result<void, AllocateException> allocate_cached_images(std::span<Image<>> dst, std::span<const ICI> cis, SourceLocationAtFrame loc);
 
-		Result<void, AllocateException> allocate_cached_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc);
-		
+		Result<void, AllocateException> allocate_cached_image_views(std::span<ImageView<>> dst, std::span<const IVCI> cis, SourceLocationAtFrame loc);
+
 		Result<void, AllocateException> allocate_memory(std::span<ptr_base> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) override;
 
 		/*
 		Result<void, AllocateException> allocate_views(std::span<view_base> dst, std::span<const VCI> cis, SourceLocationAtFrame loc) override;
 		void deallocate_views(std::span<const view_base> dst) override;*/
 
-		void deallocate_image_views(std::span<const ImageView> src) override;
+		void deallocate_image_views(std::span<const ImageView<>> src) override;
 
 		void deallocate_persistent_descriptor_sets(std::span<const PersistentDescriptorSet> src) override;
 

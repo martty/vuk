@@ -363,7 +363,7 @@ namespace vuk {
 				if (parm.type()->kind == Type::ARRAY_TY) {
 					type = (*parm.type()->array.T)->hash_value;
 				}
-				if (!parm.type()->is_bufferlike_view() && type != current_module->types.builtin_image) {
+				if (!parm.type()->is_bufferlike_view() && !parm.type()->is_imageview()) {
 					break;
 				}
 				auto& link = parm.link();
@@ -628,7 +628,7 @@ namespace vuk {
 					switch (b->type) {
 					case DescriptorType::eSampledImage:
 						acc = Access::eComputeSampled;
-						base_ty = current_module->types.get_builtin_image();
+						base_ty = to_IR_type<ImageView<>>();
 						break;
 					case DescriptorType::eCombinedImageSampler:
 						acc = Access::eComputeSampled;
@@ -636,7 +636,7 @@ namespace vuk {
 						break;
 					case DescriptorType::eStorageImage:
 						acc = b->non_writable ? Access::eComputeRead : (b->non_readable ? Access::eComputeWrite : Access::eComputeRW);
-						base_ty = current_module->types.get_builtin_image();
+						base_ty = to_IR_type<ImageView<>>();
 						break;
 					case DescriptorType::eUniformBuffer:
 					case DescriptorType::eStorageBuffer:

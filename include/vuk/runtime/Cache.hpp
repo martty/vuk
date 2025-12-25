@@ -2,12 +2,13 @@
 #include "CreateInfo.hpp"
 #include "vuk/Hash.hpp"
 #include "vuk/runtime/vk/Pipeline.hpp"
-#include "vuk/ToIntegral.hpp"
-#include "vuk/Types.hpp"
 #include "vuk/runtime/vk/Program.hpp"
 #include "vuk/runtime/vk/RenderPass.hpp"
+#include "vuk/ToIntegral.hpp"
+#include "vuk/Types.hpp"
 
 #include <atomic>
+#include <cstdint>
 #include <optional>
 #include <robin_hood.h>
 #include <span>
@@ -143,20 +144,17 @@ namespace std {
 	};
 
 	template<>
-	struct hash<vuk::ImageCreateInfo> {
-		size_t operator()(vuk::ImageCreateInfo const& x) const noexcept {
+	struct hash<vuk::ICI> {
+		size_t operator()(vuk::ICI const& x) const noexcept {
 			size_t h = 0;
 			hash_combine(h,
-			             x.flags,
-			             x.arrayLayers,
+			             x.image_flags,
+			             x.layer_count,
 			             x.extent,
 			             to_integral(x.format),
-			             to_integral(x.imageType),
-			             to_integral(x.initialLayout),
-			             x.mipLevels,
-			             std::span(x.pQueueFamilyIndices, x.queueFamilyIndexCount),
-			             to_integral(x.samples),
-			             to_integral(x.sharingMode),
+			             to_integral(x.image_type),
+			             x.level_count,
+			             x.sample_count.count,
 			             to_integral(x.tiling),
 			             x.usage);
 			return h;
@@ -200,9 +198,9 @@ namespace std {
 	};
 
 	template<>
-	struct hash<vuk::CompressedImageViewCreateInfo> {
-		size_t operator()(vuk::CompressedImageViewCreateInfo const& x) const noexcept {
-			return robin_hood::hash_bytes((const char*)&x, sizeof(vuk::CompressedImageViewCreateInfo));
+	struct hash<vuk::IVCI> {
+		size_t operator()(vuk::IVCI const& x) const noexcept {
+			return robin_hood::hash_bytes((const char*)&x, sizeof(vuk::IVCI));
 		}
 	};
 

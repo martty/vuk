@@ -250,8 +250,10 @@ namespace vuk {
 			}
 		}
 
-		void synch_image(ImageAttachment& img_att, Subrange::Image subrange, StreamResourceUse src_use, StreamResourceUse dst_use, void* tag) override {
-			auto aspect = format_to_aspect(img_att.format);
+		void synch_image(ImageView<> img_att, Subrange::Image subrange, StreamResourceUse src_use, StreamResourceUse dst_use, void* tag) override {
+			auto& ve = img_att.get_meta();
+			auto& ie = alloc.get_context().resolve_image(ve.image);
+			auto aspect = format_to_aspect(ve.format);
 
 			// if we start an RP and we have LOAD_OP_LOAD (currently always), then we must upgrade access with an appropriate READ
 			if (is_framebuffer_attachment(dst_use)) {
@@ -311,7 +313,7 @@ namespace vuk {
 			barrier.srcStageMask = (VkPipelineStageFlags2)src_use.stages.m_mask;
 			barrier.dstStageMask = (VkPipelineStageFlags2)dst_use.stages.m_mask;
 
-			barrier.image = img_att.image.image;
+			barrier.image = ie.image;
 
 #ifdef VUK_DEBUG_IMBAR
 			print_ib(barrier, "$");
@@ -320,7 +322,7 @@ namespace vuk {
 			assert(barrier.oldLayout != VK_IMAGE_LAYOUT_UNDEFINED || !is_readonly_layout(barrier.newLayout));
 			im_bars.push_back(barrier);
 
-			img_att.layout = (ImageLayout)barrier.newLayout;
+			ve.layout = (ImageLayout)barrier.newLayout;
 			if (barrier.oldLayout != VK_IMAGE_LAYOUT_UNDEFINED) {
 				assert(barrier.newLayout != VK_IMAGE_LAYOUT_UNDEFINED);
 			}
@@ -355,23 +357,26 @@ namespace vuk {
 			mem_bars.push_back(barrier);
 		};
 
-		void prepare_render_pass_attachment(Allocator alloc, ImageAttachment img_att) {
-			auto aspect = format_to_aspect(img_att.format);
+		void prepare_render_pass_attachment(Allocator alloc, ImageView<> img_att) {
+			auto& ve = img_att.get_meta();
+			auto& ie = alloc.get_context().resolve_image(ve.image);
+
+			auto aspect = format_to_aspect(ve.format);
 			VkAttachmentReference attref{};
 
 			attref.attachment = (uint32_t)rp.rpci.attachments.size();
 
 			auto& descr = rp.rpci.attachments.emplace_back();
 			// no layout changed by RPs currently
-			descr.initialLayout = (VkImageLayout)img_att.layout;
-			descr.finalLayout = (VkImageLayout)img_att.layout;
-			attref.layout = (VkImageLayout)img_att.layout;
+			descr.initialLayout = (VkImageLayout)ve.layout;
+			descr.finalLayout = (VkImageLayout)ve.layout;
+			attref.layout = (VkImageLayout)ve.layout;
 
 			descr.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-			descr.storeOp = is_readonly_layout((VkImageLayout)img_att.layout) ? VK_ATTACHMENT_STORE_OP_NONE_KHR : VK_ATTACHMENT_STORE_OP_STORE;
+			descr.storeOp = is_readonly_layout((VkImageLayout)ve.layout) ? VK_ATTACHMENT_STORE_OP_NONE_KHR : VK_ATTACHMENT_STORE_OP_STORE;
 
-			descr.format = (VkFormat)img_att.format;
-			descr.samples = (VkSampleCountFlagBits)img_att.sample_count.count;
+			descr.format = (VkFormat)ve.format;
+			descr.samples = (VkSampleCountFlagBits)ve.sample_count.count;
 
 			if ((aspect & ImageAspectFlagBits::eColor) == ImageAspectFlags{}) { // not color -> depth or depth/stencil
 				rp.rpci.ds_ref = attref;
@@ -379,19 +384,13 @@ namespace vuk {
 				rp.rpci.color_refs.push_back(attref);
 			}
 
-			if (img_att.image_view.payload == VK_NULL_HANDLE) {
-				auto iv = allocate_image_view(alloc, img_att); // TODO: dropping error
-				img_att.image_view = **iv;
-
-				alloc.get_context().set_name(img_att.image_view.payload, Name("ImageView: RenderTarget "));
-			}
-			rp.framebuffer_ivs.push_back(img_att.image_view.payload);
-			rp.fbci.width = img_att.extent.width;
-			rp.fbci.height = img_att.extent.height;
-			rp.fbci.layers = img_att.layer_count;
-			assert(img_att.level_count == 1);
-			rp.fbci.sample_count = img_att.sample_count;
-			rp.fbci.attachments.push_back(img_att.image_view);
+			rp.framebuffer_ivs.push_back(ve.api_view);
+			rp.fbci.width = ve.extent.width;
+			rp.fbci.height = ve.extent.height;
+			rp.fbci.layers = ve.layer_count;
+			assert(ve.level_count == 1);
+			rp.fbci.sample_count = ve.sample_count;
+			rp.fbci.attachments.push_back(img_att);
 		}
 
 		Result<void> prepare_render_pass() {
@@ -461,7 +460,7 @@ namespace vuk {
 			assert(false);
 		}
 
-		void synch_image(ImageAttachment& img_att, Subrange::Image subrange, StreamResourceUse src_use, StreamResourceUse dst_use, void* tag) override {
+		void synch_image(ImageView<> img_att, Subrange::Image subrange, StreamResourceUse src_use, StreamResourceUse dst_use, void* tag) override {
 			/* host -> host and host -> device not needed, device -> host inserts things on the device side */
 			return;
 		}
@@ -501,7 +500,7 @@ namespace vuk {
 			assert(false);
 		}
 
-		void synch_image(ImageAttachment& img_att, Subrange::Image subrange, StreamResourceUse src_use, StreamResourceUse dst_use, void* tag) override {}
+		void synch_image(ImageView<> img_att, Subrange::Image subrange, StreamResourceUse src_use, StreamResourceUse dst_use, void* tag) override {}
 
 		void synch_memory(StreamResourceUse src_use, StreamResourceUse dst_use, void* tag) override { /* PE doesn't do memory */
 			assert(false);
@@ -572,9 +571,10 @@ namespace vuk {
 
 		uint64_t value_identity(Type* base_ty, void* value) {
 			uint64_t key = 0;
-			if (base_ty->hash_value == current_module->types.builtin_image) {
-				auto& img_att = *reinterpret_cast<ImageAttachment*>(value);
-				key = reinterpret_cast<uint64_t>(img_att.image.image);
+			if (base_ty->is_imageview()) {
+				auto& img_att = *reinterpret_cast<ImageView<>*>(value);
+				auto& ve = img_att.get_meta();
+				key = ve.image.device_address;
 			} else if (base_ty->is_bufferlike_view()) {
 				auto buf = reinterpret_cast<Buffer<>*>(value);
 				auto bo = alloc.get_context().ptr_to_buffer_offset(buf->ptr);
@@ -589,7 +589,8 @@ namespace vuk {
 				}
 			} else if (base_ty->hash_value == current_module->types.builtin_sampled_image) { // only image syncs
 				auto& img_att = reinterpret_cast<SampledImage*>(value)->ia;
-				key = reinterpret_cast<uint64_t>(img_att.image.image);
+				auto& ve = img_att.get_meta();
+				key = ve.image.device_address;
 			} else {
 				return 0;
 			}
@@ -617,9 +618,10 @@ namespace vuk {
 
 			uint64_t key = value_identity(base_ty, value);
 			auto& psru = *new (this->arena.ensure_space(sizeof(PartialStreamResourceUse))) PartialStreamResourceUse{ src_use };
-			if (base_ty->hash_value == current_module->types.builtin_image) {
-				auto& img_att = *reinterpret_cast<ImageAttachment*>(value);
-				psru.subrange.image = { img_att.base_level, img_att.level_count, img_att.base_layer, img_att.layer_count };
+			if (base_ty->is_imageview()) {
+				auto& img_att = *reinterpret_cast<ImageView<>*>(value);
+				auto& ve = img_att.get_meta();
+				psru.subrange.image = { ve.base_level, ve.level_count, ve.base_layer, ve.layer_count };
 			} else if (base_ty->is_bufferlike_view()) { // for buffers, we allow underlying resource to alias
 				auto buf = reinterpret_cast<Buffer<>*>(value);
 				auto bo = alloc.get_context().ptr_to_buffer_offset(buf->ptr);
@@ -663,7 +665,7 @@ namespace vuk {
 				return;
 			} else if (base_ty->hash_value == current_module->types.builtin_sampled_image) { // sync the image
 				auto& img_att = reinterpret_cast<SampledImage*>(value)->ia;
-				add_sync(current_module->types.get_builtin_image().get(), dst_use, &img_att);
+				add_sync(to_IR_type<ImageView<>>().get(), dst_use, &img_att);
 				return;
 			} else if (!base_ty->is_bufferlike_view() && base_ty->kind == Type::COMPOSITE_TY) { // sync every part of a composite
 				auto& composite = base_ty->composite;
@@ -681,10 +683,12 @@ namespace vuk {
 
 			auto& head = last_modify.at(key);
 
-			if (base_ty->hash_value == current_module->types.builtin_image) {
-				auto& img_att = *reinterpret_cast<ImageAttachment*>(value);
+			if (base_ty->is_imageview()) {
+				auto& img_att = *reinterpret_cast<ImageView<>*>(value);
+				auto& ve = img_att.get_meta();
+
 				std::vector<Subrange::Image, inline_alloc<Subrange::Image, 1024>> work_queue(this->arena);
-				work_queue.emplace_back(Subrange::Image{ img_att.base_level, img_att.level_count, img_att.base_layer, img_att.layer_count });
+				work_queue.emplace_back(Subrange::Image{ ve.base_level, ve.level_count, ve.base_layer, ve.layer_count });
 
 				while (work_queue.size() > 0) {
 					Subrange::Image dst_range = work_queue.back();
@@ -1043,7 +1047,7 @@ namespace vuk {
 
 							recorder.add_sync(base_type(parm).get(), get_dependency_info(parm, arg_ty.get(), RW::eWrite, nullptr), get_value(parm));
 						}
-						auto image = *get_value<ImageAttachment>(node->construct.args[1]);
+						auto image = *get_value<ImageView<>>(node->construct.args[1]);
 						auto samp = *get_value<SamplerCreateInfo>(node->construct.args[2]);
 						done(node, host_stream, SampledImage{ image, samp });
 					} else if (node->type[0]->kind == Type::UNION_TY) {
@@ -1099,9 +1103,9 @@ namespace vuk {
 				case Node::ALLOCATE: {
 					auto allocator = node->allocate.allocator ? *node->allocate.allocator : this->allocator;
 
-					if (node->type[0]->kind == Type::POINTER_TY) {
-						auto pointed_ty = *node->type[0]->pointer.T;
-
+					assert(node->type[0]->kind == Type::POINTER_TY);
+					auto pointed_ty = *node->type[0]->pointer.T;
+					if (pointed_ty->kind != Type::ENUM_TY) { // buffer types
 						ptr_base buf;
 						auto bci = *get_value<BufferCreateInfo>(node->allocate.src);
 						if (auto res = allocator.allocate_memory(std::span{ static_cast<ptr_base*>(&buf), 1 }, std::span{ &bci, 1 }); !res) {
@@ -1109,47 +1113,51 @@ namespace vuk {
 						}
 						allocator.deallocate(std::span{ static_cast<ptr_base*>(&buf), 1 });
 						done(node, host_stream, buf);
-					} else if (node->type[0]->hash_value == current_module->types.builtin_image) {
-						auto& attachment = constant<ImageAttachment>(node->construct.args[0]);
+					} else { // image types
+						auto ici = *get_value<ICI>(node->allocate.src);
+						Image<> im;
+						if (auto res = allocator.allocate_images(std::span{ static_cast<Image<>*>(&im), 1 }, std::span{ &ici, 1 }); !res) {
+							return res;
+						}
+						allocator.deallocate(std::span{ static_cast<Image<>*>(&im), 1 });
+						done(node, host_stream, im);
+						/*
 						// set iv type
-						if (attachment.image_view == ImageView{}) {
-							if (attachment.view_type == ImageViewType::eInfer && attachment.layer_count != VK_REMAINING_ARRAY_LAYERS) {
-								if (attachment.image_type == ImageType::e1D) {
-									if (attachment.layer_count == 1) {
-										attachment.view_type = ImageViewType::e1D;
-									} else {
-										attachment.view_type = ImageViewType::e1DArray;
-									}
-								} else if (attachment.image_type == ImageType::e2D) {
-									if (attachment.layer_count == 1) {
-										attachment.view_type = ImageViewType::e2D;
-									} else {
-										attachment.view_type = ImageViewType::e2DArray;
-									}
-								} else if (attachment.image_type == ImageType::e3D) {
-									if (attachment.layer_count == 1) {
-										attachment.view_type = ImageViewType::e3D;
-									} else {
-										attachment.view_type = ImageViewType::e2DArray;
-									}
-								}
-							}
+						if (ve.api_view == VK_NULL_HANDLE) {
+						  if (ve.view_type == ImageViewType::eInfer && ve.layer_count != VK_REMAINING_ARRAY_LAYERS) {
+						    if (ie.image_type == ImageType::e1D) {
+						      if (ve.layer_count == 1) {
+						        ve.view_type = ImageViewType::e1D;
+						      } else {
+						        ve.view_type = ImageViewType::e1DArray;
+						      }
+						    } else if (ie.image_type == ImageType::e2D) {
+						      if (ve.layer_count == 1) {
+						        ve.view_type = ImageViewType::e2D;
+						      } else {
+						        ve.view_type = ImageViewType::e2DArray;
+						      }
+						    } else if (ie.image_type == ImageType::e3D) {
+						      if (ve.layer_count == 1) {
+						        ve.view_type = ImageViewType::e3D;
+						      } else {
+						        ve.view_type = ImageViewType::e2DArray;
+						      }
+						    }
+						  }
 						}
-						if (!attachment.image) {
-							attachment.usage |= impl->compute_usage(&first(node).link());
-							assert(attachment.usage != ImageUsageFlags{});
-							auto img = allocate_image(allocator, attachment);
-							if (!img) {
-								return img;
-							}
-							attachment.image = **img;
-							if (node->debug_info && node->debug_info->result_names.size() > 0 && !node->debug_info->result_names[0].empty()) {
-								ctx.set_name(attachment.image.image, node->debug_info->result_names[0].c_str());
-							}
-						}
-						done(node, host_stream, attachment);
-					} else {
-						assert(false); // nothing else can be allocated
+						if (!ve.image) {
+						  ve.image.usage |= impl->compute_usage(&first(node).link());
+						  assert(ve.image.usage != ImageUsageFlags{});
+						  auto img = allocate_image(allocator, attachment);
+						  if (!img) {
+						    return img;
+						  }
+						  ve.image = **img;
+						  if (node->debug_info && node->debug_info->result_names.size() > 0 && !node->debug_info->result_names[0].empty()) {
+						    ctx.set_name(ie.image, node->debug_info->result_names[0].c_str());
+						  }
+						}*/
 					}
 					recorder.init_sync(node->type[0].get(), { to_use(eNone), host_stream }, get_value(first(node)));
 
@@ -1177,20 +1185,30 @@ namespace vuk {
 
 							// here: figuring out which allocator to use to make image views for the RP and then making them
 							if (is_framebuffer_attachment(access)) {
-								auto& img_att = *get_value<ImageAttachment>(parm);
-								if (img_att.view_type == ImageViewType::eInfer || img_att.view_type == ImageViewType::eCube) { // framebuffers need 2D or 2DArray views
-									if (img_att.layer_count > 1) {
-										img_att.view_type = ImageViewType::e2DArray;
+								auto& img_att = *get_value<ImageView<>>(parm);
+								auto& ve = img_att.get_meta();
+
+								if (ve.view_type == ImageViewType::eInfer || ve.view_type == ImageViewType::eCube) { // framebuffers need 2D or 2DArray views
+									if (ve.layer_count > 1) {
+										ve.view_type = ImageViewType::e2DArray;
 									} else {
-										img_att.view_type = ImageViewType::e2D;
+										ve.view_type = ImageViewType::e2D;
 									}
 								}
-								if (img_att.image_view.payload == VK_NULL_HANDLE) {
-									auto iv = allocate_image_view(allocator, img_att); // TODO: dropping error
-									img_att.image_view = **iv;
+								if (ve.api_view == VK_NULL_HANDLE) {
+									IVCI ivci;
+									ivci.image = ve.image;
+									ivci.format = ve.format;
+									ivci.base_level = ve.base_level;
+									ivci.level_count = ve.level_count;
+									ivci.base_layer = ve.base_layer;
+									ivci.layer_count = ve.layer_count;
+									ivci.view_type = ve.view_type;
+
+									auto iv = *allocate_image_view(allocator, ivci); // TODO: dropping error
 
 									auto name = std::string("ImageView: RenderTarget ");
-									allocator.get_context().set_name(img_att.image_view.payload, Name(name));
+									allocator.get_context().set_name((*iv)->api_view, Name(name));
 								}
 							}
 
@@ -1199,7 +1217,7 @@ namespace vuk {
 							recorder.add_sync(base_type(parm).get(), get_dependency_info(parm, arg_ty.get(), sync_access, dst_stream), get_value(parm));
 
 							if (is_framebuffer_attachment(access)) {
-								auto& img_att = *get_value<ImageAttachment>(parm);
+								auto& img_att = *get_value<ImageView<>>(parm);
 								vk_rec->prepare_render_pass_attachment(allocator, img_att);
 							}
 						} else {
@@ -1288,7 +1306,7 @@ namespace vuk {
 								switch (binding->type) {
 								case DescriptorType::eSampledImage:
 								case DescriptorType::eStorageImage:
-									cobuf.bind_image(set, binding->binding, *reinterpret_cast<ImageAttachment*>(val));
+									cobuf.bind_image(set, binding->binding, *reinterpret_cast<ImageView<>*>(val));
 									break;
 								case DescriptorType::eUniformBuffer:
 								case DescriptorType::eStorageBuffer: {
@@ -1524,6 +1542,13 @@ namespace vuk {
 					auto size = allocator.get_context().resolve_ptr(ptr).buffer.size;
 
 					done(node, item.scheduled_stream, size);
+					break;
+				}
+				case Node::GET_IV_META: {
+					auto& img_att = *get_value<ImageView<>>(node->get_iv_meta.imageview);
+					auto& ve = img_att.get_meta();
+
+					done(node, item.scheduled_stream, (void*)&ve);
 					break;
 				}
 				default:

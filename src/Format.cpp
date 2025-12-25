@@ -982,6 +982,10 @@ namespace vuk {
 		}
 	}
 
+	std::string format_as(const Format& fmt) {
+		return std::string(format_to_sv(fmt));
+	}
+
 	bool is_format_srgb(Format format) noexcept {
 		switch (format) {
 		case Format::eR8Srgb:

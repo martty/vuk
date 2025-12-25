@@ -1,9 +1,11 @@
 #include "vuk/RenderGraph.hpp"
-#include "vuk/Value.hpp"
 #include "vuk/runtime/Cache.hpp"
 #include "vuk/runtime/vk/DeviceVkResource.hpp"
 #include "vuk/runtime/vk/VkRuntime.hpp"
 #include "vuk/runtime/vk/VkSwapchain.hpp"
+#include "vuk/Value.hpp"
+
+#include <fmt/format.h>
 
 namespace vuk {
 	Result<void> submit(Allocator& allocator, Compiler& compiler, std::span<UntypedValue> values, RenderGraphCompileOptions options) {
@@ -23,8 +25,7 @@ namespace vuk {
 				}
 			} else {
 				if (node->get_node()->kind != Node::RELEASE) {
-					auto rel_node = std::make_shared<ExtNode>(
-					    Ref{ node->get_node(), value.get_head().index }, node, Access::eNone, DomainFlagBits::eDevice);
+					auto rel_node = std::make_shared<ExtNode>(Ref{ node->get_node(), value.get_head().index }, node, Access::eNone, DomainFlagBits::eDevice);
 					extnodes.push_back(rel_node);
 				} else {
 					extnodes.push_back(node);
@@ -99,43 +100,41 @@ namespace vuk {
 		}
 		return { expected_value, node->acqrel->status };
 	}
+
+	std::string format_as(const BufferCreateInfo& foo) {
+		return fmt::format("BufferCreateInfo{{{}, {}}}", foo.memory_usage, foo.size);
+	}
+
+	std::string format_as(const view<BufferLike<byte>, dynamic_extent>& foo) {
+		return fmt::format("buffer[{:x}:{}]", foo.ptr.device_address, foo.sz_bytes);
+	}
+
+	std::string format_as(const ImageView<Format::eUndefined>& foo) {
+		return fmt::format("iv[{}]", foo.view_key);
+	}
+
+	std::string format_as(const Extent3D& extent) {
+		return fmt::format("{}x{}x{}", extent.width, extent.height, extent.depth);
+	}
+
+	std::string format_as(const Samples& samples) {
+		return fmt::format("{}x", (uint32_t)samples.count);
+	}
+
+	std::string format_as(const ImageViewEntry& entry) {
+		return fmt::format("ImageViewEntry{{format={}, extent={}, samples={}, base_level={}, level_count={}, base_layer={}, layer_count={}}}",
+		                   entry.format,
+		                   entry.extent,
+		                   entry.sample_count,
+		                   entry.base_level,
+		                   entry.level_count,
+		                   entry.base_layer,
+		                   entry.layer_count);
+	}
 } // namespace vuk
 
-size_t std::hash<vuk::ImageAttachment>::operator()(vuk::ImageAttachment const& x) const noexcept {
-	size_t h = 0;
-	if (x.image != vuk::Image{} && x.image_view != vuk::ImageView{}) { // both i and iv, thats the only thing that matter
-		hash_combine(h, x.image.image, x.image_view.payload);
-	} else if (x.image != vuk::Image{}) { // only i, take all params that form the iv
-		hash_combine(h,
-		             x.image.image,
-		             x.view_type,
-		             x.format,
-		             x.base_layer,
-		             x.layer_count,
-		             x.base_level,
-		             x.level_count,
-		             x.components,
-		             x.format,
-		             x.image_view_flags,
-		             x.layout);
-	} else {
-		hash_combine(h,
-		             x.extent,
-		             x.image_flags,
-		             x.image_type,
-		             x.sample_count.count,
-		             x.tiling,
-		             x.usage,
-		             x.view_type,
-		             x.format,
-		             x.base_layer,
-		             x.layer_count,
-		             x.base_level,
-		             x.level_count,
-		             x.components,
-		             x.format,
-		             x.image_view_flags,
-		             x.layout);
-	}
+size_t std::hash<vuk::ImageView<>>::operator()(vuk::ImageView<> const& x) const noexcept {
+	size_t h = std::hash<uint32_t>()(x.view_key);
+
 	return h;
 }

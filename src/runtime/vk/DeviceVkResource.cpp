@@ -264,44 +264,11 @@ namespace vuk {
 		}
 	}
 
-	Result<void, AllocateException>
-	DeviceVkResource::allocate_memory_views(std::span<generic_view_base> dst, std::span<const BVCI> cis, SourceLocationAtFrame loc) {
-		assert(dst.size() == cis.size());
-		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
-			auto& ci = cis[i];
-			auto& ae = ctx->resolve_ptr(ci.ptr);
-			assert(ci.vci.format == Format::eUndefined); // TODO: implement texel bufs
-			const auto& view_data = view<BufferLike<byte>>{ ptr<BufferLike<byte>>{ ci.ptr }, ci.vci.count * ci.vci.elem_size };
-			ptr_base meta_p;
-			BufferCreateInfo bci{ .memory_usage = ae.buffer.memory_usage, .size = sizeof(view_data) };
-			auto res = allocate_memory({ &meta_p, 1 }, { &bci, 1 }, loc);
-			if (!res) {
-				deallocate_memory_views({ dst.data(), (uint64_t)i });
-				return res;
-			}
-			ViewEntry ve{ .ptr = ci.ptr, .size = { .linear = ci.vci.count * ci.vci.elem_size }, .buffer = { ci.vci } };
-			ctx->add_generic_view(meta_p.device_address, ve);
-			dst[i] = generic_view_base{ meta_p.device_address };
-		}
-		return { expected_value };
-	}
-
-	void DeviceVkResource::deallocate_memory_views(std::span<const generic_view_base> dst) {
-		for (auto& v : dst) {
-			if (v) {
-				assert((v.key & 0x1) == 0); // memory
-				ctx->remove_generic_view(v.key);
-				ptr_base ptr{ v.key };
-				deallocate_memory({ &ptr, 1 });
-			}
-		}
-	}
-
 	/* void DeviceVkResource::set_buffer_allocation_name(Buffer& dst, Name name) {
 	  vmaSetAllocationName(impl->allocator, static_cast<VmaAllocation>(dst.allocation), name.c_str());
 	}*/
 
-	Result<void, AllocateException> DeviceVkResource::allocate_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException> DeviceVkResource::allocate_images(std::span<Image<>> dst, std::span<const ICI> cis, SourceLocationAtFrame loc) {
 		assert(dst.size() == cis.size());
 		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
 			std::lock_guard _(impl->mutex);
@@ -326,42 +293,106 @@ namespace vuk {
 			vmaSetAllocationName(impl->allocator, allocation, to_string(loc).c_str());
 #endif
 
-			dst[i] = Image{ vkimg, allocation };
+			ImageEntry ie = static_cast<ImageEntry>(cis[i]);
+			ie.image = vkimg;
+			ie.allocation = allocation;
+			dst[i] = Image<>{ get_context().add_image(ie) };
+			// allocate the default view
+
+			ImageViewType view_type = ImageViewType::e2D; // default
+
+			// Determine view type from image type and extents
+			switch (cis[i].image_type) {
+			case ImageType::e1D:
+				view_type = (cis[i].layer_count > 1) ? ImageViewType::e1DArray : ImageViewType::e1D;
+				break;
+			case ImageType::e2D:
+				if (cis[i].image_flags & ImageCreateFlagBits::eCubeCompatible) {
+					view_type = (cis[i].layer_count > 6) ? ImageViewType::eCubeArray : ImageViewType::eCube;
+				} else {
+					view_type = (cis[i].layer_count > 1) ? ImageViewType::e2DArray : ImageViewType::e2D;
+				}
+				break;
+			case ImageType::e3D:
+				view_type = ImageViewType::e3D;
+				break;
+			}
+			// the default view covers all mips and layers, has the same format as the image and the view type is inferred from the image type and array layer count
+
+			IVCI ivci{
+				.view_type = view_type,
+				.base_level = 0,
+				.level_count = (uint16_t)VK_REMAINING_MIP_LEVELS,
+				.base_layer = 0,
+				.layer_count = (uint16_t)VK_REMAINING_ARRAY_LAYERS,
+				.image = dst[i],
+				.format = cis[i].format,
+			};
+			ImageView<> dst_iv;
+			auto res2 = allocate_image_views(std::span{ &dst_iv, 1 }, std::span{ &ivci, 1 }, loc);
+			if (!res2) {
+				deallocate_images({ dst.data(), (uint64_t)i });
+				return res2;
+			}
 		}
 		return { expected_value };
 	}
 
-	void DeviceVkResource::deallocate_images(std::span<const Image> src) {
+	void DeviceVkResource::deallocate_images(std::span<const Image<>> src) {
 		for (auto& v : src) {
 			if (v) {
-				vmaDestroyImage(impl->allocator, v.image, static_cast<VmaAllocation>(v.allocation));
+				auto& ae = get_context().resolve_image(v);
+				vmaDestroyImage(impl->allocator, ae.image, static_cast<VmaAllocation>(ae.allocation));
+				get_context().remove_image(v.device_address);
 			}
 		}
 	}
 
-	void DeviceVkResource::set_image_allocation_name(Image& dst, Name name) {
-		vmaSetAllocationName(impl->allocator, static_cast<VmaAllocation>(dst.allocation), name.c_str());
+	void DeviceVkResource::set_image_allocation_name(Image<>& dst, Name name) {
+		auto& ae = get_context().resolve_image(dst);
+
+		vmaSetAllocationName(impl->allocator, static_cast<VmaAllocation>(ae.allocation), name.c_str());
 	}
 
-	Result<void, AllocateException>
-	DeviceVkResource::allocate_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException> DeviceVkResource::allocate_image_views(std::span<ImageView<>> dst, std::span<const IVCI> cis, SourceLocationAtFrame loc) {
 		assert(dst.size() == cis.size());
 		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
-			VkImageViewCreateInfo ci = cis[i];
+			ImageViewEntry ive = ImageViewEntry{ cis[i] };
+			ive.id = ctx->get_unique_handle_id();
+
+			VkImageViewCreateInfo ci{ VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
 			VkImageViewUsageCreateInfo uvci{ VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO };
-			uvci.usage = (VkImageUsageFlags)cis[i].view_usage;
+			uvci.usage = (VkImageUsageFlags)ive.view_usage;
 			if (uvci.usage != 0) {
 				ci.pNext = &uvci;
 			}
+
+			auto& image_entry = get_context().resolve_image(ive.image);
+			ci.image = image_entry.image;
+			ci.viewType = (VkImageViewType)ive.view_type;
+			ci.format = (VkFormat)ive.format;
+			ci.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+			ci.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+			ci.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+			ci.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+			ci.subresourceRange.aspectMask = (VkImageAspectFlags)format_to_aspect(ive.format);
+			ci.subresourceRange.baseMipLevel = ive.base_level;
+			ci.subresourceRange.levelCount = ive.level_count;
+			ci.subresourceRange.baseArrayLayer = ive.base_layer;
+			ci.subresourceRange.layerCount = ive.layer_count;
 			ci.subresourceRange.layerCount = ci.subresourceRange.layerCount == 65535 ? VK_REMAINING_ARRAY_LAYERS : ci.subresourceRange.layerCount;
 			ci.subresourceRange.levelCount = ci.subresourceRange.levelCount == 65535 ? VK_REMAINING_MIP_LEVELS : ci.subresourceRange.levelCount;
+
 			VkImageView iv;
-			VkResult res = ctx->vkCreateImageView(device, &ci, nullptr, &iv);
+			VkResult res = ctx->vkCreateImageView(this->device, &ci, nullptr, &iv);
 			if (res != VK_SUCCESS) {
 				deallocate_image_views({ dst.data(), (uint64_t)i });
 				return { expected_error, AllocateException{ res } };
 			}
-			dst[i] = ctx->wrap(iv);
+			ive.extent = image_entry.extent;
+			ive.sample_count = image_entry.sample_count;
+			ive.api_view = iv;
+			dst[i] = ImageView<>{ get_context().add_image_view(ive) };
 		}
 		return { expected_value };
 	}
@@ -535,11 +566,9 @@ namespace vuk {
 		}
 	}
 
-	void DeviceVkResource::deallocate_image_views(std::span<const ImageView> src) {
+	void DeviceVkResource::deallocate_image_views(std::span<const ImageView<>> src) {
 		for (auto& v : src) {
-			if (v.payload != VK_NULL_HANDLE) {
-				ctx->vkDestroyImageView(device, v.payload, nullptr);
-			}
+			get_context().remove_image_view(v.view_key);
 		}
 	}
 
@@ -1241,15 +1270,6 @@ namespace vuk {
 		upstream->deallocate_memory(dst);
 	}
 
-	Result<void, AllocateException>
-	DeviceNestedResource::allocate_memory_views(std::span<generic_view_base> dst, std::span<const BVCI> cis, SourceLocationAtFrame loc) {
-		return upstream->allocate_memory_views(dst, cis, loc);
-	}
-
-	void DeviceNestedResource::deallocate_memory_views(std::span<const generic_view_base> dst) {
-		upstream->deallocate_memory_views(dst);
-	}
-
 	/* void DeviceNestedResource::set_buffer_allocation_name(Buffer& dst, Name name) {
 	  upstream->set_buffer_allocation_name(dst, name);
 	}*/
@@ -1263,24 +1283,23 @@ namespace vuk {
 		upstream->deallocate_framebuffers(src);
 	}
 
-	Result<void, AllocateException> DeviceNestedResource::allocate_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException> DeviceNestedResource::allocate_images(std::span<Image<>> dst, std::span<const ICI> cis, SourceLocationAtFrame loc) {
 		return upstream->allocate_images(dst, cis, loc);
 	}
 
-	void DeviceNestedResource::deallocate_images(std::span<const Image> src) {
+	void DeviceNestedResource::deallocate_images(std::span<const Image<>> src) {
 		upstream->deallocate_images(src);
 	}
 
-	void DeviceNestedResource::set_image_allocation_name(Image& dst, Name name) {
+	void DeviceNestedResource::set_image_allocation_name(Image<>& dst, Name name) {
 		upstream->set_image_allocation_name(dst, name);
 	}
 
-	Result<void, AllocateException>
-	DeviceNestedResource::allocate_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException> DeviceNestedResource::allocate_image_views(std::span<ImageView<>> dst, std::span<const IVCI> cis, SourceLocationAtFrame loc) {
 		return upstream->allocate_image_views(dst, cis, loc);
 	}
 
-	void DeviceNestedResource::deallocate_image_views(std::span<const ImageView> src) {
+	void DeviceNestedResource::deallocate_image_views(std::span<const ImageView<>> src) {
 		upstream->deallocate_image_views(src);
 	}
 

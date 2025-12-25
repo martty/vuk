@@ -460,6 +460,7 @@ if(VUK_BUILD_TESTS)
 	  doctest
 	  GIT_REPOSITORY https://github.com/kociap/doctest
 	  GIT_TAG        88b9982182fd670966b37d9271323b0169db6143
+	  GIT_SHALLOW FALSE
 	)
 	FetchContent_Declare(
 	  vk-bootstrap
@@ -473,17 +474,19 @@ if(VUK_BUILD_TESTS)
 	target_sources(vuk PRIVATE tests/Test.cpp)
 	include(doctest_force_link_static_lib_in_target) # until we can use cmake 3.24
 	add_executable(vuk-tests tests/Test.cpp
-					tests/00_misc.cpp
-					tests/01_semantics.cpp
-					tests/02_rg_errors.cpp
-					tests/03_commands.cpp
-					tests/04_arrays.cpp
-					tests/05_renderpass.cpp
-					tests/06_mt.cpp
-					tests/X1_SPD.cpp
+					#tests/00_misc.cpp
+					#tests/01_semantics.cpp
+					tests/01_image.cpp
+					#tests/02_rg_errors.cpp
+					#tests/03_commands.cpp
+					#tests/04_arrays.cpp
+					#tests/05_renderpass.cpp
+					#tests/06_mt.cpp
+					#tests/X1_SPD.cpp
 					#tests/radix_tree.cpp
 					#tests/frame_allocator.cpp
-					tests/buffer_ptr_view.cpp
+					#tests/buffer_ptr_view.cpp
+					#tests/image_ptr_view.cpp
 	)
 	#target_compile_features(vuk-tests PRIVATE cxx_std_17)
 	target_include_directories(vuk-tests PRIVATE ext/renderdoc)

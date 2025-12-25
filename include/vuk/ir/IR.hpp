@@ -44,9 +44,12 @@ namespace vuk {
 			IMBUED_TY,
 			ALIASED_TY,
 			OPAQUE_FN_TY,
-			SHADER_FN_TY
+			SHADER_FN_TY,
+			ENUM_TY,
+			IMAGE_TY,
+			OPAQUE_TY
 		} kind;
-		enum Tags { TAG_BUFFERLIKE_VIEW = 1, TAG_IMAGE = 3, TAG_SWAPCHAIN = 4 };
+		enum Tags { TAG_IMAGE = 3, TAG_SWAPCHAIN = 4 };
 		size_t size = ~0ULL;
 
 		TypeDebugInfo debug_info;
@@ -97,6 +100,13 @@ namespace vuk {
 				void (*destroy)(void* dst) = nullptr;
 				void (*format_to)(void* value, std::string& dst) = nullptr;
 			} composite;
+			struct {
+				void (*format_to)(void* value, std::string& dst) = nullptr;
+				size_t tag;
+			} enumt;
+			struct {
+				size_t tag;
+			} opaque;
 		};
 
 		~Type() {}
@@ -170,6 +180,12 @@ namespace vuk {
 			case POINTER_TY:
 				hash_combine_direct(v, Type::hash(t->array.T->get()));
 				return v;
+			case ENUM_TY:
+				hash_combine_direct(v, (uint32_t)t->enumt.tag);
+				return v;
+			case OPAQUE_TY:
+				hash_combine_direct(v, (uint32_t)t->opaque.tag);
+				return v;
 			}
 			assert(0);
 			return v;
@@ -178,6 +194,10 @@ namespace vuk {
 		bool is_bufferlike_view() const {
 			return kind == Type::COMPOSITE_TY && composite.types.size() == 2 && composite.types[0]->kind == Type::POINTER_TY &&
 			       composite.types[1]->kind == Type::INTEGER_TY && composite.types[1]->scalar.width == 64;
+		}
+
+		bool is_imageview() const {
+			return kind == Type::POINTER_TY && pointer.T->get()->kind == Type::ENUM_TY;
 		}
 
 		// TODO: handle multiple flags
@@ -300,6 +320,8 @@ namespace vuk {
 				return "sfn";
 			case POINTER_TY:
 				return to_string(t->pointer.T->get()) + "*";
+			case OPAQUE_TY:
+				return "opaque:" + std::to_string(t->opaque.tag);
 			default:
 				assert(0);
 				return "?";
@@ -366,6 +388,7 @@ namespace vuk {
 			COMPILE_PIPELINE,
 			ALLOCATE,
 			GET_ALLOCATION_SIZE,
+			GET_IV_META,
 			GARBAGE
 		} kind;
 		uint8_t flag = 0;
@@ -485,6 +508,9 @@ namespace vuk {
 			struct : Fixed<1> {
 				Ref ptr;
 			} get_allocation_size;
+			struct : Fixed<1> {
+				Ref imageview;
+			} get_iv_meta;
 			struct {
 				uint8_t arg_count;
 			} generic_node;
@@ -536,6 +562,8 @@ namespace vuk {
 				return "lcopy";
 			case GET_ALLOCATION_SIZE:
 				return "get_allocation_size";
+			case GET_IV_META:
+				return "get_iv_meta";
 			case COMPILE_PIPELINE:
 				return "compile_pipeline";
 			case ALLOCATE:
@@ -722,7 +750,6 @@ namespace vuk {
 	struct IRModule {
 		IRModule() : op_arena(/**/), module_id(module_id_counter++) {
 			// prepopulate builtin type hashes
-			types.get_builtin_image();
 			types.get_builtin_sampler();
 			types.get_builtin_sampled_image();
 			types.get_builtin_swapchain();
@@ -739,7 +766,6 @@ namespace vuk {
 			std::unordered_map<Type::Hash, std::weak_ptr<Type>> type_map;
 			plf::colony<UserCallbackType> ucbs;
 
-			Type::Hash builtin_image = 0;
 			Type::Hash builtin_swapchain = 0;
 			Type::Hash builtin_sampler = 0;
 			Type::Hash builtin_sampled_image = 0;
@@ -767,6 +793,13 @@ namespace vuk {
 
 			std::shared_ptr<Type> make_pointer_ty(std::shared_ptr<Type> ty) {
 				auto t = new Type{ .kind = Type::POINTER_TY, .size = sizeof(uint64_t), .pointer = {} };
+				t->pointer.T = &t->child_types.emplace_back(ty);
+				return emplace_type(std::shared_ptr<Type>(t));
+			}
+
+			// an opaque pointer I guess
+			std::shared_ptr<Type> make_image_ty(std::shared_ptr<Type> ty) {
+				auto t = new Type{ .kind = Type::IMAGE_TY, .size = sizeof(uint64_t), .pointer = {} };
 				t->pointer.T = &t->child_types.emplace_back(ty);
 				return emplace_type(std::shared_ptr<Type>(t));
 			}
@@ -848,6 +881,16 @@ namespace vuk {
 				return emplace_type(std::shared_ptr<Type>(new Type{ .kind = kind, .size = bit_width / 8, .scalar = { .width = bit_width } }));
 			}
 
+			std::shared_ptr<Type> make_enum_ty() {
+				auto t = new Type{ .kind = Type::ENUM_TY, .size = 4, .enumt = { .tag = 0 } };
+				return emplace_type(std::shared_ptr<Type>(t));
+			};
+
+			std::shared_ptr<Type> make_opaque_ty(size_t tag, size_t size = sizeof(uint32_t)) {
+				auto t = new Type{ .kind = Type::OPAQUE_TY, .size = size, .opaque = { .tag = tag } };
+				return emplace_type(std::shared_ptr<Type>(t));
+			}
+
 			std::shared_ptr<Type> u32() {
 				return make_scalar_ty(Type::INTEGER_TY, 32);
 			}
@@ -867,43 +910,8 @@ namespace vuk {
 				return emplace_type(std::shared_ptr<Type>(new Type{ .kind = Type::MEMORY_TY, .size = size }));
 			}
 
-			std::shared_ptr<Type> get_builtin_image() {
-				if (builtin_image) {
-					auto it = type_map.find(builtin_image);
-					if (it != type_map.end()) {
-						if (auto ty = it->second.lock()) {
-							return ty;
-						}
-					}
-				}
-
-				auto u32_t = u32();
-				auto image_ = std::vector<std::shared_ptr<Type>>{ u32_t, u32_t, u32_t, memory(sizeof(Format)), memory(sizeof(Samples)), u32_t, u32_t, u32_t, u32_t };
-				// TODO: crimes
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Winvalid-offsetof"
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Winvalid-offsetof"
-				auto image_offsets = std::vector<size_t>{ offsetof(ImageAttachment, extent) + offsetof(Extent3D, width),
-					                                        offsetof(ImageAttachment, extent) + offsetof(Extent3D, height),
-					                                        offsetof(ImageAttachment, extent) + offsetof(Extent3D, depth),
-					                                        offsetof(ImageAttachment, format),
-					                                        offsetof(ImageAttachment, sample_count),
-					                                        offsetof(ImageAttachment, base_layer),
-					                                        offsetof(ImageAttachment, layer_count),
-					                                        offsetof(ImageAttachment, base_level),
-					                                        offsetof(ImageAttachment, level_count) };
-#pragma GCC diagnostic pop
-#pragma clang diagnostic pop
-				auto image_type = emplace_type(std::shared_ptr<Type>(new Type{ .kind = Type::COMPOSITE_TY,
-				                                                               .size = sizeof(ImageAttachment),
-				                                                               .debug_info = allocate_type_debug_info("image"),
-				                                                               .offsets = image_offsets,
-				                                                               .composite = { .types = image_, .tag = Type::TAG_IMAGE } }));
-				image_type->child_types = std::move(image_);
-				builtin_image = Type::hash(image_type.get());
-
-				return image_type;
+			std::shared_ptr<Type> make_imageview_ty() {
+				return make_pointer_ty(make_enum_ty());
 			}
 
 			std::shared_ptr<Type> get_builtin_swapchain() {
@@ -915,7 +923,7 @@ namespace vuk {
 						}
 					}
 				}
-				auto arr_ty = make_array_ty(get_builtin_image(), 16);
+				auto arr_ty = make_array_ty(make_imageview_ty(), 16);
 				auto swp_ = std::vector<std::shared_ptr<Type>>{ arr_ty };
 				auto offsets = std::vector<size_t>{ 0 };
 
@@ -1015,8 +1023,6 @@ namespace vuk {
 			// TODO: PAV: this changes
 			void destroy(Type* t, void* v) {
 				if (t->kind == Type::INTEGER_TY) {
-				} else if (t->hash_value == builtin_image) {
-					std::destroy_at<ImageAttachment>((ImageAttachment*)v);
 				} else if (t->hash_value == builtin_sampled_image) {
 					std::destroy_at<SampledImage>((SampledImage*)v);
 				} else if (t->hash_value == builtin_sampler) {
@@ -1039,6 +1045,8 @@ namespace vuk {
 					destroy(t->imbued.T->get(), v);
 				} else if (t->kind == Type::ALIASED_TY) {
 					destroy(t->aliased.T->get(), v);
+				} else if (t->kind == Type::OPAQUE_TY) {
+					// nothing to do - opaque types don't own their values
 				} else if (t->kind == Type::ARRAY_TY || t->kind == Type::UNION_TY) {
 					// currently arrays and unions don't own their values
 					/* auto cv = (char*)v;
@@ -1206,74 +1214,6 @@ namespace vuk {
 			set_value_on_allocate_src(ref, index, make_constant(value));
 		}
 
-		Ref make_declare_image(ImageAttachment value) {
-			auto ptr = new (new char[sizeof(ImageAttachment)])
-			    ImageAttachment(value); /* rest extent_x extent_y extent_z format samples base_layer layer_count base_level level_count */
-			auto args_ptr = new Ref[10];
-			auto mem_ty = new std::shared_ptr<Type>[1]{ types.memory(sizeof(ImageAttachment)) };
-			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = ptr, .owned = true } }));
-			if (value.extent.width > 0) {
-				args_ptr[1] = make_constant(&ptr->extent.width);
-			} else {
-				args_ptr[1] = first(emplace_op(Node{
-				    .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1]{ types.u32() }, 1 }, .compute_class = DomainFlagBits::ePlaceholder }));
-			}
-			if (value.extent.height > 0) {
-				args_ptr[2] = make_constant(&ptr->extent.height);
-			} else {
-				args_ptr[2] = first(emplace_op(Node{
-				    .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1]{ types.u32() }, 1 }, .compute_class = DomainFlagBits::ePlaceholder }));
-			}
-			if (value.extent.depth > 0) {
-				args_ptr[3] = make_constant(&ptr->extent.depth);
-			} else {
-				args_ptr[3] = first(emplace_op(Node{
-				    .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1]{ types.u32() }, 1 }, .compute_class = DomainFlagBits::ePlaceholder }));
-			}
-			if (value.format != Format::eUndefined) {
-				args_ptr[4] = make_constant(&ptr->format);
-			} else {
-				args_ptr[4] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER,
-				                                     .type = std::span{ new std::shared_ptr<Type>[1]{ types.memory(sizeof(Format)) }, 1 },
-				                                     .compute_class = DomainFlagBits::ePlaceholder }));
-			}
-			if (value.sample_count != Samples::eInfer) {
-				args_ptr[5] = make_constant(&ptr->sample_count);
-			} else {
-				args_ptr[5] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER,
-				                                     .type = std::span{ new std::shared_ptr<Type>[1]{ types.memory(sizeof(Samples)) }, 1 },
-				                                     .compute_class = DomainFlagBits::ePlaceholder }));
-			}
-			if (value.base_layer != VK_REMAINING_ARRAY_LAYERS) {
-				args_ptr[6] = make_constant(&ptr->base_layer);
-			} else {
-				args_ptr[6] = first(emplace_op(Node{
-				    .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1]{ types.u32() }, 1 }, .compute_class = DomainFlagBits::ePlaceholder }));
-			}
-			if (value.layer_count != VK_REMAINING_ARRAY_LAYERS) {
-				args_ptr[7] = make_constant(&ptr->layer_count);
-			} else {
-				args_ptr[7] = first(emplace_op(Node{
-				    .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1]{ types.u32() }, 1 }, .compute_class = DomainFlagBits::ePlaceholder }));
-			}
-			if (value.base_level != VK_REMAINING_MIP_LEVELS) {
-				args_ptr[8] = make_constant(&ptr->base_level);
-			} else {
-				args_ptr[8] = first(emplace_op(Node{
-				    .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1]{ types.u32() }, 1 }, .compute_class = DomainFlagBits::ePlaceholder }));
-			}
-			if (value.level_count != VK_REMAINING_MIP_LEVELS) {
-				args_ptr[9] = make_constant(&ptr->level_count);
-			} else {
-				args_ptr[9] = first(emplace_op(Node{
-				    .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1]{ types.u32() }, 1 }, .compute_class = DomainFlagBits::ePlaceholder }));
-			}
-
-			return first(emplace_op(Node{ .kind = Node::CONSTRUCT,
-			                              .type = std::span{ new std::shared_ptr<Type>[1]{ types.get_builtin_image() }, 1 },
-			                              .construct = { .args = std::span(args_ptr, 10) } }));
-		}
-
 		Ref make_placeholder(std::shared_ptr<Type> type) {
 			return first(emplace_op(
 			    Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1]{ type }, 1 }, .compute_class = DomainFlagBits::ePlaceholder }));
@@ -1309,9 +1249,9 @@ namespace vuk {
 			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = swpptr, .owned = true } }));
 			std::vector<Ref> imgs;
 			for (auto i = 0; i < bundle.images.size(); i++) {
-				imgs.push_back(make_declare_image(bundle.images[i]));
+				imgs.push_back(make_constant(types.make_imageview_ty(), &bundle.images[i]));
 			}
-			args_ptr[1] = make_declare_array(types.get_builtin_image(), imgs);
+			args_ptr[1] = make_declare_array(types.make_imageview_ty(), imgs);
 			return first(emplace_op(Node{ .kind = Node::CONSTRUCT,
 			                              .type = std::span{ new std::shared_ptr<Type>[1]{ types.get_builtin_swapchain() }, 1 },
 			                              .construct = { .args = std::span(args_ptr, 2) } }));
@@ -1381,6 +1321,7 @@ namespace vuk {
 			auto ty = new std::shared_ptr<Type>[1]{ types.u64() };
 			return first(emplace_op(Node{ .kind = Node::GET_ALLOCATION_SIZE, .type = std::span{ ty, 1 }, .get_allocation_size = { .ptr = ptr } }));
 		}
+		Ref make_get_iv_meta(Ref ptr);
 
 		// slice splits a range into two halves
 		// converge is essentially an unslice -> it returns back to before the slice was made
@@ -1406,13 +1347,13 @@ namespace vuk {
 
 		Ref make_acquire_next_image(Ref swapchain) {
 			return first(emplace_op(Node{ .kind = Node::ACQUIRE_NEXT_IMAGE,
-			                              .type = std::span{ new std::shared_ptr<Type>[1]{ types.get_builtin_image() }, 1 },
+			                              .type = std::span{ new std::shared_ptr<Type>[1]{ types.make_imageview_ty() }, 1 },
 			                              .acquire_next_image = { .swapchain = swapchain } }));
 		}
 
 		Ref make_clear_image(Ref dst, Clear cv) {
 			return first(emplace_op(Node{ .kind = Node::CLEAR,
-			                              .type = std::span{ new std::shared_ptr<Type>[1]{ types.get_builtin_image() }, 1 },
+			                              .type = std::span{ new std::shared_ptr<Type>[1]{ types.make_imageview_ty() }, 1 },
 			                              .clear = { .dst = dst, .cv = new Clear(cv) } }));
 		}
 

@@ -5,12 +5,41 @@
 #include <fmt/format.h>
 
 namespace vuk {
+	template<class T>
+	struct ir_type_provider {
+		static constexpr bool has_custom_ir_type = false;
+		static std::shared_ptr<Type> get_ir_type() {
+			static_assert(sizeof(T) == 0, "No IR type provider for this type");
+			return nullptr;
+		}
+	};
+
 	template<class>
 	struct dependent_false : std::false_type {};
 
+	template<template<typename...> class T, typename U>
+	struct is_specialization_of : std::false_type {};
+
+	template<template<typename...> class T, typename... Us>
+	struct is_specialization_of<T, T<Us...>> : std::true_type {};
+
+	template<class T>
+	struct is_imagelike : std::false_type {};
+
+	template<Format f>
+	struct is_imagelike<ImageLike<f>> : std::true_type {};
+
+	template<class T>
+	struct is_imageview : std::false_type {};
+
+	template<Format f>
+	struct is_imageview<view<ImageLike<f>, dynamic_extent>> : std::true_type {};
+
 	template<class T>
 	inline std::shared_ptr<Type> to_IR_type() {
-		if constexpr (!std::is_same_v<T, typename detail::unwrap<T>::T>) {
+		if constexpr (ir_type_provider<T>::has_custom_ir_type) {
+			return ir_type_provider<T>::get_ir_type();
+		} else if constexpr (!std::is_same_v<T, typename detail::unwrap<T>::T>) {
 			return to_IR_type<typename detail::unwrap<T>::T>();
 		}
 		if constexpr (std::is_array_v<T> && std::extent_v<T> == 0) {
@@ -25,6 +54,8 @@ namespace vuk {
 			return current_module->types.make_scalar_ty(Type::FLOAT_TY, sizeof(T) * 8);
 		} else if constexpr (std::is_enum_v<T>) {
 			return current_module->types.make_scalar_ty(Type::INTEGER_TY, sizeof(T) * 8);
+		} else if constexpr (is_imageview<T>::value) {
+			return current_module->types.make_imageview_ty();
 		} else if constexpr (std::is_base_of_v<ptr_base, T>) {
 			return current_module->types.make_pointer_ty(to_IR_type<typename T::UnwrappedT>());
 		} else if constexpr (erased_tuple_adaptor<T>::value) {

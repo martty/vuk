@@ -9,8 +9,8 @@
 #include "vuk/runtime/vk/VkRuntime.hpp"
 #include "vuk/vsl/Core.hpp"
 
-#include "imgui_vert_shader.h"
 #include "imgui_frag_shader.h"
+#include "imgui_vert_shader.h"
 
 namespace vuk::extra {
 	ImTextureID ImGuiData::add_sampled_image(Value<SampledImage> sampled_image) {
@@ -19,7 +19,7 @@ namespace vuk::extra {
 		return (ImTextureID)idx;
 	}
 
-	ImTextureID ImGuiData::add_image(Value<ImageAttachment> image) {
+	ImTextureID ImGuiData::add_image(Value<ImageView<>> image) {
 		return add_sampled_image(combine_image_sampler("_simg", std::move(image), acquire_sampler("_default_sampler", {})));
 	}
 
@@ -34,17 +34,14 @@ namespace vuk::extra {
 		io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
 
 		ImGuiData data;
-		auto font_ia =
-		    ImageAttachment::from_preset(ImageAttachment::Preset::eMap2D, Format::eR8G8B8A8Srgb, Extent3D{ (unsigned)width, (unsigned)height, 1u }, Samples::e1);
-		font_ia.level_count = 1; // no mips for font texture
-		auto [image, view, fut] = create_image_and_view_with_data(allocator, DomainFlagBits::eTransferOnTransfer, font_ia, pixels);
-		data.font_image = std::move(image);
+		ICI font_ici = from_preset(Preset::eMap2D, Format::eR8G8B8A8Srgb, Extent3D{ (unsigned)width, (unsigned)height, 1u }, Samples::e1);
+		font_ici.level_count = 1; // no mips for font texture
+		auto [view, fut] = create_image_with_data(allocator, DomainFlagBits::eTransferOnTransfer, font_ici, pixels);
 		data.font_image_view = std::move(view);
 		Compiler comp;
 		fut.as_released(Access::eFragmentSampled, DomainFlagBits::eGraphicsQueue);
-		data.font_ia = *fut.get(allocator, comp);
-		data.font_ia.layout = vuk::ImageLayout::eReadOnlyOptimal;
-		ctx.set_name(data.font_image_view->payload, "ImGui/font");
+		fut.wait(allocator, comp);
+		ctx.set_name(data.font_image_view.get()->api_view, "ImGui/font");
 		SamplerCreateInfo sci;
 		sci.minFilter = sci.magFilter = Filter::eLinear;
 		sci.mipmapMode = SamplerMipmapMode::eLinear;
@@ -59,10 +56,10 @@ namespace vuk::extra {
 		return data;
 	}
 
-	Value<ImageAttachment> ImGui_ImplVuk_Render(Allocator& allocator, Value<ImageAttachment> target, ImGuiData& data) {
+	Value<ImageView<>> ImGui_ImplVuk_Render(Allocator& allocator, Value<ImageView<>> target, ImGuiData& data) {
 		auto draw_data = ImGui::GetDrawData();
 		auto reset_render_state = [](const ImGuiData& data, CommandBuffer& command_buffer, ImDrawData* draw_data, Buffer<> vertex, Buffer<> index) {
-			command_buffer.bind_image(0, 0, *data.font_image_view).bind_sampler(0, 0, data.font_sci);
+			command_buffer.bind_image(0, 0, data.font_image_view.get()).bind_sampler(0, 0, data.font_sci);
 			if (index.count() > 0) {
 				command_buffer.bind_index_buffer(index, sizeof(ImDrawIdx) == 2 ? IndexType::eUint16 : IndexType::eUint32);
 			}
@@ -100,8 +97,8 @@ namespace vuk::extra {
 
 		// add rendergraph dependencies to be transitioned
 		ImGui::GetIO().Fonts->TexID = (ImTextureID)(data.sampled_images.size() + 1);
-		data.sampled_images.push_back(
-		    combine_image_sampler("imgui font", acquire_ia("imgui font", data.font_ia, Access::eFragmentSampled), acquire_sampler("font sampler", data.font_sci)));
+		data.sampled_images.push_back(combine_image_sampler(
+		    "imgui font", acquire("imgui font", data.font_image_view.get(), Access::eFragmentSampled), acquire_sampler("font sampler", data.font_sci)));
 		// make all rendergraph sampled images available
 		auto sampled_images_array = declare_array("imgui_sampled", std::span(data.sampled_images));
 
@@ -179,4 +176,4 @@ namespace vuk::extra {
 		return pass(target, std::move(sampled_images_array));
 	}
 
-} // namespace vuk::extra
+} // namespace vuk::extra} // namespace vuk::extra

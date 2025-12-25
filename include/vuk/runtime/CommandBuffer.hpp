@@ -254,7 +254,6 @@ namespace vuk {
 	static_assert(std::is_standard_layout_v<BufferImageCopy>, "struct wrapper is not a standard layout!");
 
 	struct Compiler;
-	struct ImageAttachment;
 	struct PassInfo;
 	struct Query;
 	class Allocator;
@@ -274,7 +273,7 @@ namespace vuk {
 			Extent2D extent;
 			SampleCountFlagBits samples;
 			VkAttachmentReference const* depth_stencil_attachment;
-			std::array<ImageView, VUK_MAX_COLOR_ATTACHMENTS> color_attachment_ivs = {};
+			std::array<ImageView<>, VUK_MAX_COLOR_ATTACHMENTS> color_attachment_ivs = {};
 			std::span<const VkAttachmentReference> color_attachments;
 		};
 		std::optional<RenderPassInfo> ongoing_render_pass;
@@ -398,11 +397,11 @@ namespace vuk {
 		/// @brief Set color blend state for a specific color attachment
 		/// @param color_attachment the Name of the color_attachment to set the blend state for
 		/// @param color_blend_state PipelineColorBlendAttachmentState to use
-		CommandBuffer& set_color_blend(const ImageAttachment& color_attachment, PipelineColorBlendAttachmentState color_blend_state);
+		CommandBuffer& set_color_blend(ImageView<> color_attachment, PipelineColorBlendAttachmentState color_blend_state);
 		/// @brief Set color blend preset for a specific color attachment
 		/// @param color_attachment the Name of the color_attachment to set the blend preset for
 		/// @param blend_preset BlendPreset to use
-		CommandBuffer& set_color_blend(const ImageAttachment& color_attachment, BlendPreset blend_preset);
+		CommandBuffer& set_color_blend(ImageView<> color_attachment, BlendPreset blend_preset);
 		/// @brief Set blend constants
 		CommandBuffer& set_blend_constants(std::array<float, 4> blend_constants);
 
@@ -453,18 +452,15 @@ namespace vuk {
 		/// @brief Binds an index buffer with the given type
 		/// @param buffer The buffer to be bound
 		/// @param type The index type in the buffer
-		CommandBuffer& bind_index_buffer(const Buffer<>& buffer, IndexType type);
+		CommandBuffer& bind_index_buffer(Buffer<> buffer, IndexType type);
 		/// @brief Binds a vertex buffer to the given binding point and configures attributes sourced from this buffer based on a packed format list, the attribute
 		/// locations are offset with first_location
 		/// @param binding The binding point of the buffer
 		/// @param buffer The buffer to be bound
 		/// @param first_location First location assigned to the attributes
 		/// @param format_list List of formats packed in buffer to generate attributes from
-		CommandBuffer& bind_vertex_buffer(unsigned binding,
-		                                  const Buffer<>& buffer,
-		                                  unsigned first_location,
-		                                  Packed format_list,
-		                                  VertexInputRate input_rate = VertexInputRate::eVertex);
+		CommandBuffer&
+		bind_vertex_buffer(unsigned binding, Buffer<> buffer, unsigned first_location, Packed format_list, VertexInputRate input_rate = VertexInputRate::eVertex);
 		/// @brief Binds a vertex buffer to the given binding point and configures attributes sourced from this buffer based on a span of attribute descriptions and
 		/// stride
 		/// @param binding The binding point of the buffer
@@ -472,7 +468,7 @@ namespace vuk {
 		/// @param attribute_descriptions Attributes that are sourced from this buffer
 		/// @param stride Stride of a vertex sourced from this buffer
 		CommandBuffer& bind_vertex_buffer(unsigned binding,
-		                                  const Buffer<>& buffer,
+		                                  Buffer<> buffer,
 		                                  std::span<VertexInputAttributeDescription> attribute_descriptions,
 		                                  uint32_t stride,
 		                                  VertexInputRate input_rate = VertexInputRate::eVertex);
@@ -507,30 +503,20 @@ namespace vuk {
 		/// @param set The set bind index to be used
 		/// @param binding The descriptor binding to bind the buffer to
 		/// @param buffer The buffer to be bound
-		CommandBuffer& bind_buffer(unsigned set, unsigned binding, const Buffer<>& buffer);
+		CommandBuffer& bind_buffer(unsigned set, unsigned binding, Buffer<> buffer);
 
 		/// @brief Bind an image to the command buffer
 		/// @param set The set bind index to be used
 		/// @param binding The descriptor binding to bind the image to
-		/// @param image_view The ImageView to bind
+		/// @param image_view The ImageView<> to bind
 		/// @param layout layout of the image when the affected draws execute
-		CommandBuffer& bind_image(unsigned set, unsigned binding, ImageView image_view, ImageLayout layout = ImageLayout::eReadOnlyOptimalKHR);
+		CommandBuffer& bind_image(unsigned set, unsigned binding, ImageView<> image_view, ImageLayout layout);
 
 		/// @brief Bind an image to the command buffer
 		/// @param set The set bind index to be used
 		/// @param binding The descriptor binding to bind the image to
 		/// @param image The ImageAttachment to bind
-		CommandBuffer& bind_image(unsigned set, unsigned binding, const ImageAttachment& image);
-		CommandBuffer& bind_image(unsigned set, unsigned binding, const ImageAttachment& image, Ref def);
-
-		/// @brief Bind an image to the command buffer
-		/// @param set The set bind index to be used
-		/// @param binding The descriptor binding to bind the image to
-		/// @param image The ImageAttachment to bind
-		template<Access acc, class UniqueT>
-		CommandBuffer& bind_image(unsigned set, unsigned binding, Arg<ImageAttachment, acc, UniqueT> image) {
-			return bind_image(set, binding, *image.ptr, image.def);
-		}
+		CommandBuffer& bind_image(unsigned set, unsigned binding, ImageView<> image);
 
 		/// @brief Bind a sampler to the command buffer from a Resource
 		/// @param set The set bind index to be used
@@ -569,7 +555,7 @@ namespace vuk {
 		/// @brief Issue an indirect draw
 		/// @param command_count Number of indirect commands to be used
 		/// @param indirect_buffer Buffer of indirect commands
-		CommandBuffer& draw_indirect(size_t command_count, const Buffer<>& indirect_buffer);
+		CommandBuffer& draw_indirect(size_t command_count, Buffer<> indirect_buffer);
 		/// @brief Issue an indirect draw
 		/// @param commands Indirect commands to be uploaded and used for this draw
 		CommandBuffer& draw_indirect(std::span<DrawIndirectCommand> commands);
@@ -578,7 +564,7 @@ namespace vuk {
 		/// @param max_command_count Upper limit of commands that can be drawn
 		/// @param indirect_buffer Buffer of indirect commands
 		/// @param count_buffer Buffer of command count
-		CommandBuffer& draw_indirect_count(size_t max_draw_count, const Buffer<>& indirect_buffer, const Buffer<>& count_buffer);
+		CommandBuffer& draw_indirect_count(size_t max_draw_count, Buffer<> indirect_buffer, Buffer<> count_buffer);
 
 		/// @brief Isuse an indexed draw
 		/// @param index_count Number of vertices to draw
@@ -591,7 +577,7 @@ namespace vuk {
 		/// @brief Issue an indirect indexed draw
 		/// @param command_count Number of indirect commands to be used
 		/// @param indirect_buffer Buffer of indirect commands
-		CommandBuffer& draw_indexed_indirect(size_t command_count, const Buffer<>& indirect_buffer);
+		CommandBuffer& draw_indexed_indirect(size_t command_count, Buffer<> indirect_buffer);
 		/// @brief Issue an indirect indexed draw
 		/// @param commands Indirect commands to be uploaded and used for this draw
 		CommandBuffer& draw_indexed_indirect(std::span<DrawIndexedIndirectCommand> commands);
@@ -600,7 +586,7 @@ namespace vuk {
 		/// @param max_command_count Upper limit of commands that can be drawn
 		/// @param indirect_buffer Buffer of indirect commands
 		/// @param count_buffer Buffer of command count
-		CommandBuffer& draw_indexed_indirect_count(size_t max_command_count, const Buffer<>& indirect_buffer, const Buffer<>& count_buffer);
+		CommandBuffer& draw_indexed_indirect_count(size_t max_command_count, Buffer<> indirect_buffer, Buffer<> count_buffer);
 
 		/// @brief Issue a mesh shader draw
 		/// @param group_count_x Number of mesh shader workgroups on the x-axis
@@ -642,7 +628,7 @@ namespace vuk {
 		/// @param invocations_per_pixel_scale_x Invocation count scale in x-axis
 		/// @param invocations_per_pixel_scale_y Invocation count scale in y-axis
 		/// @param invocations_per_pixel_scale_z Invocation count scale in z-axis
-		CommandBuffer& dispatch_invocations_per_pixel(const ImageAttachment& ia,
+		CommandBuffer& dispatch_invocations_per_pixel(ImageView<> ia,
 		                                              float invocations_per_pixel_scale_x = 1.f,
 		                                              float invocations_per_pixel_scale_y = 1.f,
 		                                              float invocations_per_pixel_scale_z = 1.f);
@@ -657,11 +643,11 @@ namespace vuk {
 		/// @param buffer Buffer to use for calculating element count
 		/// @param element_size Size of one element
 		/// @param invocations_per_element_scale Invocation count scale
-		CommandBuffer& dispatch_invocations_per_element(const Buffer<>& buffer, size_t element_size, float invocations_per_element_scale = 1.f);
+		CommandBuffer& dispatch_invocations_per_element(Buffer<> buffer, size_t element_size, float invocations_per_element_scale = 1.f);
 
 		/// @brief Issue an indirect compute dispatch
 		/// @param indirect_buffer Buffer of workgroup counts
-		CommandBuffer& dispatch_indirect(const Buffer<>& indirect_buffer);
+		CommandBuffer& dispatch_indirect(Buffer<> indirect_buffer);
 
 		/// @brief Issue an indirect compute dispatch
 		/// @param commands Indirect commands to be uploaded and used for this draw
@@ -688,44 +674,44 @@ namespace vuk {
 		/// @brief Clear an image
 		/// @param dst the Name of the Resource to be cleared
 		/// @param clear_value value to clear with
-		CommandBuffer& clear_image(const ImageAttachment& dst, Clear clear_value);
+		CommandBuffer& clear_image(ImageView<> dst, Clear clear_value);
 		/// @brief Resolve an image
 		/// @param src the Name of the multisampled Resource
 		/// @param dst the Name of the singlesampled Resource
-		CommandBuffer& resolve_image(const ImageAttachment& src, const ImageAttachment& dst);
+		CommandBuffer& resolve_image(ImageView<> src, ImageView<> dst);
 		/// @brief Perform an image blit
 		/// @param src the Name of the source Resource
 		/// @param dst the Name of the destination Resource
 		/// @param region parameters of the blit
 		/// @param filter Filter to use if the src and dst extents differ
-		CommandBuffer& blit_image(const ImageAttachment& src, const ImageAttachment& dst, ImageBlit region, Filter filter);
+		CommandBuffer& blit_image(ImageView<> src, ImageView<> dst, ImageBlit region, Filter filter);
 		/// @brief Perform an image copy
 		/// @param src the Name of the source Resource
 		/// @param dst the Name of the destination Resource
 		/// @param region parameters of the copy
-		CommandBuffer& copy_image(const ImageAttachment& src, const ImageAttachment& dst, ImageCopy region);
+		CommandBuffer& copy_image(ImageView<> src, ImageView<> dst, ImageCopy region);
 		/// @brief Copy a buffer resource into an image resource
 		/// @param src the Name of the source Resource
 		/// @param dst the Name of the destination Resource
 		/// @param copy_params parameters of the copy
-		CommandBuffer& copy_buffer_to_image(const Buffer<>& src, const ImageAttachment& dst, BufferImageCopy copy_params);
+		CommandBuffer& copy_buffer_to_image(Buffer<> src, ImageView<> dst, BufferImageCopy copy_params);
 		/// @brief Copy an image resource into a buffer resource
 		/// @param src the Name of the source Resource
 		/// @param dst the Name of the destination Resource
 		/// @param copy_params parameters of the copy
-		CommandBuffer& copy_image_to_buffer(const ImageAttachment& src, const Buffer<>& dst, BufferImageCopy copy_params);
+		CommandBuffer& copy_image_to_buffer(ImageView<> src, Buffer<> dst, BufferImageCopy copy_params);
 		/// @brief Copy between two Buffers
 		/// @param src the source Buffer
 		/// @param dst the destination Buffer
-		CommandBuffer& copy_buffer(const Buffer<>& src, const Buffer<>& dst);
+		CommandBuffer& copy_buffer(Buffer<> src, Buffer<> dst);
 		/// @brief Fill a buffer with a fixed value
 		/// @param dst the destination Buffer
 		/// @param data the 4 byte value to fill with
-		CommandBuffer& fill_buffer(const Buffer<>& dst, uint32_t data);
+		CommandBuffer& fill_buffer(Buffer<> dst, uint32_t data);
 		/// @brief Fill a buffer with a host values
 		/// @param dst the destination Buffer
 		/// @param data pointer to host values
-		CommandBuffer& update_buffer(const Buffer<>& dst, const void* data);
+		CommandBuffer& update_buffer(Buffer<> dst, const void* data);
 
 		// explicit synchronisation
 
@@ -741,7 +727,7 @@ namespace vuk {
 		/// @param level_count number of mip levels affected by the barrier (relative to the ImageAttachment)
 		/// @param base_layer base array layer affected by the barrier (relative to the ImageAttachment)
 		/// @param layer_count number of array layers affected by the barrier (relative to the ImageAttachment)
-		CommandBuffer& image_barrier(const ImageAttachment& image_attachment,
+		CommandBuffer& image_barrier(ImageView<> image_attachment,
 		                             Access src_access,
 		                             Access dst_access,
 		                             uint32_t base_level = 0,

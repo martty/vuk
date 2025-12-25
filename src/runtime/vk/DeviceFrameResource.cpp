@@ -33,9 +33,9 @@ namespace vuk {
 		std::vector<VkDescriptorPool> ds_pools;
 
 		std::mutex images_mutex;
-		std::unordered_map<ImageCreateInfo, uint32_t> image_identity;
+		std::unordered_map<ICI, uint32_t> image_identity;
 		Cache<ImageWithIdentity> image_cache;
-		Cache<ImageView> image_view_cache;
+		Cache<ImageView<>> image_view_cache;
 
 		Cache<GraphicsPipelineInfo> graphics_pipeline_cache;
 		Cache<ComputePipelineInfo> compute_pipeline_cache;
@@ -61,14 +61,13 @@ namespace vuk {
 		        }),
 		    image_view_cache(
 		        this,
-		        +[](void* allocator, const CompressedImageViewCreateInfo& civci) {
-			        ImageView iv;
-			        ImageViewCreateInfo ivci = static_cast<ImageViewCreateInfo>(civci);
+		        +[](void* allocator, const IVCI& ivci) {
+			        ImageView<> iv;
 			        reinterpret_cast<DeviceSuperFrameResourceImpl*>(allocator)->sfr->allocate_image_views(
 			            { &iv, 1 }, { &ivci, 1 }, VUK_HERE_AND_NOW()); // TODO: dropping error
 			        return iv;
 		        },
-		        +[](void* allocator, const ImageView& iv) {
+		        +[](void* allocator, const ImageView<>& iv) {
 			        reinterpret_cast<DeviceSuperFrameResourceImpl*>(allocator)->sfr->deallocate_image_views({ &iv, 1 });
 		        }),
 		    graphics_pipeline_cache(
@@ -138,9 +137,9 @@ namespace vuk {
 		std::mutex framebuffer_mutex;
 		std::vector<VkFramebuffer> framebuffers;
 		std::mutex images_mutex;
-		std::vector<Image> images;
+		std::vector<Image<>> images;
 		std::mutex image_views_mutex;
-		std::vector<ImageView> image_views;
+		std::vector<ImageView<>> image_views;
 		std::mutex pds_mutex;
 		std::vector<PersistentDescriptorSet> persistent_descriptor_sets;
 		std::mutex ds_mutex;
@@ -277,15 +276,14 @@ namespace vuk {
 
 	void DeviceFrameResource::deallocate_framebuffers(std::span<const VkFramebuffer> src) {} // noop
 
-	Result<void, AllocateException> DeviceFrameResource::allocate_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException> DeviceFrameResource::allocate_images(std::span<Image<>> dst, std::span<const ICI> cis, SourceLocationAtFrame loc) {
 		VUK_DO_OR_RETURN(static_cast<DeviceSuperFrameResource*>(upstream)->allocate_cached_images(dst, cis, loc));
 		return { expected_value };
 	}
 
-	void DeviceFrameResource::deallocate_images(std::span<const Image> src) {} // noop
+	void DeviceFrameResource::deallocate_images(std::span<const Image<>> src) {} // noop
 
-	Result<void, AllocateException>
-	DeviceFrameResource::allocate_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException> DeviceFrameResource::allocate_image_views(std::span<ImageView<>> dst, std::span<const IVCI> cis, SourceLocationAtFrame loc) {
 		VUK_DO_OR_RETURN(upstream->allocate_image_views(dst, cis, loc));
 		std::unique_lock _(impl->image_views_mutex);
 		auto& vec = impl->image_views;
@@ -293,7 +291,7 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	void DeviceFrameResource::deallocate_image_views(std::span<const ImageView> src) {} // noop
+	void DeviceFrameResource::deallocate_image_views(std::span<const ImageView<>> src) {} // noop
 
 	Result<void, AllocateException> DeviceFrameResource::allocate_persistent_descriptor_sets(std::span<PersistentDescriptorSet> dst,
 	                                                                                         std::span<const PersistentDescriptorSetCreateInfo> cis,
@@ -567,8 +565,7 @@ namespace vuk {
 	    remaining_lifetime(frame_lifetime),
 	    multiframe_id((uint32_t)(construction_frame % frame_lifetime)) {}
 
-	Result<void, AllocateException>
-	DeviceMultiFrameResource::allocate_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException> DeviceMultiFrameResource::allocate_images(std::span<Image<>> dst, std::span<const ICI> cis, SourceLocationAtFrame loc) {
 		VUK_DO_OR_RETURN(static_cast<DeviceSuperFrameResource*>(upstream)->allocate_cached_images(dst, cis, loc));
 		return { expected_value };
 	}
@@ -649,7 +646,7 @@ namespace vuk {
 		vec.insert(vec.end(), src.begin(), src.end());
 	}
 
-	void DeviceSuperFrameResource::deallocate_images(std::span<const Image> src) {
+	void DeviceSuperFrameResource::deallocate_images(std::span<const Image<>> src) {
 		std::shared_lock _s(impl->new_frame_mutex);
 		auto& f = get_last_frame();
 		std::unique_lock _(f.impl->images_mutex);
@@ -658,7 +655,7 @@ namespace vuk {
 	}
 
 	Result<void, AllocateException>
-	DeviceSuperFrameResource::allocate_cached_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc) {
+	DeviceSuperFrameResource::allocate_cached_images(std::span<Image<>> dst, std::span<const ICI> cis, SourceLocationAtFrame loc) {
 		std::unique_lock _(impl->images_mutex);
 		assert(dst.size() == cis.size());
 		for (uint64_t i = 0; i < dst.size(); i++) {
@@ -671,7 +668,7 @@ namespace vuk {
 	}
 
 	Result<void, AllocateException>
-	DeviceSuperFrameResource::allocate_cached_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc) {
+	DeviceSuperFrameResource::allocate_cached_image_views(std::span<ImageView<>> dst, std::span<const IVCI> cis, SourceLocationAtFrame loc) {
 		return allocate_image_views(dst, cis, loc);
 	}
 
@@ -692,7 +689,7 @@ namespace vuk {
 		return { expected_value };
 	}
 
-	void DeviceSuperFrameResource::deallocate_image_views(std::span<const ImageView> src) {
+	void DeviceSuperFrameResource::deallocate_image_views(std::span<const ImageView<>> src) {
 		std::shared_lock _s(impl->new_frame_mutex);
 		auto& f = get_last_frame();
 		std::unique_lock _(f.impl->image_views_mutex);
