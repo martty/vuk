@@ -146,7 +146,7 @@ namespace vuk::extra {
 		if (is_recycle) {
 			allocator.deallocate(std::span{ &old_swapchain->swapchain, 1 });
 			for (auto& iv : old_swapchain->images) {
-				allocator.deallocate(std::span{ &iv.image_view, 1 });
+				allocator.deallocate(std::span{ &iv, 1 });
 			}
 		}
 
@@ -156,16 +156,27 @@ namespace vuk::extra {
 		old_swapchain->images.clear();
 
 		for (auto i = 0; i < images.size(); i++) {
-			ImageAttachment ia;
-			ia.extent = { vkswapchain->extent.width, vkswapchain->extent.height, 1 };
-			ia.format = (Format)vkswapchain->image_format;
-			ia.image = Image{ images[i], nullptr };
-			ia.image_view = ImageView{ { 0 }, views[i] };
-			ia.view_type = ImageViewType::e2D;
-			ia.sample_count = Samples::e1;
-			ia.base_level = ia.base_layer = 0;
-			ia.level_count = ia.layer_count = 1;
-			old_swapchain->images.push_back(ia);
+			ImageEntry ie{};
+			ie.image_type = ImageType::e2D;
+			ie.format = (Format)vkswapchain->image_format;
+			ie.extent = { vkswapchain->extent.width, vkswapchain->extent.height, 1 };
+			ie.sample_count = Samples::e1;
+			ie.level_count = 1;
+			ie.layer_count = 1;
+			ie.image = images[i];
+			ie.allocation = nullptr;
+
+			IVCI ivci{
+				.view_type = ImageViewType::e2D,
+				.base_level = 0,
+				.level_count = 1,
+				.base_layer = 0,
+				.layer_count = 1,
+				.image = Image<>{ allocator.get_context().add_image(ie) },
+				.format = (Format)vkswapchain->image_format,
+			};
+			auto image_view = ImageView<>{ allocator.get_context().add_image_view({ ImageViewEntry{ ivci, views[i], ~0ULL } }) };
+			old_swapchain->images.push_back(image_view);
 		}
 
 		old_swapchain->swapchain = vkswapchain->swapchain;
@@ -230,7 +241,7 @@ namespace vuk::extra {
 	void SimpleApp::update_swapchain() {
 		swapchain = make_swapchain(*superframe_allocator, vkbdevice, surface, std::move(swapchain));
 		for (auto& iv : swapchain->images) {
-			runtime->set_name(iv.image_view.payload, "Swapchain ImageView");
+			runtime->set_name(iv->api_view, "Swapchain ImageView");
 		}
 	}
 

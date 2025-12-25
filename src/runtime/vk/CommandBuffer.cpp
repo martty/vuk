@@ -8,6 +8,7 @@
 
 #include <cmath>
 #include <fmt/printf.h>
+#include <vuk/runtime/vk/Allocation.hpp>
 
 #define VUK_EARLY_RET()                                                                                                                                        \
 	if (!current_error) {                                                                                                                                        \
@@ -235,11 +236,11 @@ namespace vuk {
 		return broadcast_color_blend(blend_preset_to_pcba(preset));
 	}
 
-	CommandBuffer& CommandBuffer::set_color_blend(const ImageAttachment& att, PipelineColorBlendAttachmentState state) {
+	CommandBuffer& CommandBuffer::set_color_blend(ImageView<> att, PipelineColorBlendAttachmentState state) {
 		VUK_EARLY_RET();
 		assert(ongoing_render_pass);
 
-		auto it = std::find(ongoing_render_pass->color_attachment_ivs.begin(), ongoing_render_pass->color_attachment_ivs.end(), att.image_view);
+		auto it = std::find(ongoing_render_pass->color_attachment_ivs.begin(), ongoing_render_pass->color_attachment_ivs.end(), att);
 		assert(it != ongoing_render_pass->color_attachment_ivs.end() && "Color attachment name not found.");
 		auto idx = std::distance(ongoing_render_pass->color_attachment_ivs.begin(), it);
 		set_color_blend_attachments.set(idx, true);
@@ -248,7 +249,7 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::set_color_blend(const ImageAttachment& att, BlendPreset preset) {
+	CommandBuffer& CommandBuffer::set_color_blend(ImageView<> att, BlendPreset preset) {
 		VUK_EARLY_RET();
 		return set_color_blend(att, blend_preset_to_pcba(preset));
 	}
@@ -298,7 +299,7 @@ namespace vuk {
 		return bind_ray_tracing_pipeline(ctx.get_named_pipeline(p));
 	}
 
-	CommandBuffer& CommandBuffer::bind_vertex_buffer(unsigned binding, const Buffer<>& buf, unsigned first_attribute, Packed format, VertexInputRate input_rate) {
+	CommandBuffer& CommandBuffer::bind_vertex_buffer(unsigned binding, Buffer<> buf, unsigned first_attribute, Packed format, VertexInputRate input_rate) {
 		VUK_EARLY_RET();
 		assert(binding < VUK_MAX_ATTRIBUTES && "Vertex buffer binding must be smaller than VUK_MAX_ATTRIBUTES.");
 		uint32_t location = first_attribute;
@@ -334,7 +335,7 @@ namespace vuk {
 	}
 
 	CommandBuffer& CommandBuffer::bind_vertex_buffer(unsigned binding,
-	                                                 const Buffer<>& buf,
+	                                                 Buffer<> buf,
 	                                                 std::span<VertexInputAttributeDescription> viads,
 	                                                 uint32_t stride,
 	                                                 VertexInputRate input_rate) {
@@ -359,7 +360,7 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::bind_index_buffer(const Buffer<>& buffer, IndexType type) {
+	CommandBuffer& CommandBuffer::bind_index_buffer(Buffer<> buffer, IndexType type) {
 		VUK_EARLY_RET();
 		auto bo = allocator->get_context().ptr_to_buffer_offset(buffer.ptr);
 		ctx.vkCmdBindIndexBuffer(command_buffer, bo.buffer, bo.offset, (VkIndexType)type);
@@ -396,7 +397,7 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::bind_buffer(unsigned set, unsigned binding, const Buffer<>& buffer) {
+	CommandBuffer& CommandBuffer::bind_buffer(unsigned set, unsigned binding, Buffer<> buffer) {
 		VUK_EARLY_RET();
 		assert(set < VUK_MAX_SETS);
 		assert(binding < VUK_MAX_BINDINGS);
@@ -408,49 +409,14 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::bind_image(unsigned set, unsigned binding, const ImageAttachment& ia) {
-		VUK_EARLY_RET();
-		if (ia.image_view != ImageView{}) {
-			bind_image(set, binding, ia.image_view, ia.layout);
-		} else {
-			assert(ia.image);
-			auto res = allocate_image_view(*allocator, ia);
-			if (!res) {
-				current_error = std::move(res);
-				return *this;
-			} else {
-				bind_image(set, binding, **res, ia.layout);
-			}
-		}
-		return *this;
+	CommandBuffer& CommandBuffer::bind_image(unsigned set, unsigned binding, ImageView<> image_view) {
+		return bind_image(set, binding, image_view, ImageLayout::eReadOnlyOptimalKHR);
 	}
 
-	CommandBuffer& CommandBuffer::bind_image(unsigned set, unsigned binding, const ImageAttachment& ia, Ref def) {
-		VUK_EARLY_RET();
-		if (ia.image_view != ImageView{}) {
-			bind_image(set, binding, ia.image_view, ia.layout);
-		} else {
-			assert(ia.image);
-			auto res = allocate_image_view(*allocator, ia);
-			if (!res) {
-				current_error = std::move(res);
-				return *this;
-			} else {
-				auto node = def.node;
-				if (node->debug_info && node->debug_info->result_names.size() > 0 && !node->debug_info->result_names[0].empty()) {
-					ctx.set_name((**res).payload, node->debug_info->result_names[0].c_str());
-				}
-				bind_image(set, binding, **res, ia.layout);
-			}
-		}
-		return *this;
-	}
-
-	CommandBuffer& CommandBuffer::bind_image(unsigned set, unsigned binding, ImageView image_view, ImageLayout layout) {
+	CommandBuffer& CommandBuffer::bind_image(unsigned set, unsigned binding, ImageView<> image_view, ImageLayout layout) {
 		VUK_EARLY_RET();
 		assert(set < VUK_MAX_SETS);
 		assert(binding < VUK_MAX_BINDINGS);
-		assert(image_view.payload != VK_NULL_HANDLE);
 		sets_to_bind.set(set, true);
 		auto& db = set_bindings[set].bindings[binding];
 		// if previous descriptor was not an image, we reset the DescriptorImageInfo
@@ -522,7 +488,7 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::draw_indirect(size_t command_count, const Buffer<>& indirect_buffer) {
+	CommandBuffer& CommandBuffer::draw_indirect(size_t command_count, Buffer<> indirect_buffer) {
 		VUK_EARLY_RET();
 		if (!_bind_graphics_pipeline_state()) {
 			return *this;
@@ -551,7 +517,7 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::draw_indirect_count(size_t max_draw_count, const Buffer<>& indirect_buffer, const Buffer<>& count_buffer) {
+	CommandBuffer& CommandBuffer::draw_indirect_count(size_t max_draw_count, Buffer<> indirect_buffer, Buffer<> count_buffer) {
 		VUK_EARLY_RET();
 		if (!_bind_graphics_pipeline_state()) {
 			return *this;
@@ -578,7 +544,7 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::draw_indexed_indirect(size_t command_count, const Buffer<>& indirect_buffer) {
+	CommandBuffer& CommandBuffer::draw_indexed_indirect(size_t command_count, Buffer<> indirect_buffer) {
 		VUK_EARLY_RET();
 		if (!_bind_graphics_pipeline_state()) {
 			return *this;
@@ -607,7 +573,7 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::draw_indexed_indirect_count(size_t max_draw_count, const Buffer<>& indirect_buffer, const Buffer<>& count_buffer) {
+	CommandBuffer& CommandBuffer::draw_indexed_indirect_count(size_t max_draw_count, Buffer<> indirect_buffer, Buffer<> count_buffer) {
 		VUK_EARLY_RET();
 		if (!_bind_graphics_pipeline_state()) {
 			return *this;
@@ -681,24 +647,25 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::dispatch_invocations_per_pixel(const ImageAttachment& ia,
+	CommandBuffer& CommandBuffer::dispatch_invocations_per_pixel(ImageView<> ia,
 	                                                             float invocations_per_pixel_scale_x,
 	                                                             float invocations_per_pixel_scale_y,
 	                                                             float invocations_per_pixel_scale_z) {
-		auto extent = ia.extent;
+		auto& ve = ia.get_meta();
+		auto extent = ve.extent;
 
 		return dispatch_invocations((uint32_t)std::ceil(invocations_per_pixel_scale_x * extent.width),
 		                            (uint32_t)std::ceil(invocations_per_pixel_scale_y * extent.height),
 		                            (uint32_t)std::ceil(invocations_per_pixel_scale_z * extent.depth));
 	}
 
-	CommandBuffer& CommandBuffer::dispatch_invocations_per_element(const Buffer<>& buffer, size_t element_size, float invocations_per_element_scale) {
+	CommandBuffer& CommandBuffer::dispatch_invocations_per_element(Buffer<> buffer, size_t element_size, float invocations_per_element_scale) {
 		auto count = (uint32_t)std::ceil(invocations_per_element_scale * idivceil(buffer.sz_bytes, element_size));
 
 		return dispatch_invocations(count, 1, 1);
 	}
 
-	CommandBuffer& CommandBuffer::dispatch_indirect(const Buffer<>& indirect_buffer) {
+	CommandBuffer& CommandBuffer::dispatch_indirect(Buffer<> indirect_buffer) {
 		VUK_EARLY_RET();
 		if (!_bind_compute_pipeline_state()) {
 			return *this;
@@ -809,50 +776,58 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::clear_image(const ImageAttachment& src, Clear c) {
+	CommandBuffer& CommandBuffer::clear_image(ImageView<> src, Clear c) {
 		VUK_EARLY_RET();
 
-		auto aspect = format_to_aspect(src.format);
+		auto& ve = src.get_meta();
+		auto aspect = format_to_aspect(ve.format);
+		auto& ie = allocator->get_context().resolve_image(ve.image);
 
 		if (!ongoing_render_pass) {
 			VkImageSubresourceRange isr = {};
 			isr.aspectMask = (VkImageAspectFlags)aspect;
-			isr.baseArrayLayer = src.base_layer;
-			isr.layerCount = src.layer_count;
-			isr.baseMipLevel = src.base_level;
-			isr.levelCount = src.level_count;
+			isr.baseArrayLayer = ve.base_layer;
+			isr.layerCount = ve.layer_count;
+			isr.baseMipLevel = ve.base_level;
+			isr.levelCount = ve.level_count;
 			if (aspect == ImageAspectFlagBits::eColor) {
-				ctx.vkCmdClearColorImage(command_buffer, src.image.image, (VkImageLayout)src.layout, &c.c.color, 1, &isr);
+				ctx.vkCmdClearColorImage(command_buffer, ie.image, (VkImageLayout)ve.layout, &c.c.color, 1, &isr);
 			} else if (aspect & (ImageAspectFlagBits::eDepth | ImageAspectFlagBits::eStencil)) {
-				ctx.vkCmdClearDepthStencilImage(command_buffer, src.image.image, (VkImageLayout)src.layout, &c.c.depthStencil, 1, &isr);
+				ctx.vkCmdClearDepthStencilImage(command_buffer, ie.image, (VkImageLayout)ve.layout, &c.c.depthStencil, 1, &isr);
 			}
 		} else {
 			VkClearAttachment clr = {};
 			clr.aspectMask = (VkImageAspectFlags)aspect;
 			clr.clearValue = c.c;
 			if (aspect == ImageAspectFlagBits::eColor) {
-				auto it = std::find(ongoing_render_pass->color_attachment_ivs.begin(), ongoing_render_pass->color_attachment_ivs.end(), src.image_view);
+				auto it = std::find(ongoing_render_pass->color_attachment_ivs.begin(), ongoing_render_pass->color_attachment_ivs.end(), src);
 				assert(it != ongoing_render_pass->color_attachment_ivs.end() && "Color attachment name not found.");
 				auto idx = std::distance(ongoing_render_pass->color_attachment_ivs.begin(), it);
 				clr.colorAttachment = (uint32_t)idx;
 			}
 			VkClearRect rect = {};
-			rect.baseArrayLayer = src.base_layer;
-			rect.layerCount = src.layer_count;
-			rect.rect = { { (int32_t)0, (int32_t)0 }, { src.extent.width, src.extent.height } };
+			rect.baseArrayLayer = ve.base_layer;
+			rect.layerCount = ve.layer_count;
+			rect.rect = { { (int32_t)0, (int32_t)0 }, { ve.extent.width, ve.extent.height } };
 			ctx.vkCmdClearAttachments(command_buffer, 1, &clr, 1, &rect);
 		}
 
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::resolve_image(const ImageAttachment& src, const ImageAttachment& dst) {
+	CommandBuffer& CommandBuffer::resolve_image(ImageView<> src, ImageView<> dst) {
 		VUK_EARLY_RET();
+
+		auto& src_ve = src.get_meta();
+		auto& dst_ve = dst.get_meta();
+		auto& src_ie = allocator->get_context().resolve_image(src_ve.image);
+		auto& dst_ie = allocator->get_context().resolve_image(dst_ve.image);
+
 		VkImageResolve ir;
 
 		ImageSubresourceLayers isl;
 		ImageAspectFlagBits aspect;
-		if (dst.format == Format::eD32Sfloat) {
+		if (dst_ve.format == Format::eD32Sfloat) {
 			aspect = ImageAspectFlagBits::eDepth;
 		} else {
 			aspect = ImageAspectFlagBits::eColor;
@@ -866,47 +841,61 @@ namespace vuk {
 		ir.srcSubresource = isl;
 		ir.dstOffset = Offset3D{};
 		ir.dstSubresource = isl;
-		ir.extent = static_cast<Extent3D>(src.extent);
+		ir.extent = static_cast<Extent3D>(src_ve.extent);
 
-		ctx.vkCmdResolveImage(command_buffer, src.image.image, (VkImageLayout)src.layout, dst.image.image, (VkImageLayout)dst.layout, 1, &ir);
+		ctx.vkCmdResolveImage(command_buffer, src_ie.image, (VkImageLayout)src_ve.layout, dst_ie.image, (VkImageLayout)dst_ve.layout, 1, &ir);
 
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::blit_image(const ImageAttachment& src, const ImageAttachment& dst, ImageBlit region, Filter filter) {
+	CommandBuffer& CommandBuffer::blit_image(ImageView<> src, ImageView<> dst, ImageBlit region, Filter filter) {
 		VUK_EARLY_RET();
+
+		auto& src_ve = src.get_meta();
+		auto& dst_ve = dst.get_meta();
+		auto& src_ie = allocator->get_context().resolve_image(src_ve.image);
+		auto& dst_ie = allocator->get_context().resolve_image(dst_ve.image);
 
 		ctx.vkCmdBlitImage(
-		    command_buffer, src.image.image, (VkImageLayout)src.layout, dst.image.image, (VkImageLayout)dst.layout, 1, (VkImageBlit*)&region, (VkFilter)filter);
+		    command_buffer, src_ie.image, (VkImageLayout)src_ve.layout, dst_ie.image, (VkImageLayout)dst_ve.layout, 1, (VkImageBlit*)&region, (VkFilter)filter);
 
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::copy_image(const ImageAttachment& src, const ImageAttachment& dst, ImageCopy region) {
+	CommandBuffer& CommandBuffer::copy_image(ImageView<> src, ImageView<> dst, ImageCopy region) {
 		VUK_EARLY_RET();
 
-		ctx.vkCmdCopyImage(command_buffer, src.image.image, (VkImageLayout)src.layout, dst.image.image, (VkImageLayout)dst.layout, 1, (VkImageCopy*)&region);
+		auto& src_ve = src.get_meta();
+		auto& dst_ve = dst.get_meta();
+		auto& src_ie = allocator->get_context().resolve_image(src_ve.image);
+		auto& dst_ie = allocator->get_context().resolve_image(dst_ve.image);
+
+		ctx.vkCmdCopyImage(command_buffer, src_ie.image, (VkImageLayout)src_ve.layout, dst_ie.image, (VkImageLayout)dst_ve.layout, 1, (VkImageCopy*)&region);
 
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::copy_buffer_to_image(const Buffer<>& src, const ImageAttachment& dst, BufferImageCopy bic) {
+	CommandBuffer& CommandBuffer::copy_buffer_to_image(Buffer<> src, ImageView<> dst, BufferImageCopy bic) {
 		VUK_EARLY_RET();
+		auto& dst_ve = dst.get_meta();
+		auto& dst_ie = allocator->get_context().resolve_image(dst_ve.image);
 		auto bo = allocator->get_context().ptr_to_buffer_offset(src.ptr);
-		ctx.vkCmdCopyBufferToImage(command_buffer, bo.buffer, dst.image.image, (VkImageLayout)dst.layout, 1, (VkBufferImageCopy*)&bic);
+		ctx.vkCmdCopyBufferToImage(command_buffer, bo.buffer, dst_ie.image, (VkImageLayout)dst_ve.layout, 1, (VkBufferImageCopy*)&bic);
 
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::copy_image_to_buffer(const ImageAttachment& src, const Buffer<>& dst, BufferImageCopy bic) {
+	CommandBuffer& CommandBuffer::copy_image_to_buffer(ImageView<> src, Buffer<> dst, BufferImageCopy bic) {
 		VUK_EARLY_RET();
+		auto& src_ve = src.get_meta();
+		auto& src_ie = allocator->get_context().resolve_image(src_ve.image);
 		auto bo = allocator->get_context().ptr_to_buffer_offset(dst.ptr);
-		ctx.vkCmdCopyImageToBuffer(command_buffer, src.image.image, (VkImageLayout)src.layout, bo.buffer, 1, (VkBufferImageCopy*)&bic);
+		ctx.vkCmdCopyImageToBuffer(command_buffer, src_ie.image, (VkImageLayout)src_ve.layout, bo.buffer, 1, (VkBufferImageCopy*)&bic);
 
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::copy_buffer(const Buffer<>& src, const Buffer<>& dst) {
+	CommandBuffer& CommandBuffer::copy_buffer(Buffer<> src, Buffer<> dst) {
 		VUK_EARLY_RET();
 		assert(src.size == dst.size);
 		if (src.size == 0) {
@@ -932,7 +921,7 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::fill_buffer(const view<BufferLike<byte>>& dst, uint32_t data) {
+	CommandBuffer& CommandBuffer::fill_buffer(Buffer<> dst, uint32_t data) {
 		if (dst.size == 0) {
 			return *this;
 		}
@@ -941,7 +930,7 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::update_buffer(const Buffer<>& dst, const void* data) {
+	CommandBuffer& CommandBuffer::update_buffer(Buffer<> dst, const void* data) {
 		if (dst.size == 0) {
 			return *this;
 		}
@@ -965,7 +954,7 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::image_barrier(const ImageAttachment& src,
+	CommandBuffer& CommandBuffer::image_barrier(ImageView<> src,
 	                                            vuk::Access src_acc,
 	                                            vuk::Access dst_acc,
 	                                            uint32_t mip_level,
@@ -974,24 +963,27 @@ namespace vuk {
 	                                            uint32_t layer_count) {
 		VUK_EARLY_RET();
 
+		auto& src_ve = src.get_meta();
+		auto& src_ie = allocator->get_context().resolve_image(src_ve.image);
+
 		VkImageSubresourceRange isr = {};
 		isr.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		if (layer_count != VK_REMAINING_ARRAY_LAYERS && src.layer_count != VK_REMAINING_ARRAY_LAYERS) {
-			assert(src.base_layer + base_layer + layer_count <= src.base_layer + src.layer_count); // no barriering out of range
-		} else if (src.layer_count != VK_REMAINING_ARRAY_LAYERS) {
-			assert(src.base_layer + base_layer <= src.base_layer + src.layer_count); // only validate start
+		if (layer_count != VK_REMAINING_ARRAY_LAYERS && src_ve.layer_count != VK_REMAINING_ARRAY_LAYERS) {
+			assert(src_ve.base_layer + base_layer + layer_count <= src_ve.base_layer + src_ve.layer_count); // no barriering out of range
+		} else if (src_ve.layer_count != VK_REMAINING_ARRAY_LAYERS) {
+			assert(src_ve.base_layer + base_layer <= src_ve.base_layer + src_ve.layer_count); // only validate start
 		}
-		isr.baseArrayLayer = src.base_layer + base_layer;
+		isr.baseArrayLayer = src_ve.base_layer + base_layer;
 		isr.layerCount = layer_count;
-		if (level_count != VK_REMAINING_MIP_LEVELS && src.level_count != VK_REMAINING_MIP_LEVELS) {
-			assert(src.base_level + mip_level + level_count <= src.base_level + src.level_count); // no barriering out of range
-		} else if (src.level_count != VK_REMAINING_MIP_LEVELS) {
-			assert(src.base_level + mip_level <= src.base_level + src.level_count); // only validate start
+		if (level_count != VK_REMAINING_MIP_LEVELS && src_ve.level_count != VK_REMAINING_MIP_LEVELS) {
+			assert(src_ve.base_level + mip_level + level_count <= src_ve.base_level + src_ve.level_count); // no barriering out of range
+		} else if (src_ve.level_count != VK_REMAINING_MIP_LEVELS) {
+			assert(src_ve.base_level + mip_level <= src_ve.base_level + src_ve.level_count); // only validate start
 		}
-		isr.baseMipLevel = src.base_level + mip_level;
+		isr.baseMipLevel = src_ve.base_level + mip_level;
 		isr.levelCount = level_count;
 		VkImageMemoryBarrier2 imb{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2_KHR };
-		imb.image = src.image.image;
+		imb.image = src_ie.image;
 		auto src_use = to_use(src_acc);
 		auto dst_use = to_use(dst_acc);
 		imb.srcStageMask = (VkPipelineStageFlags2)src_use.stages;
@@ -1000,7 +992,7 @@ namespace vuk {
 		imb.dstAccessMask = (VkAccessFlags2)dst_use.access;
 
 		// TODO: questionable
-		if (src.layout == ImageLayout::eGeneral) {
+		if (src_ve.layout == ImageLayout::eGeneral) {
 			imb.oldLayout = imb.newLayout = VK_IMAGE_LAYOUT_GENERAL;
 		} else {
 			imb.oldLayout = (VkImageLayout)src_use.layout;

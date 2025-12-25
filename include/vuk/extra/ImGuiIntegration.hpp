@@ -7,10 +7,8 @@
 
 namespace vuk::extra {
 	struct ImGuiData {
-		Unique<Image> font_image;
-		Unique<ImageView> font_image_view;
+		Unique<ImageView<>> font_image_view;
 		SamplerCreateInfo font_sci;
-		ImageAttachment font_ia;
 		std::vector<Value<SampledImage>> sampled_images;
 
 		/// @brief Add a sampled image that can be used in ImGui (use vuk::combine_image_sampler to create)
@@ -21,7 +19,7 @@ namespace vuk::extra {
 		/// @brief Add an image that can be used in ImGui, with the default sampler
 		/// @param image Image to be added
 		/// @return Value to be passed to ImGui::Image
-		ImTextureID add_image(Value<ImageAttachment> image);
+		ImTextureID add_image(Value<ImageView<>> image);
 	};
 
 	/// @brief Initialize ImGui integration with Vuk
@@ -33,6 +31,6 @@ namespace vuk::extra {
 	/// @param allocator Allocator to use to allocate additional resources
 	/// @param target ImageAttachment to render ImGui into
 	/// @param data ImGui data to use for rendering
-	Value<ImageAttachment> ImGui_ImplVuk_Render(Allocator& allocator, Value<ImageAttachment> target, ImGuiData& data);
+	Value<ImageView<>> ImGui_ImplVuk_Render(Allocator& allocator, Value<ImageView<>> target, ImGuiData& data);
 
 } // namespace vuk::extra

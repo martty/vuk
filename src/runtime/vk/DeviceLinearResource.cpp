@@ -1,6 +1,6 @@
-#include "vuk/runtime/vk/DeviceLinearResource.hpp"
 #include "vuk/runtime/vk/BufferAllocator.hpp"
 #include "vuk/runtime/vk/Descriptor.hpp"
+#include "vuk/runtime/vk/DeviceLinearResource.hpp"
 #include "vuk/runtime/vk/Query.hpp"
 #include "vuk/runtime/vk/RenderPass.hpp"
 #include "vuk/runtime/vk/VkQueueExecutor.hpp"
@@ -19,8 +19,8 @@ namespace vuk {
 		std::vector<CommandBufferAllocation> cmdbuffers_to_free;
 		std::vector<CommandPool> cmdpools_to_free;
 		std::vector<VkFramebuffer> framebuffers;
-		std::vector<Image> images;
-		std::vector<ImageView> image_views;
+		std::vector<Image<>> images;
+		std::vector<ImageView<>> image_views;
 		std::vector<PersistentDescriptorSet> persistent_descriptor_sets;
 		std::vector<DescriptorSet> descriptor_sets;
 		VkDescriptorPool* last_ds_pool;
@@ -133,24 +133,23 @@ namespace vuk {
 
 	void DeviceLinearResource::deallocate_framebuffers(std::span<const VkFramebuffer> src) {} // noop
 
-	Result<void, AllocateException> DeviceLinearResource::allocate_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException> DeviceLinearResource::allocate_images(std::span<Image<>> dst, std::span<const ICI> cis, SourceLocationAtFrame loc) {
 		VUK_DO_OR_RETURN(upstream->allocate_images(dst, cis, loc));
 		auto& vec = impl->images;
 		vec.insert(vec.end(), dst.begin(), dst.end());
 		return { expected_value };
 	}
 
-	void DeviceLinearResource::deallocate_images(std::span<const Image> src) {} // noop
+	void DeviceLinearResource::deallocate_images(std::span<const Image<>> src) {} // noop
 
-	Result<void, AllocateException>
-	DeviceLinearResource::allocate_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException> DeviceLinearResource::allocate_image_views(std::span<ImageView<>> dst, std::span<const IVCI> cis, SourceLocationAtFrame loc) {
 		VUK_DO_OR_RETURN(upstream->allocate_image_views(dst, cis, loc));
 		auto& vec = impl->image_views;
 		vec.insert(vec.end(), dst.begin(), dst.end());
 		return { expected_value };
 	}
 
-	void DeviceLinearResource::deallocate_image_views(std::span<const ImageView> src) {} // noop
+	void DeviceLinearResource::deallocate_image_views(std::span<const ImageView<>> src) {} // noop
 
 	Result<void, AllocateException> DeviceLinearResource::allocate_persistent_descriptor_sets(std::span<PersistentDescriptorSet> dst,
 	                                                                                          std::span<const PersistentDescriptorSetCreateInfo> cis,

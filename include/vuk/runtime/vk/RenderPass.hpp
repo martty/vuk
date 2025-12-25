@@ -1,10 +1,10 @@
 #pragma once
 
-#include "vuk/ShortAlloc.hpp"
-#include "vuk/Types.hpp"
 #include "vuk/runtime/Cache.hpp"
 #include "vuk/runtime/CreateInfo.hpp"
 #include "vuk/runtime/vk/Image.hpp"
+#include "vuk/ShortAlloc.hpp"
+#include "vuk/Types.hpp"
 #include "vuk/vuk_fwd.hpp"
 
 #include <optional>
@@ -52,13 +52,13 @@ namespace vuk {
 
 	template<>
 	struct create_info<VkRenderPass> {
-		using type = vuk::RenderPassCreateInfo;
+		using type = RenderPassCreateInfo;
 	};
 
 	struct FramebufferCreateInfo : public VkFramebufferCreateInfo {
 		FramebufferCreateInfo() : VkFramebufferCreateInfo{ .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO } {}
-		std::vector<vuk::ImageView> attachments;
-		vuk::Samples sample_count = vuk::Samples::eInfer;
+		std::vector<ImageView<>> attachments;
+		Samples sample_count = Samples::eInfer;
 
 		bool operator==(const FramebufferCreateInfo& o) const noexcept {
 			return std::tie(flags, attachments, width, height, renderPass, layers, sample_count) ==
@@ -68,7 +68,7 @@ namespace vuk {
 
 	template<>
 	struct create_info<VkFramebuffer> {
-		using type = vuk::FramebufferCreateInfo;
+		using type = FramebufferCreateInfo;
 	};
 } // namespace vuk
 

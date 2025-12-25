@@ -16,7 +16,7 @@
 
 namespace vuk {
 	struct ptr_base {
-		uint64_t device_address;
+		uint64_t device_address = 0;
 
 		explicit operator bool() const noexcept {
 			return device_address != 0;
@@ -40,6 +40,14 @@ namespace vuk {
 
 	template<class T>
 	constexpr bool is_bufferlike_view = is_bufferlike_view_type<T>::value;
+
+	template<class T>
+	struct is_imagelike_view_type {
+		static constexpr bool value = false;
+	};
+
+	template<class T>
+	constexpr bool is_imagelike_view = is_imagelike_view_type<T>::value;
 
 	struct generic_view_base {
 		uint64_t key;
@@ -107,7 +115,9 @@ namespace vuk {
 		e16 = VK_SAMPLE_COUNT_16_BIT,
 		e32 = VK_SAMPLE_COUNT_32_BIT,
 		e64 = VK_SAMPLE_COUNT_64_BIT,
-		eInfer = 1024
+		eInfer = 1024,
+		eSingleSampled = e1,
+		eMultiSampled = 1025,
 	};
 
 	struct Samples {
@@ -128,6 +138,8 @@ namespace vuk {
 		constexpr static auto e64 = SampleCountFlagBits::e64;
 		constexpr static auto eInfer = SampleCountFlagBits::eInfer;
 	};
+
+	std::string format_as(const Samples& samples);
 
 	inline bool operator==(Samples const& a, Samples const& b) noexcept {
 		return a.count == b.count;
@@ -222,6 +234,8 @@ namespace vuk {
 			return *reinterpret_cast<VkExtent3D*>(this);
 		}
 	};
+
+	std::string format_as(const Extent3D& extent);
 
 	inline Extent2D::operator Extent3D() {
 		return Extent3D{ width, height, 1u };
@@ -558,7 +572,14 @@ namespace vuk {
 		eR10X6UnormPack16KHR = VK_FORMAT_R10X6_UNORM_PACK16_KHR,
 		eR12X4G12X4B12X4A12X4Unorm4Pack16KHR = VK_FORMAT_R12X4G12X4B12X4A12X4_UNORM_4PACK16_KHR,
 		eR12X4G12X4Unorm2Pack16KHR = VK_FORMAT_R12X4G12X4_UNORM_2PACK16_KHR,
-		eR12X4UnormPack16KHR = VK_FORMAT_R12X4_UNORM_PACK16_KHR
+		eR12X4UnormPack16KHR = VK_FORMAT_R12X4_UNORM_PACK16_KHR,
+		// format classes
+		eFormatClassStart = 1100000000,
+		eFormatClassDepth,
+		eFormatClassDepthStencil,
+		eFormatClassStencil,
+		eFormatClassColour,
+		eFormatClassCompressedColour
 	};
 
 	// return the texel block size of a format
@@ -569,6 +590,7 @@ namespace vuk {
 	uint32_t compute_image_size(Format, Extent3D) noexcept;
 	// get name of format
 	std::string_view format_to_sv(Format format) noexcept;
+	std::string format_as(const Format& extent);
 	// true if format performs automatic sRGB conversion
 	bool is_format_srgb(Format) noexcept;
 	// get the unorm equivalent of the srgb format (returns Format::Undefined if the format doesn't exist)
@@ -930,8 +952,6 @@ namespace vuk {
 	void synchronize(Buffer<T>, struct SyncHelper&);
 	template<class T, size_t Extent>
 	void synchronize(Buffer<T, Extent>, struct SyncHelper&);
-	void synchronize(ImageAttachment, struct SyncHelper&);
-	void synchronize(struct SampledImage, struct SyncHelper&);
 
 	template<class T>
 	concept Synchronized = requires(std::remove_all_extents_t<T> a, SyncHelper& sh) {

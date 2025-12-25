@@ -2,22 +2,11 @@
 
 #include <cassert>
 
-#include "vuk/Types.hpp"
 #include "vuk/runtime/CreateInfo.hpp"
 #include "vuk/runtime/vk/VkTypes.hpp"
+#include "vuk/Types.hpp"
 
 namespace vuk {
-	struct Image {
-		VkImage image = VK_NULL_HANDLE;
-		void* allocation = nullptr;
-
-		constexpr explicit operator bool() const noexcept {
-			return image != VK_NULL_HANDLE;
-		}
-
-		constexpr bool operator==(const Image&) const = default;
-	};
-
 	using Sampler = Handle<VkSampler>;
 
 	enum class ImageTiling {
@@ -130,28 +119,6 @@ namespace vuk {
 	};
 	static_assert(sizeof(ImageCreateInfo) == sizeof(VkImageCreateInfo), "struct and wrapper have different size!");
 	static_assert(std::is_standard_layout<ImageCreateInfo>::value, "struct wrapper is not a standard layout!");
-
-	template<>
-	struct create_info<Image> {
-		using type = ImageCreateInfo;
-	};
-
-	struct ImageWithIdentity {
-		Image image;
-	};
-
-	struct CachedImageIdentifier {
-		ImageCreateInfo ici;
-		uint32_t id;
-		uint32_t multi_frame_index;
-
-		bool operator==(const CachedImageIdentifier&) const = default;
-	};
-
-	template<>
-	struct create_info<ImageWithIdentity> {
-		using type = CachedImageIdentifier;
-	};
 
 	enum class ImageViewCreateFlagBits : VkImageViewCreateFlags { eFragmentDensityMapDynamicEXT = VK_IMAGE_VIEW_CREATE_FRAGMENT_DENSITY_MAP_DYNAMIC_BIT_EXT };
 
@@ -285,72 +252,6 @@ namespace vuk {
 	};
 	static_assert(std::is_standard_layout<ImageViewCreateInfo>::value, "struct wrapper is not a standard layout!");
 
-#pragma pack(push, 1)
-	struct CompressedImageViewCreateInfo {
-		uint32_t flags : 2;
-		ImageViewType viewType : 3 = ImageViewType::e2D;
-		ComponentSwizzle r_swizzle : 3 = ComponentSwizzle::eIdentity;
-		ComponentSwizzle g_swizzle : 3 = ComponentSwizzle::eIdentity;
-		ComponentSwizzle b_swizzle : 3 = ComponentSwizzle::eIdentity;
-		ComponentSwizzle a_swizzle : 3 = ComponentSwizzle::eIdentity;
-		uint32_t padding : 4 = 0;
-		uint32_t aspectMask : 11 = {}; // 27 bits ~ pad to 4 bytes
-		uint32_t baseMipLevel : 16 = 0;
-		uint32_t levelCount : 16 = 1;
-		uint32_t baseArrayLayer : 16 = 0;
-		uint32_t layerCount : 16 = 1;
-		VkImageUsageFlags view_usage : 10;  // 8 bytes
-		VkImage image = {};                 // 16 bytes
-		Format format = Format::eUndefined; // 32 bytes in total
-
-		CompressedImageViewCreateInfo(ImageViewCreateInfo ivci) {
-			assert(ivci.pNext == nullptr && "Compression does not support pNextended IVCIs");
-			flags = ivci.flags.m_mask;
-			viewType = ivci.viewType;
-			r_swizzle = ivci.components.r;
-			g_swizzle = ivci.components.g;
-			b_swizzle = ivci.components.b;
-			a_swizzle = ivci.components.a;
-			aspectMask = ivci.subresourceRange.aspectMask.m_mask;
-			baseMipLevel = ivci.subresourceRange.baseMipLevel;
-			levelCount = ivci.subresourceRange.levelCount;
-			baseArrayLayer = ivci.subresourceRange.baseArrayLayer;
-			layerCount = ivci.subresourceRange.layerCount;
-			image = ivci.image;
-			format = ivci.format;
-			view_usage = (VkImageUsageFlags)ivci.view_usage;
-		}
-
-		explicit operator ImageViewCreateInfo() const noexcept {
-			ImageViewCreateInfo ivci;
-			ivci.flags = (ImageViewCreateFlags)flags;
-			ivci.viewType = (ImageViewType)viewType;
-			ivci.components.r = (ComponentSwizzle)r_swizzle;
-			ivci.components.g = (ComponentSwizzle)g_swizzle;
-			ivci.components.b = (ComponentSwizzle)b_swizzle;
-			ivci.components.a = (ComponentSwizzle)a_swizzle;
-			ivci.subresourceRange = { .aspectMask = (ImageAspectFlags)aspectMask,
-				                        .baseMipLevel = baseMipLevel,
-				                        .levelCount = levelCount,
-				                        .baseArrayLayer = baseArrayLayer,
-				                        .layerCount = layerCount };
-			ivci.image = image;
-			ivci.format = (Format)format;
-			ivci.view_usage = (ImageUsageFlags)view_usage;
-			return ivci;
-		}
-
-		constexpr bool operator==(CompressedImageViewCreateInfo const& rhs) const noexcept = default;
-	};
-#pragma pack(pop)
-
-	using ImageView = Handle<VkImageView>;
-
-	template<>
-	struct create_info<ImageView> {
-		using type = CompressedImageViewCreateInfo;
-	};
-
 	enum class SamplerCreateFlagBits : VkSamplerCreateFlags {
 		eSubsampledEXT = VK_SAMPLER_CREATE_SUBSAMPLED_BIT_EXT,
 		eSubsampledCoarseReconstructionEXT = VK_SAMPLER_CREATE_SUBSAMPLED_COARSE_RECONSTRUCTION_BIT_EXT
@@ -460,30 +361,4 @@ namespace vuk {
 		size_t linear;
 		ImageOffset image;
 	};
-
-	struct IVCI {
-		Format format = Format::eUndefined;
-		bool allow_srgb_unorm_mutable;
-		ImageViewCreateFlags image_view_flags;
-		ImageViewType view_type;
-		ComponentMapping components;
-		ImageLayout layout = ImageLayout::eUndefined;
-
-		uint32_t base_level = VK_REMAINING_MIP_LEVELS;
-		uint32_t level_count = VK_REMAINING_MIP_LEVELS;
-
-		uint32_t base_layer = VK_REMAINING_ARRAY_LAYERS;
-		uint32_t layer_count = VK_REMAINING_ARRAY_LAYERS;
-	};
 }; // namespace vuk
-
-namespace std {
-	template<>
-	struct hash<vuk::ImageView> {
-		size_t operator()(vuk::ImageView const& x) const noexcept {
-			size_t h = 0;
-			hash_combine(h, x.id, reinterpret_cast<uint64_t>(x.payload));
-			return h;
-		}
-	};
-} // namespace std

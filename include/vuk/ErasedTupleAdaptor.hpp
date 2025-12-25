@@ -3,6 +3,7 @@
 #include <type_traits>
 
 namespace vuk {
+	struct Extent3D;
 	namespace detail {
 		template<class T>
 		struct member_type_helper;
@@ -21,7 +22,9 @@ namespace vuk {
 	} // namespace detail
 
 	template<class T>
-	struct erased_tuple_adaptor : std::false_type {};
+	struct erased_tuple_adaptor : std::false_type {
+		static_assert(!std::is_same_v<T, Extent3D>);
+	};
 
 // https://stackoverflow.com/a/44479664
 #define EVAL(...)                                                                                                          __VA_ARGS__
@@ -185,8 +188,8 @@ namespace vuk {
 		};                                                                                                                                                         \
 	}
 
-#define ADAPT_TEMPLATED_STRUCT_FOR_IR(type, ...)                                                                                                               \
-	template<class Type>                                                                                                                                         \
+#define ADAPT_TEMPLATED_STRUCT_FOR_IR(ttype, type, ...)                                                                                                        \
+	template<ttype Type>                                                                                                                                         \
 	struct erased_tuple_adaptor<type<Type>> : std::true_type {                                                                                                   \
 		using T = type<Type>;                                                                                                                                      \
 		static constexpr std::tuple members = EVAL(MAKE_INITIALIZER TRANSFORM(MEM_OBJ_ARG, (__VA_ARGS__)));                                                        \

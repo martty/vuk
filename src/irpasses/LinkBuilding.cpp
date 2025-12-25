@@ -241,11 +241,11 @@ namespace vuk {
 						add_read(node, parm, i);
 					}
 					auto& base = *arg_ty->imbued.T;
-					if (do_ssa && base->hash_value == current_module->types.builtin_image) {
-						auto def = eval<ImageAttachment>(parm);
-						if (def.holds_value() && !def->image) {
-							access_to_usage(def->usage, access);
-						}
+					if (do_ssa && base->is_imageview()) {
+						auto def = eval<ImageView<>>(parm);
+						/* if (def.holds_value() && !def->image) { // TODO : PAV : we need observe only allocates here..
+						  access_to_usage(def->usage, access);
+						}*/
 					}
 				} else {
 					assert(0); // not handling non-imbued yet

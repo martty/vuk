@@ -1,5 +1,5 @@
-#include "vuk/runtime/vk/Allocator.hpp"
 #include "vuk/Exception.hpp"
+#include "vuk/runtime/vk/Allocator.hpp"
 #include "vuk/runtime/vk/Address.hpp"
 #include "vuk/runtime/vk/PipelineInstance.hpp"
 #include "vuk/runtime/vk/Query.hpp"
@@ -85,18 +85,10 @@ namespace vuk {
 		device_resource->deallocate_memory(src);
 	}
 
-	Result<void, AllocateException> Allocator::allocate_memory_views(std::span<generic_view_base> dst, std::span<const BVCI> cis, SourceLocationAtFrame loc) {
-		return device_resource->allocate_memory_views(dst, cis, loc);
-	}
-
-	void Allocator::deallocate(std::span<const generic_view_base> src) {
-		device_resource->deallocate_memory_views(src);
-	}
-
 	/* void Allocator::set_allocation_name(Buffer& dst, Name name) {
-		device_resource->set_buffer_allocation_name(dst, name);
+	  device_resource->set_buffer_allocation_name(dst, name);
 	}*/
-	
+
 	Result<void, AllocateException> Allocator::allocate(std::span<VkFramebuffer> dst, std::span<const FramebufferCreateInfo> cis, SourceLocationAtFrame loc) {
 		return device_resource->allocate_framebuffers(dst, cis, loc);
 	}
@@ -110,32 +102,31 @@ namespace vuk {
 		device_resource->deallocate_framebuffers(src);
 	}
 
-	Result<void, AllocateException> Allocator::allocate(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException> Allocator::allocate(std::span<Image<>> dst, std::span<const ICI> cis, SourceLocationAtFrame loc) {
 		return device_resource->allocate_images(dst, cis, loc);
 	}
 
-	Result<void, AllocateException> Allocator::allocate_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException> Allocator::allocate_images(std::span<Image<>> dst, std::span<const ICI> cis, SourceLocationAtFrame loc) {
 		return device_resource->allocate_images(dst, cis, loc);
 	}
 
-	void Allocator::deallocate(std::span<const Image> src) {
+	void Allocator::deallocate(std::span<const Image<>> src) {
 		device_resource->deallocate_images(src);
 	}
 
-	void Allocator::set_allocation_name(Image& dst, Name name) {
+	void Allocator::set_allocation_name(Image<>& dst, Name name) {
 		device_resource->set_image_allocation_name(dst, name);
 	}
 
-	Result<void, AllocateException> Allocator::allocate(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException> Allocator::allocate(std::span<ImageView<>> dst, std::span<const IVCI> cis, SourceLocationAtFrame loc) {
 		return device_resource->allocate_image_views(dst, cis, loc);
 	}
 
-	Result<void, AllocateException>
-	Allocator::allocate_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException> Allocator::allocate_image_views(std::span<ImageView<>> dst, std::span<const IVCI> cis, SourceLocationAtFrame loc) {
 		return device_resource->allocate_image_views(dst, cis, loc);
 	}
 
-	void Allocator::deallocate(std::span<const ImageView> src) {
+	void Allocator::deallocate(std::span<const ImageView<>> src) {
 		device_resource->deallocate_image_views(src);
 	}
 

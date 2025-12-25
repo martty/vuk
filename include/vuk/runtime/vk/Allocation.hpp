@@ -1,21 +1,75 @@
 #pragma once
 
 #include "vuk/runtime/vk/Image.hpp"
-#include <fmt/format.h>
 #include <span>
 
 namespace vuk {
 	struct AllocationEntry;
-	struct ViewEntry;
+	struct ICI {
+		ImageCreateFlags image_flags = {};
+		ImageType image_type = ImageType::e2D;
+		ImageTiling tiling = ImageTiling::eOptimal;
+		ImageUsageFlags usage = {};
+		Extent3D extent = {};
+		Format format = Format::eUndefined;
+		Samples sample_count = Samples::eInfer;
+		bool allow_srgb_unorm_mutable = false;
+		uint32_t level_count = VK_REMAINING_MIP_LEVELS;
+		uint32_t layer_count = VK_REMAINING_ARRAY_LAYERS;
+
+		operator VkImageCreateInfo() const noexcept {
+			VkImageCreateInfo vkici{};
+			vkici.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+			vkici.pNext = nullptr;
+			vkici.flags = (VkImageCreateFlags)image_flags;
+			vkici.imageType = (VkImageType)image_type;
+			vkici.format = (VkFormat)format;
+			vkici.extent = (VkExtent3D)extent;
+			vkici.mipLevels = level_count;
+			vkici.arrayLayers = layer_count;
+			vkici.samples = (VkSampleCountFlagBits)sample_count.count;
+			vkici.tiling = (VkImageTiling)tiling;
+			vkici.usage = (VkImageUsageFlags)usage;
+			vkici.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+			vkici.queueFamilyIndexCount = 0;
+			vkici.pQueueFamilyIndices = nullptr;
+			vkici.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			return vkici;
+		}
+
+		bool operator==(const ICI& o) const noexcept = default;
+	};
+
+	struct ImageEntry : ICI {
+		VkImage image;
+		void* allocation;
+		std::vector<uint32_t> image_view_indices;
+	};
+	struct ImageViewEntry;
+
+	template<Format format = Format::eUndefined>
+	struct ImageLike : std::integral_constant<Format, format> {};
 
 	struct Resolver {
 		inline static thread_local Resolver* per_thread;
 
-		void commit(uint64_t base, size_t size, AllocationEntry& ae);
+		Resolver();
+		~Resolver();
+
+		Resolver(const Resolver&) = delete;
+		Resolver& operator=(const Resolver&) = delete;
+
+		Resolver(Resolver&&) noexcept;
+		Resolver& operator=(Resolver&&) noexcept;
+
+		void commit(uint64_t base, size_t size, AllocationEntry ae);
 		void decommit(uint64_t base, size_t size);
 
-		void add_generic_view(uint64_t key, ViewEntry& ve);
-		void remove_generic_view(uint64_t key);
+		uint64_t add_image(ImageEntry ve);
+		void remove_image(uint64_t key);
+
+		uint32_t add_image_view(ImageViewEntry ve);
+		void remove_image_view(uint32_t key);
 
 		struct BufferWithOffset {
 			VkBuffer buffer;
@@ -28,18 +82,23 @@ namespace vuk {
 
 		AllocationEntry& resolve_ptr(ptr_base ptr);
 		BufferWithOffset ptr_to_buffer_offset(ptr_base ptr);
-		ViewEntry& resolve_view(generic_view_base view);
+		ImageEntry& resolve_image(ptr_base ptr);
+		ImageViewEntry& resolve_image_view(uint32_t view_key);
+
 		void install_as_thread_resolver();
+		void install_resolver_callbacks(VkDevice device, PFN_vkCreateImageView create_fn, PFN_vkDestroyImageView destroy_fn);
 
-		RadixTree<AllocationEntry> allocations;
-		RadixTree<ViewEntry> memory_views;
+		// Debug/testing accessors
+		size_t get_image_count() const;
+		size_t get_active_image_view_count() const;
+
+	private:
+		struct ResolverImpl* impl;
 	};
-
-	template<Format f>
-	struct FormatT {};
 
 	template<class Type = byte>
 	struct ptr : ptr_base {
+		static constexpr bool imagelike = false;
 		using pointed_T = Type;
 		using UnwrappedT = detail::unwrap<Type>::T;
 
@@ -90,55 +149,6 @@ namespace vuk {
 
 	template<class T>
 	using Unique_ptr = Unique<ptr<T>>;
-
-	template<class Type = void, size_t Extent = dynamic_extent>
-	struct view : generic_view_base {
-		auto& operator[](size_t index)
-		  requires(!std::is_same_v<Type, void>)
-		{
-			if ((key & 0x3) == 0) { // generic memory view
-				auto& ve = Resolver::per_thread->resolve_view(*this);
-				assert(index < ve.buffer.count);
-				return static_cast<ptr<Type>>(ve.ptr)[index];
-			} else if ((key & 0x3) == 0x2) { // specific memory view
-				return reinterpret_cast<view<BufferLike<Type>>*>(key & ~0x3)->operator[](index);
-			}
-		}
-
-		const auto& operator[](size_t index) const
-		  requires(!std::is_same_v<Type, void>)
-		{
-			if ((key & 0x3) == 0) { // generic memory view
-				auto& ve = Resolver::per_thread->resolve_view(*this);
-				assert(index < ve.buffer.count);
-				return static_cast<ptr<Type>>(ve.ptr)[index];
-			} else if ((key & 0x3) == 0x2) { // specific memory view
-				return reinterpret_cast<const view<BufferLike<Type>>*>(key & ~0x3)->operator[](index);
-			}
-		}
-
-		size_t size_bytes() const {
-			if ((key & 0x3) == 0) { // generic memory view
-				auto& ve = Resolver::per_thread->resolve_view(*this);
-				return ve.buffer.count * ve.buffer.elem_size;
-			} else if ((key & 0x3) == 0x2) { // specific memory view
-				return reinterpret_cast<view<BufferLike<Type>>*>(key & ~0x3)->size_bytes();
-			}
-		}
-
-		size_t count() const noexcept {
-			return size_bytes() / sizeof(Type);
-		}
-
-		auto& data() {
-			if ((key & 0x3) == 0) { // generic memory view
-				auto& ve = Resolver::per_thread->resolve_view(*this);
-				return static_cast<ptr<Type>&>(ve.ptr);
-			} else if ((key & 0x3) == 0x2) { // specific memory view
-				return reinterpret_cast<view<BufferLike<Type>>*>(key & ~0x3)->ptr;
-			}
-		}
-	};
 
 	/// @brief Buffer creation parameters
 	struct BufferCreateInfo {
@@ -195,9 +205,7 @@ namespace vuk {
 		}
 	}
 
-	inline std::string format_as(const BufferCreateInfo& foo) {
-		return fmt::format("BufferCreateInfo{{{}, {}}}", foo.memory_usage, foo.size);
-	}
+	std::string format_as(const BufferCreateInfo& foo);
 
 	/// @brief A contiguous portion of GPU-visible memory
 	// fixed extent
@@ -252,7 +260,7 @@ namespace vuk {
 		}
 
 		/// @brief Create a new view that is a subset of the original
-		[[nodiscard]] view<BufferLike<Type>> subview(VkDeviceSize offset, VkDeviceSize new_count = ~(0ULL)) const {
+		[[nodiscard]] view<BufferLike<Type>, dynamic_extent> subview(VkDeviceSize offset, VkDeviceSize new_count = ~(0ULL)) const {
 			if (new_count == ~0ULL) {
 				new_count = count() - offset;
 			} else {
@@ -320,7 +328,7 @@ namespace vuk {
 			return sz_bytes / sizeof(Type);
 		}
 
-		[[nodiscard]] view<BufferLike<byte>> to_byte_view() const noexcept {
+		[[nodiscard]] view<BufferLike<byte>, dynamic_extent> to_byte_view() const noexcept {
 			return { vuk::ptr<BufferLike<byte>>{ ptr.device_address }, sz_bytes };
 		}
 
@@ -355,9 +363,11 @@ namespace vuk {
 		std::strong_ordering operator<=>(const view<BufferLike<Type>, dynamic_extent>&) const noexcept = default;
 	};
 
+	std::string format_as(const view<BufferLike<byte>, dynamic_extent>& foo);
+
 	template<class Type>
 	std::string format_as(const view<BufferLike<Type>, dynamic_extent>& foo) {
-		return fmt::format("buffer[{:x}:{}]", foo.ptr.device_address, foo.sz_bytes);
+		return format_as(foo.to_byte_view());
 	}
 
 	template<class T, size_t Extent>
@@ -379,6 +389,398 @@ namespace vuk {
 		Format format = Format::eUndefined;
 	};
 
+	/* struct ImageConstraints {
+	  Format format = Format::eUndefined;
+	  Samples samples = Samples::eInfer;
+	};*/
+
+	template<Format f>
+	struct ptr<ImageLike<f>> : ptr_base {
+		static constexpr bool imagelike = true;
+		using pointed_T = ImageLike<f>;
+		using UnwrappedT = detail::unwrap<ImageLike<f>>::T;
+
+		view<ImageLike<f>, dynamic_extent> default_view() {
+			auto& ie = Resolver::per_thread->resolve_image(*this);
+			return view<ImageLike<f>, dynamic_extent>{ ie.image_view_indices[0] };
+		}
+	};
+
+	template<Format f = {}>
+	using Image = ptr<ImageLike<f>>;
+
+	template<Format f>
+	struct create_info<Image<f>> {
+		using type = ImageCreateInfo;
+	};
+
+	/*
+	* 		Image<> image;
+	  Format format = Format::eUndefined;
+	  bool allow_srgb_unorm_mutable;
+	  ImageViewCreateFlags image_view_flags;
+	  ImageViewType view_type;
+	  ComponentMapping components;
+	  ImageLayout layout = ImageLayout::eUndefined;
+	  ImageUsageFlags view_usage = {};
+
+	  uint32_t base_level = VK_REMAINING_MIP_LEVELS;
+	  uint32_t level_count = VK_REMAINING_MIP_LEVELS;
+
+	  uint32_t base_layer = VK_REMAINING_ARRAY_LAYERS;
+	  uint32_t layer_count = VK_REMAINING_ARRAY_LAYERS;*/
+
+#pragma pack(push, 1)
+	struct IVCI {
+		uint32_t image_view_flags : 2;
+		uint32_t allow_srgb_unorm_mutable : 1 = false;
+		ImageViewType view_type : 3 = ImageViewType::e2D;
+		ComponentSwizzle r_swizzle : 3 = ComponentSwizzle::eIdentity;
+		ComponentSwizzle g_swizzle : 3 = ComponentSwizzle::eIdentity;
+		ComponentSwizzle b_swizzle : 3 = ComponentSwizzle::eIdentity;
+		ComponentSwizzle a_swizzle : 3 = ComponentSwizzle::eIdentity;
+		uint32_t padding : 4 = 0;
+		uint16_t base_level = 0xffff;
+		uint16_t level_count = 0xffff;
+		uint16_t base_layer = 0xffff;
+		uint16_t layer_count = 0xffff;
+		VkImageUsageFlags view_usage : 10;  // 8 bytes
+		Image<> image = {};                 // 16 bytes
+		Format format = Format::eUndefined; // 32 bytes in total
+
+		static IVCI from(ImageViewCreateInfo ivci) {
+			assert(ivci.pNext == nullptr && "Compression does not support pNextended IVCIs");
+			IVCI to;
+			to.image_view_flags = ivci.flags.m_mask;
+			to.view_type = ivci.viewType;
+			to.r_swizzle = ivci.components.r;
+			to.g_swizzle = ivci.components.g;
+			to.b_swizzle = ivci.components.b;
+			to.a_swizzle = ivci.components.a;
+			to.base_level = ivci.subresourceRange.baseMipLevel;
+			to.level_count = ivci.subresourceRange.levelCount;
+			to.base_layer = ivci.subresourceRange.baseArrayLayer;
+			to.layer_count = ivci.subresourceRange.layerCount;
+			to.format = ivci.format;
+			to.view_usage = (VkImageUsageFlags)ivci.view_usage;
+			return to;
+		}
+
+		explicit operator ImageViewCreateInfo() const noexcept {
+			ImageViewCreateInfo ivci;
+			ivci.flags = (ImageViewCreateFlags)image_view_flags;
+			ivci.viewType = (ImageViewType)view_type;
+			ivci.components.r = (ComponentSwizzle)r_swizzle;
+			ivci.components.g = (ComponentSwizzle)g_swizzle;
+			ivci.components.b = (ComponentSwizzle)b_swizzle;
+			ivci.components.a = (ComponentSwizzle)a_swizzle;
+			ivci.subresourceRange = { .aspectMask = (ImageAspectFlags)format_to_aspect(format),
+				                        .baseMipLevel = base_level,
+				                        .levelCount = level_count,
+				                        .baseArrayLayer = base_layer,
+				                        .layerCount = layer_count };
+			ivci.image = Resolver::per_thread->resolve_image(image).image;
+			ivci.format = (Format)format;
+			ivci.view_usage = (ImageUsageFlags)view_usage;
+			return ivci;
+		}
+
+		constexpr bool operator==(IVCI const& rhs) const noexcept = default;
+	};
+#pragma pack(pop)
+
+	/// @brief Mip chain configuration for images
+	enum class MipPreset : uint32_t {
+		eNoMips = 0,         // No mip chain
+		eFullMips = 1 << 16, // Full mip chain
+	};
+
+	constexpr inline MipPreset operator|(MipPreset a, MipPreset b) {
+		return static_cast<MipPreset>(static_cast<uint32_t>(a) | static_cast<uint32_t>(b));
+	}
+
+	constexpr inline MipPreset operator&(MipPreset a, MipPreset b) {
+		return static_cast<MipPreset>(static_cast<uint32_t>(a) & static_cast<uint32_t>(b));
+	}
+
+	constexpr inline bool operator!(MipPreset a) {
+		return static_cast<uint32_t>(a) == 0;
+	}
+
+	/// @brief Usage flags for images
+	enum class UsagePreset : uint32_t {
+		eNone = 0,          // No usage
+		eUpload = 1 << 0,   // Can be uploaded to
+		eDownload = 1 << 1, // Can be downloaded from
+		eCopy = 1 << 2,     // Can be used as copy source/destination
+		eRender = 1 << 3,   // Can be rendered to (render target)
+		eStore = 1 << 4,    // Can be stored to (storage image)
+		eSampled = 1 << 5,  // Can be sampled from
+	};
+
+	constexpr inline UsagePreset operator|(UsagePreset a, UsagePreset b) {
+		return static_cast<UsagePreset>(static_cast<uint32_t>(a) | static_cast<uint32_t>(b));
+	}
+
+	constexpr inline UsagePreset operator&(UsagePreset a, UsagePreset b) {
+		return static_cast<UsagePreset>(static_cast<uint32_t>(a) & static_cast<uint32_t>(b));
+	}
+
+	constexpr inline UsagePreset& operator|=(UsagePreset& a, UsagePreset b) {
+		a = a | b;
+		return a;
+	}
+
+	constexpr inline bool operator!(UsagePreset a) {
+		return static_cast<uint32_t>(a) == 0;
+	}
+
+	/// @brief Dimensionality preset for images
+	enum class DimensionalityPreset : uint32_t {
+		e2D = 0,        // 2D image
+		e1D = 1 << 8,   // 1D image
+		e3D = 2 << 8,   // 3D image
+		eCube = 3 << 8, // Cube image
+	};
+
+	constexpr inline DimensionalityPreset operator|(DimensionalityPreset a, DimensionalityPreset b) {
+		return static_cast<DimensionalityPreset>(static_cast<uint32_t>(a) | static_cast<uint32_t>(b));
+	}
+
+	constexpr inline DimensionalityPreset operator&(DimensionalityPreset a, DimensionalityPreset b) {
+		return static_cast<DimensionalityPreset>(static_cast<uint32_t>(a) & static_cast<uint32_t>(b));
+	}
+
+	/// @brief Common image configuration presets combining usage and mip settings
+	enum class Preset : uint32_t {
+		eMap1D = static_cast<uint32_t>(UsagePreset::eUpload | UsagePreset::eSampled) | static_cast<uint32_t>(DimensionalityPreset::e1D) |
+		         static_cast<uint32_t>(MipPreset::eFullMips), // 1D image with upload, sampled, never rendered to. Full mip chain. No arraying.
+		eMap2D = static_cast<uint32_t>(UsagePreset::eUpload | UsagePreset::eSampled) | static_cast<uint32_t>(DimensionalityPreset::e2D) |
+		         static_cast<uint32_t>(MipPreset::eFullMips), // 2D image with upload, sampled, never rendered to. Full mip chain. No arraying.
+		eMap3D = static_cast<uint32_t>(UsagePreset::eUpload | UsagePreset::eSampled) | static_cast<uint32_t>(DimensionalityPreset::e3D) |
+		         static_cast<uint32_t>(MipPreset::eFullMips), // 3D image with upload, sampled, never rendered to. Full mip chain. No arraying.
+		eMapCube = static_cast<uint32_t>(UsagePreset::eUpload | UsagePreset::eSampled) | static_cast<uint32_t>(DimensionalityPreset::eCube) |
+		           static_cast<uint32_t>(MipPreset::eFullMips), // Cubemap with upload, sampled, never rendered to. Full mip chain. No arraying.
+		eRTT2D = static_cast<uint32_t>(UsagePreset::eSampled | UsagePreset::eRender) | static_cast<uint32_t>(DimensionalityPreset::e2D) |
+		         static_cast<uint32_t>(MipPreset::eFullMips), // 2D image sampled and rendered to. Full mip chain. No arraying.
+		eRTTCube = static_cast<uint32_t>(UsagePreset::eSampled | UsagePreset::eRender) | static_cast<uint32_t>(DimensionalityPreset::eCube) |
+		           static_cast<uint32_t>(MipPreset::eFullMips), // Cubemap sampled and rendered to. Full mip chain. No arraying.
+		eRTT2DUnmipped = static_cast<uint32_t>(UsagePreset::eSampled | UsagePreset::eRender) | static_cast<uint32_t>(DimensionalityPreset::e2D) |
+		                 static_cast<uint32_t>(MipPreset::eNoMips), // 2D image sampled and rendered to. No mip chain. No arraying.
+		eSTT2D = static_cast<uint32_t>(UsagePreset::eSampled | UsagePreset::eStore) | static_cast<uint32_t>(DimensionalityPreset::e2D) |
+		         static_cast<uint32_t>(MipPreset::eFullMips), // 2D image sampled and stored to. Full mip chain. No arraying.
+		eSTT2DUnmipped = static_cast<uint32_t>(UsagePreset::eSampled | UsagePreset::eStore) | static_cast<uint32_t>(DimensionalityPreset::e2D) |
+		                 static_cast<uint32_t>(MipPreset::eNoMips), // 2D image sampled and stored to. No mip chain. No arraying.
+		eGeneric2D = static_cast<uint32_t>(UsagePreset::eUpload | UsagePreset::eDownload | UsagePreset::eSampled | UsagePreset::eRender | UsagePreset::eStore) |
+		             static_cast<uint32_t>(DimensionalityPreset::e2D) |
+		             static_cast<uint32_t>(MipPreset::eFullMips), // 2D image with upload, download, sampling, rendering and storing. Full mip chain. No arraying.
+	};
+
+	// Utility functions for decomposing Preset
+	inline MipPreset get_mip_preset(Preset preset) {
+		return static_cast<MipPreset>(static_cast<uint32_t>(preset) & 0xFFFF0000);
+	}
+
+	inline UsagePreset get_usage_preset(Preset preset) {
+		return static_cast<UsagePreset>(static_cast<uint32_t>(preset) & 0x00FF);
+	}
+
+	inline DimensionalityPreset get_dimensionality_preset(Preset preset) {
+		return static_cast<DimensionalityPreset>(static_cast<uint32_t>(preset) & 0x0300);
+	}
+
+	inline Preset make_preset(UsagePreset usage, MipPreset mip, DimensionalityPreset dim = DimensionalityPreset::e2D) {
+		return static_cast<Preset>(static_cast<uint32_t>(usage) | static_cast<uint32_t>(dim) | static_cast<uint32_t>(mip));
+	}
+
+	static ICI from_preset(Preset preset, Format format, Extent3D extent, Samples sample_count) {
+		ICI ici = {};
+		ici.format = format;
+		ici.extent = extent;
+		ici.sample_count = sample_count.count;
+
+		UsagePreset usage_preset = get_usage_preset(preset);
+		MipPreset mip_preset = get_mip_preset(preset);
+		DimensionalityPreset dim_preset = get_dimensionality_preset(preset);
+
+		// Set usage flags based on usage preset
+		if (!!(usage_preset & UsagePreset::eUpload)) {
+			ici.usage |= ImageUsageFlagBits::eTransferDst;
+		}
+		if (!!(usage_preset & UsagePreset::eDownload)) {
+			ici.usage |= ImageUsageFlagBits::eTransferSrc;
+		}
+		if (!!(usage_preset & UsagePreset::eCopy)) {
+			ici.usage |= ImageUsageFlagBits::eTransferSrc | ImageUsageFlagBits::eTransferDst;
+		}
+		if (!!(usage_preset & UsagePreset::eSampled)) {
+			ici.usage |= ImageUsageFlagBits::eSampled;
+		}
+		if (!!(usage_preset & UsagePreset::eRender)) {
+			ImageAspectFlags aspect = format_to_aspect(format);
+			if (!!(aspect & ImageAspectFlagBits::eColor)) {
+				ici.usage |= ImageUsageFlagBits::eColorAttachment;
+			}
+			if (!!(aspect & (ImageAspectFlagBits::eDepth | ImageAspectFlagBits::eStencil))) {
+				ici.usage |= ImageUsageFlagBits::eDepthStencilAttachment;
+			}
+		}
+		if (!!(usage_preset & UsagePreset::eStore)) {
+			ici.usage |= ImageUsageFlagBits::eStorage;
+		}
+
+		// Set mip levels based on mip preset
+		const uint32_t max_mips = (uint32_t)log2f((float)std::max(std::max(extent.width, extent.height), extent.depth)) + 1;
+		if (!!(mip_preset & MipPreset::eFullMips)) {
+			ici.level_count = max_mips;
+		} else {
+			ici.level_count = 1;
+		}
+
+		// Set image type and array layers based on dimensionality preset
+		switch (dim_preset) {
+		case DimensionalityPreset::e1D:
+			ici.image_type = ImageType::e1D;
+			ici.layer_count = 1;
+			break;
+		case DimensionalityPreset::e2D:
+			ici.image_type = ImageType::e2D;
+			ici.layer_count = 1;
+			break;
+		case DimensionalityPreset::e3D:
+			ici.image_type = ImageType::e3D;
+			ici.layer_count = 1;
+			break;
+		case DimensionalityPreset::eCube:
+			ici.image_type = ImageType::e2D;
+			ici.layer_count = 6;
+			ici.image_flags = ImageCreateFlagBits::eCubeCompatible;
+			break;
+		default:
+			assert(0);
+		}
+
+		return ici;
+	}
+
+	struct ImageViewEntry : IVCI {
+		VkImageView api_view;
+		size_t id;
+		Extent3D extent;
+		Samples sample_count;
+		ImageLayout layout;
+		size_t hash;
+	};
+
+	std::string format_as(const ImageViewEntry& entry);
+
+	template<Format f>
+	struct view<ImageLike<f>, dynamic_extent> {
+		static constexpr auto constraints = f;
+
+		uint32_t view_key = 0;
+
+		view() = default;
+		explicit view<ImageLike<f>, dynamic_extent>(uint32_t view_key) noexcept : view_key(view_key) {}
+
+		explicit operator bool() const noexcept {
+			return view_key != 0;
+		}
+
+		ImageViewEntry* operator->() const noexcept {
+			return &Resolver::per_thread->resolve_image_view(view_key);
+		}
+
+		ImageViewEntry& get_meta() const noexcept {
+			return Resolver::per_thread->resolve_image_view(view_key);
+		}
+
+		Format format() const noexcept {
+			return get_meta().format;
+		}
+
+		view<ImageLike<f>, dynamic_extent> mip(uint32_t mip) const noexcept {
+			auto a = get_meta();
+			a.base_level = (a.base_level == VK_REMAINING_MIP_LEVELS ? 0 : a.base_level) + mip;
+			a.level_count = 1;
+			a.api_view = VK_NULL_HANDLE;
+			return view<ImageLike<f>, dynamic_extent>{ Resolver::per_thread->add_image_view(a) };
+		}
+
+		view<ImageLike<f>, dynamic_extent> mip_range(uint32_t mip_base, uint32_t mip_count) const noexcept {
+			auto a = get_meta();
+			a.base_level = (a.base_level == VK_REMAINING_MIP_LEVELS ? 0 : a.base_level) + mip_base;
+			a.level_count = mip_count;
+			a.api_view = VK_NULL_HANDLE;
+			return view<ImageLike<f>, dynamic_extent>{ Resolver::per_thread->add_image_view(a) };
+		}
+
+		view<ImageLike<f>, dynamic_extent> layer(uint32_t layer) const {
+			auto a = get_meta();
+			a.base_layer = (a.base_layer == VK_REMAINING_ARRAY_LAYERS ? 0 : a.base_layer) + layer;
+			a.layer_count = 1;
+			a.api_view = VK_NULL_HANDLE;
+			return view<ImageLike<f>, dynamic_extent>{ Resolver::per_thread->add_image_view(a) };
+		}
+
+		view<ImageLike<f>, dynamic_extent> layer_range(uint32_t layer_base, uint32_t layer_count) const noexcept {
+			auto a = get_meta();
+			a.base_layer = (a.base_layer == VK_REMAINING_ARRAY_LAYERS ? 0 : a.base_layer) + layer_base;
+			a.layer_count = layer_count;
+			a.api_view = VK_NULL_HANDLE;
+			return view<ImageLike<f>, dynamic_extent>{ Resolver::per_thread->add_image_view(a) };
+		}
+
+		Extent3D base_mip_extent() const noexcept {
+			auto& ve = get_meta();
+			auto& extent = ve.extent;
+			auto base_level = ve.base_level;
+			return { std::max(1u, extent.width >> base_level), std::max(1u, extent.height >> base_level), std::max(1u, extent.depth >> base_level) };
+		}
+
+		std::strong_ordering operator<=>(const view<ImageLike<f>, dynamic_extent>&) const noexcept = default;
+	};
+
+	template<Format f = {}>
+	using ImageView = view<ImageLike<f>, dynamic_extent>;
+
+	template<Format f>
+	struct is_imagelike_view_type<view<ImageLike<f>>> {
+		static constexpr bool value = true;
+	};
+
+	std::string format_as(const ImageView<Format::eUndefined>& foo);
+	/*
+	template<Format f>
+	std::string format_as(const ImageView<f>& foo) {
+	  return fmt::format("iv[{}]", foo.view_key);
+	}*/
+
+	template<Format f>
+	struct create_info<ImageView<f>> {
+		using type = IVCI;
+	};
+
+	template<Format f = {}>
+	void synchronize(ImageView<f>, struct SyncHelper&);
+
+	struct ImageWithIdentity {
+		Image<> image;
+	};
+
+	struct CachedImageIdentifier {
+		ICI ici;
+		uint32_t id;
+		uint32_t multi_frame_index;
+
+		bool operator==(const CachedImageIdentifier&) const = default;
+	};
+
+	template<>
+	struct create_info<ImageWithIdentity> {
+		using type = CachedImageIdentifier;
+	};
+
 	struct AllocationEntry {
 		byte* host_ptr;
 		union {
@@ -387,11 +789,7 @@ namespace vuk {
 				size_t offset;
 				uint64_t base_address;
 			} buffer = {};
-			struct : ImageCreateInfo {
-				VkImage image;
-			} image;
 		};
-		struct ViewEntry* default_view;
 		VkDeviceMemory device_memory;
 		void* allocation;
 		// enum class PTEFlags {} flags;
@@ -400,24 +798,6 @@ namespace vuk {
 	struct BVCI {
 		ptr_base ptr;
 		BufferViewCreateInfo vci;
-	};
-
-	struct IVCI2 {
-		ptr_base ptr;
-		IVCI vci;
-	};
-
-	struct ViewEntry {
-		ptr_base ptr;
-		Offset size;
-		union {
-			struct : BufferViewCreateInfo {
-			} buffer;
-			struct : IVCI {
-				VkImageView view;
-			} image;
-		};
-		// enum class ViewEntryFlags {} flags;
 	};
 } // namespace vuk
 
@@ -430,4 +810,20 @@ namespace std {
 			return v;
 		}
 	};
-}; // namespace std
+
+	template<vuk::Format f>
+	struct hash<vuk::ImageView<f>> {
+		size_t operator()(vuk::ImageView<f> const& x) const noexcept {
+			return std::hash<uint64_t>()(x.view_key);
+		}
+	};
+
+	template<>
+	struct hash<vuk::ImageViewEntry> {
+		size_t operator()(vuk::ImageViewEntry const& x) const noexcept {
+			size_t h = 0;
+			hash_combine(h, x.image.device_address, x.format, x.view_type, x.base_level, x.level_count, x.base_layer, x.layer_count, x.view_usage);
+			return h;
+		}
+	};
+} // namespace std

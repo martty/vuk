@@ -31,26 +31,22 @@ namespace vuk {
 		Result<void, AllocateException> allocate_memory(std::span<ptr_base> dst, std::span<const BufferCreateInfo> cis, SourceLocationAtFrame loc) override;
 		void deallocate_memory(std::span<const ptr_base> dst) override;
 
-		Result<void, AllocateException> allocate_memory_views(std::span<generic_view_base> dst, std::span<const BVCI> cis, SourceLocationAtFrame loc) override;
-		void deallocate_memory_views(std::span<const generic_view_base> dst) override;
+		// void set_buffer_allocation_name(Buffer& dst, Name name) override final;
 
-		//void set_buffer_allocation_name(Buffer& dst, Name name) override final;
-				
 		Result<void, AllocateException>
 		allocate_framebuffers(std::span<VkFramebuffer> dst, std::span<const FramebufferCreateInfo> cis, SourceLocationAtFrame loc) override;
 
 		void deallocate_framebuffers(std::span<const VkFramebuffer> src) override;
 
-		Result<void, AllocateException> allocate_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc) override;
+		Result<void, AllocateException> allocate_images(std::span<Image<>> dst, std::span<const ICI> cis, SourceLocationAtFrame loc) override;
 
-		void deallocate_images(std::span<const Image> src) override;
+		void deallocate_images(std::span<const Image<>> src) override;
 
-		void set_image_allocation_name(Image& dst, Name name) override final;
+		void set_image_allocation_name(Image<>& dst, Name name) override final;
 
-		Result<void, AllocateException>
-		allocate_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc) override;
+		Result<void, AllocateException> allocate_image_views(std::span<ImageView<>> dst, std::span<const IVCI> cis, SourceLocationAtFrame loc) override;
 
-		void deallocate_image_views(std::span<const ImageView> src) override;
+		void deallocate_image_views(std::span<const ImageView<>> src) override;
 
 		Result<void, AllocateException> allocate_persistent_descriptor_sets(std::span<PersistentDescriptorSet> dst,
 		                                                                    std::span<const PersistentDescriptorSetCreateInfo> cis,

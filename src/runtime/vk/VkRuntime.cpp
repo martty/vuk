@@ -189,6 +189,9 @@ namespace vuk {
 			default_descriptor_set_strategy = DescriptorSetStrategyFlagBits::ePushDescriptor;
 		}
 
+		// Set up Resolver function pointers for image view management
+		install_resolver_callbacks(device, vkCreateImageView, vkDestroyImageView);
+
 		install_as_thread_resolver();
 	}
 
@@ -237,14 +240,14 @@ namespace vuk {
 		this->vkCmdEndDebugUtilsLabelEXT(cb);
 	}
 
-	void PersistentDescriptorSet::update_combined_image_sampler(unsigned binding, unsigned array_index, ImageView iv, Sampler sampler, ImageLayout layout) {
+	void PersistentDescriptorSet::update_combined_image_sampler(unsigned binding, unsigned array_index, ImageView<> iv, Sampler sampler, ImageLayout layout) {
 		assert(binding < descriptor_bindings.size());
 		assert(array_index < descriptor_bindings[binding].size());
 		descriptor_bindings[binding][array_index].image = DescriptorImageInfo(sampler, iv, layout);
 		descriptor_bindings[binding][array_index].type = (DescriptorType)((uint8_t)DescriptorType::eCombinedImageSampler | (uint8_t)DescriptorType::ePendingWrite);
 	}
 
-	void PersistentDescriptorSet::update_storage_image(unsigned binding, unsigned array_index, ImageView iv) {
+	void PersistentDescriptorSet::update_storage_image(unsigned binding, unsigned array_index, ImageView<> iv) {
 		assert(binding < descriptor_bindings.size());
 		assert(array_index < descriptor_bindings[binding].size());
 		descriptor_bindings[binding][array_index].image = DescriptorImageInfo({}, iv, ImageLayout::eGeneral);
@@ -270,11 +273,11 @@ namespace vuk {
 	void PersistentDescriptorSet::update_sampler(unsigned binding, unsigned array_index, Sampler sampler) {
 		assert(binding < descriptor_bindings.size());
 		assert(array_index < descriptor_bindings[binding].size());
-		descriptor_bindings[binding][array_index].image = DescriptorImageInfo(sampler, {}, {});
+		descriptor_bindings[binding][array_index].image = DescriptorImageInfo(sampler);
 		descriptor_bindings[binding][array_index].type = (DescriptorType)((uint8_t)DescriptorType::eSampler | (uint8_t)DescriptorType::ePendingWrite);
 	}
 
-	void PersistentDescriptorSet::update_sampled_image(unsigned binding, unsigned array_index, ImageView iv, ImageLayout layout) {
+	void PersistentDescriptorSet::update_sampled_image(unsigned binding, unsigned array_index, ImageView<> iv, ImageLayout layout) {
 		assert(binding < descriptor_bindings.size());
 		assert(array_index < descriptor_bindings[binding].size());
 		descriptor_bindings[binding][array_index].image = DescriptorImageInfo({}, iv, layout);
@@ -469,9 +472,9 @@ namespace vuk {
 	}
 
 	bool Runtime::load_pipeline_cache(std::span<std::byte> data) {
-		VkPipelineCacheCreateInfo pcci{ .sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO, .initialDataSize = data.size_bytes(), .pInitialData = data.data() };
+		VkPipelineCacheCreateInfo pCCI{ .sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO, .initialDataSize = data.size_bytes(), .pInitialData = data.data() };
 		this->vkDestroyPipelineCache(device, vk_pipeline_cache, nullptr);
-		this->vkCreatePipelineCache(device, &pcci, nullptr, &vk_pipeline_cache);
+		this->vkCreatePipelineCache(device, &pCCI, nullptr, &vk_pipeline_cache);
 		return true;
 	}
 
@@ -799,16 +802,25 @@ namespace vuk {
 		semaphores.resize(image_count);
 		allocator.allocate_semaphores(std::span(semaphores));
 		for (auto i = 0; i < images.size(); i++) {
-			ImageAttachment ia;
-			ia.extent = { extent.width, extent.height, 1 };
-			ia.format = (Format)format;
-			ia.image = Image{ images[i], nullptr };
-			ia.image_view = ImageView{ { 0 }, views[i] };
-			ia.view_type = ImageViewType::e2D;
-			ia.sample_count = Samples::e1;
-			ia.base_level = ia.base_layer = 0;
-			ia.level_count = ia.layer_count = 1;
-			this->images.push_back(ia);
+			ImageEntry ie{};
+			ie.format = (Format)format;
+			ie.extent = { extent.width, extent.height, 1 };
+			ie.sample_count = Samples::e1;
+			ie.image = images[i];
+			ie.allocation = nullptr;
+
+			auto image = Image<>{ alloc.get_context().add_image(ie) };
+			IVCI ivci{
+				.view_type = ImageViewType::e2D,
+				.base_level = 0,
+				.level_count = 1,
+				.base_layer = 0,
+				.layer_count = 1,
+				.image = image,
+				.format = (Format)format,
+			};
+			auto image_view = ImageView<>{ alloc.get_context().add_image_view({ ImageViewEntry{ ivci, views[i], ~0ULL } }) };
+			this->images.push_back(image_view);
 		}
 	}
 
@@ -817,7 +829,7 @@ namespace vuk {
 			allocator.deallocate(std::span{ &swapchain, 1 });
 		}
 		for (auto& i : images) {
-			allocator.deallocate(std::span{ &i.image_view, 1 });
+			allocator.deallocate(std::span{ &i, 1 });
 		}
 		allocator.deallocate(std::span(semaphores));
 	}
@@ -844,47 +856,190 @@ namespace vuk {
 		return *this;
 	}
 
+	struct ResolverImpl {
+		vuk::RadixTree<vuk::AllocationEntry> allocations;
+		plf::colony<vuk::ImageEntry> images;
+		std::mutex images_mtx;
+		std::vector<vuk::ImageViewEntry> image_views;
+		std::vector<uint32_t> image_view_freelist;
+
+		// Function pointers for creating and destroying image views
+		PFN_vkCreateImageView create_image_view_fn = nullptr;
+		PFN_vkDestroyImageView destroy_image_view_fn = nullptr;
+		VkDevice device = VK_NULL_HANDLE;
+
+		std::atomic<size_t> iv_id_counter = 1;
+	};
+
 	void Resolver::install_as_thread_resolver() {
 		Resolver::per_thread = this;
 	}
 
+	Resolver::Resolver() : impl(new ResolverImpl) {
+		impl->image_views.push_back(ImageViewEntry{}); // reserve index 0
+	}
+
+	Resolver::~Resolver() {
+		delete impl;
+	}
+
+	Resolver::Resolver(Resolver&& other) noexcept : impl(other.impl) {
+		other.impl = nullptr;
+	}
+
+	Resolver& Resolver::operator=(Resolver&& other) noexcept {
+		if (this != &other) {
+			delete impl;
+			impl = other.impl;
+			other.impl = nullptr;
+		}
+		return *this;
+	}
+
+	void Resolver::install_resolver_callbacks(VkDevice device, PFN_vkCreateImageView create_fn, PFN_vkDestroyImageView destroy_fn) {
+		impl->device = device;
+		impl->create_image_view_fn = create_fn;
+		impl->destroy_image_view_fn = destroy_fn;
+	}
+
 	AllocationEntry& Resolver::resolve_ptr(ptr_base ptr) {
-		auto p = allocations.find(ptr.device_address);
+		auto p = impl->allocations.find(ptr.device_address);
 		assert(p);
 		return *p;
 	}
 
 	Resolver::BufferWithOffset Resolver::ptr_to_buffer_offset(ptr_base ptr) {
-		auto p = allocations.find(ptr.device_address);
+		auto p = impl->allocations.find(ptr.device_address);
 		assert(p);
 		Resolver::BufferWithOffset bwo{ p->buffer.buffer, p->buffer.offset };
 		bwo.offset += ptr.device_address - p->buffer.base_address;
 		return bwo;
 	}
 
-	ViewEntry& Resolver::resolve_view(generic_view_base v) {
-		if ((v.key & 0x3) == 0) { // a generic memory view
-			auto p = memory_views.find(v.key);
-			assert(p);
-			return *p;
-		}
-		assert(false);
-	}
-
-	void Resolver::commit(uint64_t base, size_t size, AllocationEntry& ae) {
-		allocations.insert_unaligned(base, size, ae);
+	void Resolver::commit(uint64_t base, size_t size, AllocationEntry ae) {
+		impl->allocations.insert_unaligned(base, size, ae);
 	}
 
 	void Resolver::decommit(uint64_t base, size_t size) {
-		allocations.erase_unaligned(base, size);
+		impl->allocations.erase_unaligned(base, size);
 	}
 
-	void Resolver::add_generic_view(uint64_t key, ViewEntry& ae) {
-		memory_views.insert_unaligned(key, 1, ae);
+	uint64_t Resolver::add_image(ImageEntry ve) {
+		std::lock_guard _(impl->images_mtx);
+		auto it = impl->images.emplace(std::move(ve));
+		auto ptr = &*it;
+		return reinterpret_cast<uint64_t>(ptr);
 	}
 
-	void Resolver::remove_generic_view(uint64_t key) {
-		memory_views.erase_unaligned(key, 1);
+	void Resolver::remove_image(uint64_t key) {
+		std::lock_guard _(impl->images_mtx);
+		auto ptr = reinterpret_cast<ImageEntry*>(key);
+		for (auto iv : ptr->image_view_indices) {
+			remove_image_view(iv);
+		}
+		auto it = impl->images.get_iterator(ptr);
+		impl->images.erase(it);
 	}
 
-	} // namespace vuk
+	ImageEntry& Resolver::resolve_image(ptr_base ptr_b) {
+		auto ptr = reinterpret_cast<ImageEntry*>(ptr_b.device_address);
+		auto it = impl->images.get_iterator(ptr);
+		return *it;
+	}
+
+	uint32_t Resolver::add_image_view(ImageViewEntry ive) {
+		auto& image_entry = resolve_image(ive.image);
+		
+		// Realize the concrete range based on the parent image
+		// Handle VK_REMAINING_MIP_LEVELS (0xffff in our compact format)
+		if (ive.base_level == 0xffff) {
+			ive.base_level = 0;
+		}
+		if (ive.level_count == 0xffff) {
+			// Calculate remaining mip levels from base_level
+			ive.level_count = image_entry.level_count - ive.base_level;
+		}
+		
+		// Handle VK_REMAINING_ARRAY_LAYERS (0xffff in our compact format)
+		if (ive.base_layer == 0xffff) {
+			ive.base_layer = 0;
+		}
+		if (ive.layer_count == 0xffff) {
+			// Calculate remaining layers from base_layer
+			ive.layer_count = image_entry.layer_count - ive.base_layer;
+		}
+		
+		// Store the extent and sample count from the parent image
+		ive.extent = image_entry.extent;
+		ive.sample_count = image_entry.sample_count;
+		
+		// check if we already have this image view
+		ive.hash = std::hash<ImageViewEntry>()(ive);
+		for (auto index : image_entry.image_view_indices) {
+			if (impl->image_views[index].hash == ive.hash) {
+				return index;
+			}
+		}
+		if (ive.api_view == VK_NULL_HANDLE) {
+			ive.id = impl->iv_id_counter++;
+
+			VkImageViewCreateInfo ci{ VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
+			VkImageViewUsageCreateInfo uvci{ VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO };
+			uvci.usage = (VkImageUsageFlags)ive.view_usage;
+			if (uvci.usage != 0) {
+				ci.pNext = &uvci;
+			}
+
+			ci.image = image_entry.image;
+			ci.viewType = (VkImageViewType)ive.view_type;
+			ci.format = (VkFormat)ive.format;
+			ci.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+			ci.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+			ci.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+			ci.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+			ci.subresourceRange.aspectMask = (VkImageAspectFlags)format_to_aspect(ive.format);
+			ci.subresourceRange.baseMipLevel = ive.base_level;
+			ci.subresourceRange.levelCount = ive.level_count;
+			ci.subresourceRange.baseArrayLayer = ive.base_layer;
+			ci.subresourceRange.layerCount = ive.layer_count;
+
+			VkResult res = impl->create_image_view_fn(impl->device, &ci, nullptr, &ive.api_view);
+			// TODO: PAV: handle error
+		}
+
+		std::lock_guard _(impl->images_mtx);
+		// add new image view
+		if (!impl->image_view_freelist.empty()) {
+			auto index = impl->image_view_freelist.back();
+			impl->image_view_freelist.pop_back();
+			impl->image_views[index] = std::move(ive);
+			image_entry.image_view_indices.push_back(index);
+			return index;
+		}
+		impl->image_views.push_back(std::move(ive));
+		auto index = (uint32_t)(impl->image_views.size() - 1);
+		image_entry.image_view_indices.push_back(index);
+		return index;
+	}
+
+	void Resolver::remove_image_view(uint32_t key) {
+		auto& ve = resolve_image_view(key);
+
+		impl->destroy_image_view_fn(impl->device, ve.api_view, nullptr);
+		impl->image_views[key] = ImageViewEntry{};
+		impl->image_view_freelist.push_back(key);
+	}
+
+	ImageViewEntry& Resolver::resolve_image_view(uint32_t view_key) {
+		return impl->image_views[view_key];
+	}
+
+	size_t Resolver::get_image_count() const {
+		return impl->images.size();
+	}
+
+	size_t Resolver::get_active_image_view_count() const {
+		assert((impl->image_views.size() - 1) >= impl->image_view_freelist.size());
+		return impl->image_views.size() - impl->image_view_freelist.size() - 1;
+	}
+} // namespace vuk

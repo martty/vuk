@@ -50,14 +50,13 @@ namespace vuk {
 
 		void deallocate_framebuffers(std::span<const VkFramebuffer> src) override; // noop
 
-		Result<void, AllocateException> allocate_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc) override;
+		Result<void, AllocateException> allocate_images(std::span<Image<>> dst, std::span<const ICI> cis, SourceLocationAtFrame loc) override;
 
-		void deallocate_images(std::span<const Image> src) override; // noop
+		void deallocate_images(std::span<const Image<>> src) override; // noop
 
-		Result<void, AllocateException>
-		allocate_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc) override;
+		Result<void, AllocateException> allocate_image_views(std::span<ImageView<>> dst, std::span<const IVCI> cis, SourceLocationAtFrame loc) override;
 
-		void deallocate_image_views(std::span<const ImageView> src) override; // noop
+		void deallocate_image_views(std::span<const ImageView<>> src) override; // noop
 
 		Result<void, AllocateException> allocate_persistent_descriptor_sets(std::span<PersistentDescriptorSet> dst,
 		                                                                    std::span<const PersistentDescriptorSetCreateInfo> cis,

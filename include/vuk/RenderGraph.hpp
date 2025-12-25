@@ -24,7 +24,7 @@
 #include <vector>
 
 #if false // seems like clang still has issues with this - lets keep it safe
-#define VUK_IA(access, ...)        vuk::Arg<vuk::ImageAttachment, access, decltype([]() {}) __VA_OPT__(, ) __VA_ARGS__>
+#define VUK_IA(access, ...)        vuk::Arg<vuk::ImageView<>, access, decltype([]() {}) __VA_OPT__(, ) __VA_ARGS__>
 #define VUK_BA(access, ...)        vuk::Arg<vuk::Buffer, access, decltype([]() {}) __VA_OPT__(, ) __VA_ARGS__>
 #define VUK_ARG(type, access, ...) vuk::Arg<type, access, decltype([]() {}) __VA_OPT__(, ) __VA_ARGS__>
 #else
@@ -32,7 +32,7 @@ namespace vuk {
 	template<size_t I>
 	struct tag_type {};
 }; // namespace vuk
-#define VUK_IA(access)        vuk::Arg<vuk::ImageAttachment, access, vuk::tag_type<__COUNTER__>>
+#define VUK_IA(access)        vuk::Arg<vuk::ImageView<>, access, vuk::tag_type<__COUNTER__>>
 #define VUK_BA(access)        vuk::Arg<vuk::Buffer<>, access, vuk::tag_type<__COUNTER__>>
 #define VUK_ARG(type, access) vuk::Arg<type, access, vuk::tag_type<__COUNTER__>>
 #endif
@@ -41,28 +41,12 @@ namespace vuk {
 #define VUK_CALL      (_pscope != _scope ? _scope.parent = &_pscope, _scope : _scope)
 
 namespace vuk {
-	ADAPT_TEMPLATED_STRUCT_FOR_IR(Buffer, ptr, sz_bytes);
+	ADAPT_TEMPLATED_STRUCT_FOR_IR(class, Buffer, ptr, sz_bytes);
 	ADAPT_STRUCT_FOR_IR(BufferCreateInfo, memory_usage, size, alignment);
-	ADAPT_STRUCT_FOR_IR(ImageAttachment,
-	                    image,
-	                    image_view,
-	                    image_flags,
-	                    image_type,
-	                    tiling,
-	                    usage,
-	                    extent,
-	                    format,
-	                    sample_count,
-	                    allow_srgb_unorm_mutable,
-	                    image_view_flags,
-	                    view_type,
-	                    components,
-	                    layout,
-	                    base_level,
-	                    level_count,
-	                    base_layer,
-	                    layer_count);
-
+	ADAPT_STRUCT_FOR_IR(Extent3D, width, height, depth);
+	static_assert(erased_tuple_adaptor<Extent3D>::value);
+	ADAPT_STRUCT_FOR_IR(Samples, count);
+	ADAPT_STRUCT_FOR_IR(ImageViewEntry, base_level, level_count, base_layer, layer_count, format, extent, sample_count, layout);
 	static_assert(erased_tuple_adaptor<view<BufferLike<float>>>::value);
 } // namespace vuk
 
@@ -291,7 +275,7 @@ namespace vuk {
 			switch (b->type) {
 			case DescriptorType::eSampledImage:
 				acc = Access::eComputeSampled;
-				base_ty = current_module->types.get_builtin_image();
+				base_ty = to_IR_type<ImageView<>>();
 				break;
 			case DescriptorType::eCombinedImageSampler:
 				acc = Access::eComputeSampled;
@@ -299,7 +283,7 @@ namespace vuk {
 				break;
 			case DescriptorType::eStorageImage:
 				acc = b->non_writable ? Access::eComputeRead : (b->non_readable ? Access::eComputeWrite : Access::eComputeRW);
-				base_ty = current_module->types.get_builtin_image();
+				base_ty = to_IR_type<ImageView<>>();
 				break;
 			case DescriptorType::eUniformBuffer:
 			case DescriptorType::eStorageBuffer:
@@ -354,37 +338,6 @@ namespace vuk {
 		return { make_ext_ref(ref) };
 	}
 
-	// acquire ~~ int* x = _existing_;
-	// discard ~~ int* x = _existing_; invalidate(x);
-
-	[[nodiscard]] inline Value<ImageAttachment> declare_ia(Name name, ImageAttachment ia = {}, VUK_CALLSTACK) {
-		Ref ref = current_module->make_declare_image(ia);
-		current_module->name_output(ref, name.c_str());
-		current_module->set_source_location(ref.node, VUK_CALL);
-		return { make_ext_ref(ref) };
-	}
-
-	[[nodiscard]] inline Value<ImageAttachment> discard_ia(Name name, ImageAttachment ia, VUK_CALLSTACK) {
-		assert(ia.image_view != ImageView{});
-		Ref ref = current_module->make_declare_image(ia);
-		current_module->name_output(ref, name.c_str());
-		current_module->set_source_location(ref.node, VUK_CALL);
-		return { make_ext_ref(ref) };
-	}
-
-	/// @brief Adopt an existing resource into a Value.
-	/// @param name
-	/// @param ia
-	/// @param previous_access
-	[[nodiscard]] inline Value<ImageAttachment> acquire_ia(Name name, ImageAttachment ia, Access previous_access, VUK_CALLSTACK) {
-		assert(ia.image_view != ImageView{});
-		Ref ref = current_module->acquire(current_module->types.get_builtin_image(), nullptr, ia);
-		auto ext_ref = ExtRef(std::make_shared<ExtNode>(ref.node, to_use(previous_access)), ref);
-		current_module->name_output(ref, name.c_str());
-		current_module->set_source_location(ref.node, VUK_CALL);
-		return { std::move(ext_ref) };
-	}
-
 	// TODO: PAV: constrain to meaningful types?
 	template<class T>
 	[[nodiscard]] inline Value<T> discard(Name name, T buf, VUK_CALLSTACK) {
@@ -394,15 +347,26 @@ namespace vuk {
 
 	template<class T = byte>
 	[[nodiscard]] inline Value<Buffer<T>> allocate(Name name, Value<BufferCreateInfo> bci = {}, VUK_CALLSTACK) {
-		std::array<Ref, 3> args = {};
-		args[0] = bci->memory_usage.get_head();
-		args[1] = bci->size.get_head();
-		args[2] = bci->alignment.get_head();
-
-		Ref bci_ref = current_module->make_construct(to_IR_type<BufferCreateInfo>(), nullptr, args);
+		Ref bci_ref = bci.get_head();
 		Ref ptr_ref = current_module->make_allocate(current_module->types.make_pointer_ty(to_IR_type<T>()), bci_ref);
 		std::array arg_refs = { ptr_ref, bci->size.get_head() };
 		Ref ref = current_module->make_construct(to_IR_type<Buffer<T>>(), nullptr, std::span(arg_refs));
+		current_module->name_output(ref, name.c_str());
+		current_module->set_source_location(ref.node, VUK_CALL);
+		return { make_ext_ref(ref) };
+	}
+
+	template<Format f = Format::eUndefined>
+	[[nodiscard]] inline Value<Image<f>> allocate(Name name, Value<ICI> ici = {}, VUK_CALLSTACK) {
+		Ref ref = current_module->make_allocate(current_module->types.make_image_ty(to_IR_type<ImageLike<f>>()), ici.get_head());
+		current_module->name_output(ref, name.c_str());
+		current_module->set_source_location(ref.node, VUK_CALL);
+		return { make_ext_ref(ref) };
+	}
+
+	template<Format f = Format::eUndefined>
+	[[nodiscard]] inline Value<ImageView<f>> allocate(Name name, Value<Image<f>> image, Value<IVCI> ivci = {}, VUK_CALLSTACK) {
+		Ref ref = current_module->make_allocate(current_module->types.make_pointer_ty(to_IR_type<ImageLike<f>>()), image.get_head(), ivci.get_head());
 		current_module->name_output(ref, name.c_str());
 		current_module->set_source_location(ref.node, VUK_CALL);
 		return { make_ext_ref(ref) };
@@ -454,12 +418,12 @@ namespace vuk {
 			deps.push_back(arg.node);
 		}
 		std::shared_ptr<Type> t;
-		if constexpr (std::is_same_v<T, vuk::ImageAttachment>) {
-			t = current_module->types.get_builtin_image();
-		} else if constexpr (std::is_same_v<T, vuk::Sampler>) {
+		if constexpr (std::is_same_v<T, vuk::Sampler>) {
 			t = current_module->types.get_builtin_sampler();
 		} else if constexpr (std::is_same_v<T, vuk::SampledImage>) {
 			t = current_module->types.get_builtin_sampled_image();
+		} else {
+			throw std::runtime_error("declare_array only supports ImageView<>, Sampler, and SampledImage");
 		}
 		Ref ref = current_module->make_declare_array(t, refs);
 		current_module->name_output(ref, name.c_str());
@@ -477,12 +441,12 @@ namespace vuk {
 			deps.push_back(arg.node);
 		}
 		std::shared_ptr<Type> t;
-		if constexpr (std::is_same_v<T, vuk::ImageAttachment>) {
-			t = current_module->types.get_builtin_image();
-		} else if constexpr (std::is_same_v<T, vuk::Sampler>) {
+		if constexpr (std::is_same_v<T, vuk::Sampler>) {
 			t = current_module->types.get_builtin_sampler();
 		} else if constexpr (std::is_same_v<T, vuk::SampledImage>) {
 			t = current_module->types.get_builtin_sampled_image();
+		} else {
+			throw std::runtime_error("declare_array only supports ImageView<>, Sampler, and SampledImage");
 		}
 		Ref ref = current_module->make_declare_array(t, refs);
 		current_module->name_output(ref, name.c_str());
@@ -504,18 +468,18 @@ namespace vuk {
 		return { std::move(ext_ref) };
 	}
 
-	[[nodiscard]] inline Value<SampledImage> combine_image_sampler(Name name, Value<ImageAttachment> ia, Value<Sampler> sampler, VUK_CALLSTACK) {
+	[[nodiscard]] inline Value<SampledImage> combine_image_sampler(Name name, Value<ImageView<>> ia, Value<Sampler> sampler, VUK_CALLSTACK) {
 		Ref ref = current_module->make_sampled_image(ia.get_head(), sampler.get_head());
 		current_module->name_output(ref, name.c_str());
 		current_module->set_source_location(ref.node, VUK_CALL);
 		return { make_ext_ref(ref, { ia.node, sampler.node }) };
 	}
 
-	[[nodiscard]] inline Value<ImageAttachment> acquire_next_image(Name name, Value<Swapchain> in, VUK_CALLSTACK) {
+	[[nodiscard]] inline Value<ImageView<>> acquire_next_image(Name name, Value<Swapchain> in, VUK_CALLSTACK) {
 		Ref ref = current_module->make_acquire_next_image(in.get_head());
 		current_module->name_output(ref, name.c_str());
 		current_module->set_source_location(ref.node, VUK_CALL);
-		return std::move(in).transmute<ImageAttachment>(ref);
+		return std::move(in).transmute<ImageView<>>(ref);
 	}
 
 	template<class T>
@@ -526,7 +490,7 @@ namespace vuk {
 		return { make_ext_ref(ref) };
 	}
 
-	[[nodiscard]] inline Value<void> enqueue_presentation(Value<ImageAttachment> in) {
+	[[nodiscard]] inline Value<void> enqueue_presentation(Value<ImageView<>> in) {
 		return std::move(in).as_released<void>(Access::ePresent, DomainFlagBits::ePE);
 	}
 

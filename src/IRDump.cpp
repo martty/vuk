@@ -119,9 +119,7 @@ namespace vuk {
 
 	using namespace std::literals;
 	std::vector<std::string_view> arg_names(Type* t) { // TODO: decommission
-		if (t->hash_value == current_module->types.builtin_image) {
-			return { "width"sv, "height"sv, "depth"sv, "format"sv, "samples"sv, "base_layer"sv, "layer_count"sv, "base_level"sv, "level_count"sv };
-		} else if (t->kind == Type::COMPOSITE_TY) {
+		if (t->kind == Type::COMPOSITE_TY) {
 			std::vector<std::string_view> result;
 			for (auto& m : t->member_names) {
 				result.push_back(m);
@@ -209,7 +207,7 @@ namespace vuk {
 			for (size_t i = 0; i < node->acquire.values.size(); i++) {
 				if (node->type[i]->is_bufferlike_view()) {
 					fmt::format_to(std::back_inserter(line), "buffer");
-				} else if (node->type[i]->hash_value == current_module->types.builtin_image) {
+				} else if (node->type[i]->is_imageview()) {
 					fmt::format_to(std::back_inserter(line), "image");
 				} else if (node->type[0]->kind == Type::ARRAY_TY) {
 					fmt::format_to(std::back_inserter(line), "{}[]", (*node->type[0]->array.T)->is_bufferlike_view() ? "buffer" : "image");
@@ -271,6 +269,9 @@ namespace vuk {
 		} break;
 		case Node::GET_ALLOCATION_SIZE: {
 			print_args_to_string({ &node->get_allocation_size.ptr, 1 }, line);
+		} break;
+		case Node::GET_IV_META: {
+			print_args_to_string({ &node->get_iv_meta.imageview, 1 }, line);
 		} break;
 		}
 	}
