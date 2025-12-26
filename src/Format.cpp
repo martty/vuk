@@ -552,6 +552,8 @@ namespace vuk {
 
 	std::string_view format_to_sv(Format format) noexcept {
 		switch (format) {
+		case Format::eUndefined:
+			return "Undefined";
 		case Format::eR4G4UnormPack8:
 			return "R4G4UnormPack8";
 		case Format::eR8Unorm:

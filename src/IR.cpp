@@ -9,35 +9,148 @@
 namespace vuk {
 	thread_local std::shared_ptr<IRModule> current_module = std::make_shared<IRModule>();
 
-	struct AllocaCtx : IREvalContext {
-		std::vector<void*> allocated;
+	std::shared_ptr<Type> IRModule::Types::make_imageview_ty() {
+		using T = Format;
+		size_t tag = typeid(T).hash_code();
+		auto format_callback = [](void* v, std::string& dst) {
+			if constexpr (requires { format_as(*reinterpret_cast<T*>(v)); }) {
+				auto formatted = format_as(*reinterpret_cast<T*>(v));
+				dst.append(formatted);
+			} else {
+				// Fallback: format as underlying integer type
+				fmt::format_to(std::back_inserter(dst), "{}", static_cast<std::underlying_type_t<T>>(*reinterpret_cast<T*>(v)));
+			}
+		};
+		// Extract type name and create enum type with debug info
+		constexpr auto type_name = get_type_name<T>();
+		auto enum_type = std::shared_ptr<Type>(new Type{ .kind = Type::ENUM_TY,
+		                                                 .size = sizeof(T),
+		                                                 .debug_info = current_module->types.allocate_type_debug_info(std::string(type_name)),
+		                                                 .enumt = { .format_to = format_callback, .tag = tag } });
+		auto enum_ty = emplace_type(enum_type);
+		auto pt_ty = make_enum_value_ty(enum_ty, (uint64_t)Format::eUndefined);
+		return make_pointer_ty(pt_ty);
+	}
 
-		void* allocate_host_memory(size_t size) override {
-			void* ptr = malloc(size);
-			allocated.push_back(ptr);
-			return ptr;
+	std::shared_ptr<Type> IRModule::Types::make_imageview_ty(std::shared_ptr<Type> pt_ty) {
+		return make_pointer_ty(pt_ty);
+	}
+
+	namespace {
+		// Helper to format a constant value inline
+		std::string format_constant_inline(Node* node) {
+			Type* ty = node->type[0].get();
+			if (ty->kind == Type::INTEGER_TY) {
+				switch (ty->scalar.width) {
+				case 32:
+					return fmt::format("{}", constant<uint32_t>(first(node)));
+				case 64:
+					return fmt::format("{}", constant<uint64_t>(first(node)));
+				}
+			} else if (ty->kind == Type::ENUM_VALUE_TY) {
+				std::string formatted;
+				if (ty->enum_value.enum_type->get()->enumt.format_to) {
+					ty->enum_value.enum_type->get()->enumt.format_to((void*)&ty->enum_value.value, formatted);
+					return formatted;
+				} else {
+					return fmt::format("{}", ty->enum_value.value);
+				}
+			} else if (ty->kind == Type::COMPOSITE_TY) {
+				if (ty->composite.format_to) {
+					std::string result;
+					ty->composite.format_to(node->constant.value, result);
+					return result;
+				}
+			}
+			return "";
 		}
 
-		~AllocaCtx() {
-			for (auto ptr : allocated) {
-				free(ptr);
+		// Forward declaration for recursion
+		std::string format_ref_inline(Ref ref);
+
+		// Helper to format a slice inline with dot/bracket notation
+		std::string format_slice_inline(Node* node) {
+			auto src_str = format_ref_inline(node->slice.src);
+
+			// Get the index value if it's a constant
+			std::string index_str;
+			if (node->slice.start.node->kind == Node::CONSTANT) {
+				index_str = format_constant_inline(node->slice.start.node);
+			} else {
+				// Non-constant index, use variable reference
+				if (node->slice.start.node->debug_info && node->slice.start.node->debug_info->result_names.size() > node->slice.start.index) {
+					index_str = fmt::format("%{}", node->slice.start.node->debug_info->result_names[node->slice.start.index]);
+				} else {
+					index_str = fmt::format("[{:#x}:{}]", (uintptr_t)node->slice.start.node, node->slice.start.index);
+				}
+			}
+
+			switch (node->slice.axis) {
+			case Node::NamedAxis::FIELD: {
+				// Field access using dot notation
+				// Try to get field name from the composite type
+				auto src_type = Type::stripped(node->slice.src.type());
+				if (src_type->kind == Type::COMPOSITE_TY && !src_type->member_names.empty()) {
+					uint64_t field_index = 0;
+					if (node->slice.start.node->kind == Node::CONSTANT) {
+						field_index = constant<uint64_t>(node->slice.start);
+					}
+					if (field_index < src_type->member_names.size()) {
+						return fmt::format("{}.{}", src_str, src_type->member_names[field_index]);
+					}
+				}
+				// Fallback to numeric field access
+				return fmt::format("{}.{}", src_str, index_str);
+			}
+			case Node::NamedAxis::MIP:
+				// Mip level access using m[]
+				return fmt::format("{}m[{}]", src_str, index_str);
+			case Node::NamedAxis::LAYER:
+				// Layer access using l[]
+				return fmt::format("{}l[{}]", src_str, index_str);
+			case Node::NamedAxis::COMPONENT:
+				// Component access
+				return fmt::format("{}c[{}]", src_str, index_str);
+			default:
+				// Array access using []
+				return fmt::format("{}[{}]", src_str, index_str);
 			}
 		}
-	};
 
-	Result<void*, CannotBeConstantEvaluated> eval(Ref ref) {
-		AllocaCtx ctx;
-		return ctx.eval(ref);
-	}
+		// Format a reference inline (recursively handle constants and slices)
+		std::string format_ref_inline(Ref ref) {
+			if (ref.node->kind == Node::CONSTANT) {
+				auto inline_val = format_constant_inline(ref.node);
+				if (!inline_val.empty()) {
+					return inline_val;
+				}
+			} else if (ref.node->kind == Node::SLICE) {
+				return format_slice_inline(ref.node);
+			}
+
+			// Default: use variable name or node reference
+			if (ref.node->debug_info && ref.node->debug_info->result_names.size() > ref.index) {
+				return fmt::format("%{}", ref.node->debug_info->result_names[ref.index]);
+			} else {
+				return fmt::format("[{:#x}:{}]", (uintptr_t)ref.node, ref.index);
+			}
+		}
+	} // namespace
 
 	void UntypedValue::dump_ir() const {
 		std::vector<Node*> nodes;
 		std::unordered_set<Node*> visited;
+		std::unordered_set<Node*> inlined; // Track nodes that will be displayed inline
 
 		// Start from the head node
 		auto head = get_head();
 		std::vector<Node*> work_queue;
 		work_queue.push_back(head.node);
+
+		// First pass: identify which nodes should be inlined
+		auto should_inline = [](Node* node) {
+			return node->kind == Node::CONSTANT || node->kind == Node::SLICE;
+		};
 
 		// Traverse the IR graph reachable from this value
 		while (!work_queue.empty()) {
@@ -48,8 +161,16 @@ namespace vuk {
 				continue;
 			}
 			visited.insert(node);
-			nodes.push_back(node);
 
+			// Check if this node should be inlined
+			if (should_inline(node) && node != head.node) {
+				inlined.insert(node);
+				// Still need to traverse arguments of inlined nodes to find dependencies
+			} else {
+				nodes.push_back(node);
+			}
+
+			// Traverse arguments regardless of whether the node is inlined
 			apply_generic_args(
 			    [&](Ref arg) {
 				    if (visited.find(arg.node) == visited.end()) {
@@ -73,9 +194,9 @@ namespace vuk {
 		});
 
 		// Dump the collected nodes in order (head node will be last)
-		fmt::println("IR dump for value (reachable nodes: {}):", nodes.size());
+		fmt::println("IR dump for value (reachable nodes: {}, inlined: {}):", nodes.size(), inlined.size());
 		for (auto node : nodes) {
-			fmt::print("  [{:#x}] {} -> ", (uintptr_t)node, Node::kind_to_sv(node->kind));
+			fmt::print("[{:#x}] ", (uintptr_t)node);
 
 			// Print result types
 			fmt::print("(");
@@ -89,17 +210,20 @@ namespace vuk {
 			}
 			fmt::print(")");
 
-			// Print args using apply_generic_args
+			fmt::print(" = {} ", Node::kind_to_sv(node->kind));
+
+			// Print args using apply_generic_args, but inline constants and slices
 			bool first = true;
 			apply_generic_args(
 			    [&](Ref arg) {
 				    if (first) {
-					    fmt::print(" <- ");
 					    first = false;
 				    } else {
 					    fmt::print(", ");
 				    }
-				    fmt::print("[{:#x}:{}]", (uintptr_t)arg.node, arg.index);
+
+				    // Format the argument inline if possible
+				    fmt::print("{}", format_ref_inline(arg));
 			    },
 			    node);
 

@@ -5,6 +5,26 @@
 #include <fmt/format.h>
 
 namespace vuk {
+	// Helper to extract type name at compile time
+	template<typename T>
+	consteval std::string_view get_type_name() {
+#if defined(_MSC_VER)
+		// MSVC: __FUNCSIG__ gives something like: "class std::basic_string_view<char,struct std::char_traits<char> > __cdecl vuk::get_type_name<enum MyEnum>(void)"
+		std::string_view name = __FUNCSIG__;
+		auto start = name.find("get_type_name<") + 14;
+		auto end = name.find_last_of('>');
+		return name.substr(start, end - start);
+#elif defined(__clang__) || defined(__GNUC__)
+		// Clang/GCC: __PRETTY_FUNCTION__ gives something like: "std::string_view vuk::get_type_name() [T = MyEnum]"
+		std::string_view name = __PRETTY_FUNCTION__;
+		auto start = name.find("T = ") + 4;
+		auto end = name.find_last_of(']');
+		return name.substr(start, end - start);
+#else
+		return "unknown";
+#endif
+	}
+
 	template<class T>
 	struct ir_type_provider {
 		static constexpr bool has_custom_ir_type = false;
@@ -53,9 +73,28 @@ namespace vuk {
 		} else if constexpr (std::is_floating_point_v<T>) {
 			return current_module->types.make_scalar_ty(Type::FLOAT_TY, sizeof(T) * 8);
 		} else if constexpr (std::is_enum_v<T>) {
-			return current_module->types.make_scalar_ty(Type::INTEGER_TY, sizeof(T) * 8);
+			// Use typeid hash for the tag and format_as for formatting
+			size_t tag = typeid(T).hash_code();
+			auto format_callback = [](void* v, std::string& dst) {
+				if constexpr (requires { format_as(*reinterpret_cast<T*>(v)); }) {
+					auto formatted = format_as(*reinterpret_cast<T*>(v));
+					dst.append(formatted);
+				} else {
+					// Fallback: format as underlying integer type
+					fmt::format_to(std::back_inserter(dst), "{}", static_cast<std::underlying_type_t<T>>(*reinterpret_cast<T*>(v)));
+				}
+			};
+			// Extract type name and create enum type with debug info
+			constexpr auto type_name = get_type_name<T>();
+			auto enum_type = std::shared_ptr<Type>(new Type{ .kind = Type::ENUM_TY,
+			                                                 .size = sizeof(T),
+			                                                 .debug_info = current_module->types.allocate_type_debug_info(std::string(type_name)),
+			                                                 .enumt = { .format_to = format_callback, .tag = tag } });
+			return current_module->types.emplace_type(enum_type);
 		} else if constexpr (is_imageview<T>::value) {
-			return current_module->types.make_imageview_ty();
+			auto fmt_enum_ty = to_IR_type<Format>();
+			auto ev_ty = current_module->types.make_enum_value_ty(fmt_enum_ty, static_cast<uint64_t>(T::static_format));
+			return current_module->types.make_imageview_ty(ev_ty);
 		} else if constexpr (std::is_base_of_v<ptr_base, T>) {
 			return current_module->types.make_pointer_ty(to_IR_type<typename T::UnwrappedT>());
 		} else if constexpr (erased_tuple_adaptor<T>::value) {

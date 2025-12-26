@@ -366,6 +366,10 @@ namespace vuk {
 			add_read(node, node->get_allocation_size.ptr, 0);
 			add_breaking_result(node, 0);
 			break;
+		case Node::GET_IV_META:
+			add_read(node, node->get_iv_meta.imageview, 0);
+			add_breaking_result(node, 0);
+			break;
 		case Node::ALLOCATE:
 			add_read(node, node->allocate.src, 0);
 			add_result(node, 0, node->allocate.src);

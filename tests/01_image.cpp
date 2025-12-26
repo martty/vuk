@@ -1,4 +1,5 @@
 #include "TestContext.hpp"
+#include "vuk/ir/IRPass.hpp"
 #include "vuk/runtime/vk/AllocatorHelpers.hpp"
 #include "vuk/vsl/Core.hpp"
 #include <doctest/doctest.h>
@@ -19,19 +20,46 @@ TEST_CASE("constant_image_view_metadata") {
 	// Make the image view a constant in the IR
 	auto view_const = make_constant("test_img_view", *view);
 
-	// Get metadata from the constant view and compare to creation parameters
-	auto meta = *(ImageViewEntry*)(*eval(view_const.get_meta().get_head()));
+	AllocaCtx ctx;
+	auto meta = *(ImageViewEntry*)(*ctx.eval(view_const.get_meta().get_head()));
 
-	// Verify the metadata matches our creation parameters
 	CHECK(meta.format == Format::eR32Uint);
 	CHECK(meta.extent.width == 2);
 	CHECK(meta.extent.height == 2);
 	CHECK(meta.extent.depth == 1);
 	CHECK(meta.sample_count == Samples::e1);
 	CHECK(meta.base_level == 0);
-	CHECK(meta.level_count == 1);
+	CHECK(meta.level_count == 2);
 	CHECK(meta.base_layer == 0);
 	CHECK(meta.layer_count == 1);
+}
+
+TEST_CASE("constant_image_view_members") {
+	auto data = { 11u, 22u, 33u, 44u };
+	auto ici = from_preset(Preset::eMap2D, Format::eR32Uint, Extent3D{ 2, 2, 1 }, Samples::e1);
+
+	auto [view, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ici, std::span(data));
+
+	auto view_const = make_constant("test_img_view", *view);
+
+	AllocaCtx ctx;
+	auto format = *(Format*)(*ctx.eval(view_const.format.get_head()));
+	auto extent = *(Extent3D*)(*ctx.eval(view_const.extent.get_head()));
+	auto sample_count = *(Samples*)(*ctx.eval(view_const.sample_count.get_head()));
+	auto base_level = *(uint16_t*)(*ctx.eval(view_const.base_level.get_head()));
+	auto level_count = *(uint16_t*)(*ctx.eval(view_const.level_count.get_head()));
+	auto base_layer = *(uint16_t*)(*ctx.eval(view_const.base_layer.get_head()));
+	auto layer_count = *(uint16_t*)(*ctx.eval(view_const.layer_count.get_head()));
+
+	CHECK(format == Format::eR32Uint);
+	CHECK(extent.width == 2);
+	CHECK(extent.height == 2);
+	CHECK(extent.depth == 1);
+	CHECK(sample_count == Samples::e1);
+	CHECK(base_level == 0);
+	CHECK(level_count == 2);
+	CHECK(base_layer == 0);
+	CHECK(layer_count == 1);
 }
 
 TEST_CASE("image_as_ir_constant") {
@@ -45,7 +73,8 @@ TEST_CASE("image_as_ir_constant") {
 
 	// Download and verify the data
 	fut.format.dump_ir();
-	eval(fut.format.get_head());
+	AllocaCtx ctx;
+	ctx.eval(fut.format.get_head());
 	size_t alignment = format_to_texel_block_size(*fut.format);
 	size_t size = compute_image_size(*fut.format, *fut.extent);
 	auto dst = *allocate_buffer<uint32_t>(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });

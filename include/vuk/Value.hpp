@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ir/IRPass.hpp"
 #include "vuk/ImageAttachment.hpp"
 #include "vuk/ir/IR.hpp"
 #include "vuk/ir/IRCppTypes.hpp"
@@ -17,6 +18,8 @@ namespace vuk {
 
 	template<>
 	class erased_tuple_adaptor<Extent3D>;
+	template<>
+	class erased_tuple_adaptor<Samples>;
 
 	template<class T>
 	struct is_value : std::false_type {};
@@ -196,7 +199,8 @@ namespace vuk {
 		U operator*()
 		  requires(Unsynchronized<U> && !std::is_array_v<U>)
 		{
-			auto v = eval(this->get_head());
+			AllocaCtx ctx;
+			auto v = ctx.eval(this->get_head());
 			if (v) {
 				return *static_cast<T*>(*v);
 			}
@@ -337,19 +341,27 @@ namespace vuk {
 
 	template<Format f>
 	struct Value<ImageView<f>> : ValueBase<ImageView<f>> {
-		Value<uint32_t> base_level = VK_REMAINING_MIP_LEVELS;
-		Value<uint32_t> level_count = VK_REMAINING_MIP_LEVELS;
+		Value<uint16_t> base_level;
+		Value<uint16_t> level_count;
 
-		Value<uint32_t> base_layer = VK_REMAINING_ARRAY_LAYERS;
-		Value<uint32_t> layer_count = VK_REMAINING_ARRAY_LAYERS;
+		Value<uint16_t> base_layer;
+		Value<uint16_t> layer_count;
 
 		Value<Format> format = f;
 		Value<Extent3D> extent;
+		Value<Samples> sample_count;
 
 		Value<ImageView<f>>() = default;
 
 		Value<ImageView<f>>(Ref ref) : ValueBase<ImageView<f>>(ref) {
-			format = Value<Format>(current_module->make_extract(current_module->make_get_iv_meta(this->get_head()), 4));
+			auto meta = current_module->make_get_iv_meta(this->get_head());
+			base_level = Value<uint16_t>(current_module->make_extract(meta, 0));
+			level_count = Value<uint16_t>(current_module->make_extract(meta, 1));
+			base_layer = Value<uint16_t>(current_module->make_extract(meta, 2));
+			layer_count = Value<uint16_t>(current_module->make_extract(meta, 3));
+			format = Value<Format>(current_module->make_extract(meta, 4));
+			extent = Value<Extent3D>(current_module->make_extract(meta, 5));
+			sample_count = Value<Samples>(current_module->make_extract(meta, 6));
 		}
 
 		Value<ImageView<f>>(ExtRef extref) : Value<ImageView<f>>(Ref(extref.node->get_node(), extref.index)) {}
