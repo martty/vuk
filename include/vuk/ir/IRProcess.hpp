@@ -16,8 +16,6 @@ namespace vuk {
 
 	using DefUseMap = robin_hood::unordered_node_map<Ref, ChainLink>;
 
-	enum class RW { eRead, eWrite };
-
 #define INIT(x) x(decltype(x)::allocator_type(*arena_))
 
 	struct IRPass;

@@ -46,6 +46,7 @@ namespace vuk {
 			OPAQUE_FN_TY,
 			SHADER_FN_TY,
 			ENUM_TY,
+			ENUM_VALUE_TY,
 			IMAGE_TY,
 			OPAQUE_TY
 		} kind;
@@ -101,9 +102,13 @@ namespace vuk {
 				void (*format_to)(void* value, std::string& dst) = nullptr;
 			} composite;
 			struct {
-				void (*format_to)(void* value, std::string& dst) = nullptr;
+				void (*format_to)(void* value, std::string&) = nullptr;
 				size_t tag;
 			} enumt;
+			struct {
+				std::shared_ptr<Type>* enum_type;
+				uint64_t value;
+			} enum_value;
 			struct {
 				size_t tag;
 			} opaque;
@@ -182,6 +187,11 @@ namespace vuk {
 				return v;
 			case ENUM_TY:
 				hash_combine_direct(v, (uint32_t)t->enumt.tag);
+				return v;
+			case ENUM_VALUE_TY:
+				hash_combine_direct(v, Type::hash(t->enum_value.enum_type->get()));
+				hash_combine_direct(v, (uint32_t)(t->enum_value.value >> 32));
+				hash_combine_direct(v, (uint32_t)(t->enum_value.value & 0xffffffff));
 				return v;
 			case OPAQUE_TY:
 				hash_combine_direct(v, (uint32_t)t->opaque.tag);
@@ -314,6 +324,22 @@ namespace vuk {
 					return std::string(t->debug_info.name);
 				}
 				return "union:" + std::to_string(t->composite.tag);
+			case ENUM_TY:
+				if (!t->debug_info.name.empty()) {
+					return std::string(t->debug_info.name);
+				}
+				return "enum:" + std::to_string(t->enumt.tag);
+			case ENUM_VALUE_TY: {
+				std::string result;
+				if (t->enum_value.enum_type->get()->enumt.format_to) {
+					std::string formatted;
+					t->enum_value.enum_type->get()->enumt.format_to((void*)&t->enum_value.value, formatted);
+					result += formatted;
+				} else {
+					result += std::to_string(t->enum_value.value);
+				}
+				return result;
+			}
 			case OPAQUE_FN_TY:
 				return "ofn";
 			case SHADER_FN_TY:
@@ -613,6 +639,8 @@ namespace vuk {
 		}
 	};
 
+	enum class RW { eRead, eWrite };
+
 	struct RefOrValue {
 		Ref ref;
 		std::unique_ptr<char[]> owned_value;
@@ -886,6 +914,18 @@ namespace vuk {
 				return emplace_type(std::shared_ptr<Type>(t));
 			};
 
+			std::shared_ptr<Type> make_enum_ty(size_t tag, void (*format_to)(void*, std::string&) = nullptr, size_t size = 4) {
+				auto t = new Type{ .kind = Type::ENUM_TY, .size = size, .enumt = { .format_to = format_to, .tag = tag } };
+				return emplace_type(std::shared_ptr<Type>(t));
+			}
+
+			std::shared_ptr<Type> make_enum_value_ty(std::shared_ptr<Type> enum_type, uint64_t value) {
+				assert(enum_type->kind == Type::ENUM_TY);
+				auto t = new Type{ .kind = Type::ENUM_VALUE_TY, .size = enum_type->size, .enum_value = { .value = value } };
+				t->enum_value.enum_type = &t->child_types.emplace_back(enum_type);
+				return emplace_type(std::shared_ptr<Type>(t));
+			}
+
 			std::shared_ptr<Type> make_opaque_ty(size_t tag, size_t size = sizeof(uint32_t)) {
 				auto t = new Type{ .kind = Type::OPAQUE_TY, .size = size, .opaque = { .tag = tag } };
 				return emplace_type(std::shared_ptr<Type>(t));
@@ -910,9 +950,8 @@ namespace vuk {
 				return emplace_type(std::shared_ptr<Type>(new Type{ .kind = Type::MEMORY_TY, .size = size }));
 			}
 
-			std::shared_ptr<Type> make_imageview_ty() {
-				return make_pointer_ty(make_enum_ty());
-			}
+			std::shared_ptr<Type> make_imageview_ty();
+			std::shared_ptr<Type> make_imageview_ty(std::shared_ptr<Type>);
 
 			std::shared_ptr<Type> get_builtin_swapchain() {
 				if (builtin_swapchain) {
@@ -995,6 +1034,8 @@ namespace vuk {
 					unify_type(*t->array.T);
 				} else if (t->kind == Type::POINTER_TY) {
 					unify_type(*t->pointer.T);
+				} else if (t->kind == Type::ENUM_VALUE_TY) {
+					unify_type(*t->enum_value.enum_type);
 				} else if (t->kind == Type::COMPOSITE_TY) {
 					for (auto& elem_ty : t->child_types) {
 						unify_type(elem_ty);
@@ -1041,6 +1082,10 @@ namespace vuk {
 					// nothing to do
 				} else if (t->kind == Type::VOID_TY) {
 					// nothing to do
+				} else if (t->kind == Type::ENUM_TY) {
+					// nothing to do - enums are trivially destructible
+				} else if (t->kind == Type::ENUM_VALUE_TY) {
+					// nothing to do - enum values are trivially destructible
 				} else if (t->kind == Type::IMBUED_TY) {
 					destroy(t->imbued.T->get(), v);
 				} else if (t->kind == Type::ALIASED_TY) {
@@ -1141,6 +1186,7 @@ namespace vuk {
 				node->kind = Node::GARBAGE;
 				node->generic_node.arg_count = 0;
 				node->type = {};
+
 #else
 				return op_arena.erase(it);
 #endif
@@ -1459,8 +1505,6 @@ namespace vuk {
 		assert(node->kind == Node::ACQUIRE);
 		return node->acquire.values;
 	}
-
-	Result<void*, CannotBeConstantEvaluated> eval(Ref parm);
 
 	extern thread_local std::shared_ptr<IRModule> current_module;
 

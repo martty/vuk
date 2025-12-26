@@ -474,6 +474,7 @@ if(VUK_BUILD_TESTS)
 	target_sources(vuk PRIVATE tests/Test.cpp)
 	include(doctest_force_link_static_lib_in_target) # until we can use cmake 3.24
 	add_executable(vuk-tests tests/Test.cpp
+					#tests/enum_ir_type_test.cpp
 					#tests/00_misc.cpp
 					#tests/01_semantics.cpp
 					tests/01_image.cpp
@@ -490,7 +491,7 @@ if(VUK_BUILD_TESTS)
 	)
 	#target_compile_features(vuk-tests PRIVATE cxx_std_17)
 	target_include_directories(vuk-tests PRIVATE ext/renderdoc)
-	target_link_libraries(vuk-tests PRIVATE vuk doctest::doctest vk-bootstrap fmt::fmt)
+	target_link_libraries(vuk-tests PRIVATE vuk doctest::doctest vk-bootstrap fmt::fmt robin_hood)
 	target_compile_definitions(vuk-tests PRIVATE VUK_TEST_RUNNER)
 
 	copy_runtime_dlls(vuk-tests)

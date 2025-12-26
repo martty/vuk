@@ -676,7 +676,7 @@ namespace vuk {
 
 	template<Format f>
 	struct view<ImageLike<f>, dynamic_extent> {
-		static constexpr auto constraints = f;
+		static constexpr auto static_format = f;
 
 		uint32_t view_key = 0;
 

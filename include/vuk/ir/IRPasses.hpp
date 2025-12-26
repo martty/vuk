@@ -1,5 +1,6 @@
 #pragma once
 
+#include "vuk/ir/IR.hpp"
 #include "vuk/ir/IRPass.hpp"
 
 #include <string>

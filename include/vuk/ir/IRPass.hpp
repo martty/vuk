@@ -253,6 +253,14 @@ namespace vuk {
 				return { expected_value, eval_binop(math_binary.op, ref.type(), a, b) };
 
 			} break;
+			case Node::GET_IV_META: {
+				auto iv_ = eval(ref.node->get_iv_meta.imageview);
+				if (!iv_) {
+					return iv_;
+				}
+				auto& iv = *static_cast<ImageView<>*>(*iv_);
+				return { expected_value, &iv.get_meta() };
+			} break;
 			case Node::SLICE: {
 				if (ref.index == 1) {
 					return eval(ref.node->slice.src);
@@ -561,6 +569,22 @@ namespace vuk {
 			}
 
 			return { expected_value };
+		}
+	};
+
+	struct AllocaCtx : IREvalContext {
+		std::vector<void*> allocated;
+
+		void* allocate_host_memory(size_t size) override {
+			void* ptr = malloc(size);
+			allocated.push_back(ptr);
+			return ptr;
+		}
+
+		~AllocaCtx() {
+			for (auto ptr : allocated) {
+				free(ptr);
+			}
 		}
 	};
 } // namespace vuk
