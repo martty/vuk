@@ -339,10 +339,36 @@ namespace vuk {
 	}
 
 	// TODO: PAV: constrain to meaningful types?
+	/// @brief Break synchronisation chain of a value
 	template<class T>
-	[[nodiscard]] inline Value<T> discard(Name name, T buf, VUK_CALLSTACK) {
-		assert(buf);
-		return acquire(name, buf, Access::eNone, VUK_CALL);
+	[[nodiscard]] inline Value<T> discard(Value<T> value, VUK_CALLSTACK) {
+		auto ref = current_module->make_use(value.get_head(), Access::eNone);
+		current_module->set_source_location(ref.node, VUK_CALL);
+		return { make_ext_ref(ref) };
+	}
+
+	template<class T>
+	[[nodiscard]] inline Value<T> discard(Name name, Value<T> value, VUK_CALLSTACK) {
+		auto ref = current_module->make_use(value.get_head(), Access::eNone);
+		current_module->name_output(ref, name.c_str());
+		current_module->set_source_location(ref.node, VUK_CALL);
+		return { make_ext_ref(ref) };
+	}
+
+	template<Format f>
+	[[nodiscard]] inline Value<ImageView<f>> discard(Name name, ImageView<f> value, VUK_CALLSTACK) {
+		auto acq = acquire(name, value, Access::eNone, VUK_CALL);
+		acq.node->acqrel->status = Signal::Status::eHostAvailable;
+		acq.node->acqrel->last_use.push_back(to_use(Access::eNone));
+		return acq;
+	}
+
+	template<class T>
+	[[nodiscard]] inline Value<Buffer<T>> discard(Name name, Buffer<T> value, VUK_CALLSTACK) {
+		auto acq = acquire(name, value, Access::eNone, VUK_CALL);
+		acq.node->acqrel->status = Signal::Status::eHostAvailable;
+		acq.node->acqrel->last_use.push_back(to_use(Access::eNone));
+		return acq;
 	}
 
 	template<class T = byte>
@@ -484,7 +510,7 @@ namespace vuk {
 
 	template<class T>
 	[[nodiscard]] inline Value<T> make_constant(Name name, T in, VUK_CALLSTACK) {
-		Ref ref = current_module->make_constant(in);
+		Ref ref = current_module->make_constant(to_IR_type<T>(), &in);
 		current_module->name_output(ref, name.c_str());
 		current_module->set_source_location(ref.node, VUK_CALL);
 		return { make_ext_ref(ref) };
