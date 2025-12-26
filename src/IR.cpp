@@ -180,25 +180,13 @@ namespace vuk {
 			    node);
 		}
 
-		// Sort nodes topologically so dependencies come before uses
-		topological_sort(nodes.begin(), nodes.end(), [](Node* a, Node* b) {
-			bool b_depends_on_a = false;
-			apply_generic_args(
-			    [&](Ref arg) {
-				    if (arg.node == a) {
-					    b_depends_on_a = true;
-				    }
-			    },
-			    b);
-			return b_depends_on_a;
-		});
+		// Reverse to get dependencies before uses (depth-first traversal naturally gives us reverse order)
+		std::reverse(nodes.begin(), nodes.end());
 
 		// Dump the collected nodes in order (head node will be last)
-		fmt::println("IR dump for value (reachable nodes: {}, inlined: {}):", nodes.size(), inlined.size());
 		for (auto node : nodes) {
 			fmt::print("[{:#x}] ", (uintptr_t)node);
 
-			// Print result types
 			fmt::print("(");
 			for (size_t i = 0; i < node->type.size(); i++) {
 				if (i > 0)

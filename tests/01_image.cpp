@@ -64,7 +64,7 @@ TEST_CASE("constant_image_view_members") {
 
 TEST_CASE("image_as_ir_constant") {
 	auto data = { 1u, 2u, 3u, 4u };
-	auto ici = from_preset(Preset::eMap2D, Format::eR32Uint, Extent3D{ 2, 2, 1 }, Samples::e1);
+	auto ici = from_preset(Preset::eGeneric2D, Format::eR32Uint, Extent3D{ 2, 2, 1 }, Samples::e1);
 
 	auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ici, std::span(data));
 
