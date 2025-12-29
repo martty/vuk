@@ -826,4 +826,11 @@ namespace std {
 			return h;
 		}
 	};
+
+	template<vuk::Format f>
+	struct hash<vuk::Image<f>> {
+		size_t operator()(vuk::Image<f> const& x) const noexcept {
+			return std::hash<uint64_t>()(x.device_address);
+		}
+	};
 } // namespace std

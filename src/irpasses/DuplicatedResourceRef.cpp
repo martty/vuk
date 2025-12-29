@@ -2,27 +2,26 @@
 #include "vuk/ir/IRPasses.hpp"
 #include "vuk/ir/IRProcess.hpp"
 #include "vuk/RadixTree.hpp"
+#include "vuk/runtime/vk/Allocation.hpp"
 
 namespace vuk {
 	Result<void> validate_duplicated_resource_ref::operator()() {
 		RadixTree<void*> memory;
-		std::unordered_map<ImageView<>, Node*> ias;
+		std::unordered_map<Image<>, Node*> ias;
 		std::unordered_map<Swapchain*, Node*> swps;
 		auto add_one = [&](Type* type, Node* node, void* value) -> std::optional<Node*> {
 			if (type->kind == Type::ARRAY_TY || type->kind == Type::UNION_TY) {
 				return {};
 			}
 			if (type->is_imageview()) {
-				auto ia = reinterpret_cast<ImageView<>*>(value);
-				assert(false);
+				auto& ia = *reinterpret_cast<ImageView<>*>(value);
+				auto image = ia.get_meta().image;
 
 				// TODO: we should consider only non-allocates here!
-				/*/ if (ia->image) {
-				  auto [_, succ] = ias.emplace(*ia, node);
-				  if (!succ) {
-				    return ias.at(*ia);
-				  }
-				}*/
+				auto [_, succ] = ias.emplace(image, node);
+				if (!succ) {
+					return ias.at(image);
+				}
 			} else if (node->type[0]->is_bufferlike_view()) { // bufferlike views
 				auto& buf = *reinterpret_cast<Buffer<>*>(value);
 				bool succ = !memory.insert_unaligned(buf.ptr.device_address, buf.sz_bytes, node);

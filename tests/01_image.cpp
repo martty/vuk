@@ -86,7 +86,7 @@ TEST_CASE("image_as_ir_constant") {
 
 TEST_CASE("image_acquire_external") {
 	auto data = { 5u, 6u, 7u, 8u };
-	auto ici = from_preset(Preset::eMap2D, Format::eR32Uint, Extent3D{ 2, 2, 1 }, Samples::e1);
+	auto ici = from_preset(Preset::eGeneric2D, Format::eR32Uint, Extent3D{ 2, 2, 1 }, Samples::e1);
 
 	auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ici, std::span(data));
 
@@ -113,7 +113,7 @@ TEST_CASE("image_acquire_external") {
 
 TEST_CASE("image_view_in_pass") {
 	auto data = { 10u, 20u, 30u, 40u };
-	auto ici = from_preset(Preset::eMap2D, Format::eR32Uint, Extent3D{ 2, 2, 1 }, Samples::e1);
+	auto ici = from_preset(Preset::eGeneric2D, Format::eR32Uint, Extent3D{ 2, 2, 1 }, Samples::e1);
 
 	auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ici, std::span(data));
 
@@ -144,7 +144,7 @@ TEST_CASE("image_view_in_pass") {
 
 TEST_CASE("combine_image_sampler") {
 	auto data = { 100u, 200u, 300u, 400u };
-	auto ici = from_preset(Preset::eMap2D, Format::eR32Uint, Extent3D{ 2, 2, 1 }, Samples::e1);
+	auto ici = from_preset(Preset::eGeneric2D, Format::eR32Uint, Extent3D{ 2, 2, 1 }, Samples::e1);
 
 	auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ici, std::span(data));
 
