@@ -207,7 +207,7 @@ namespace vuk {
 		}
 
 		bool is_imageview() const {
-			return kind == Type::POINTER_TY && pointer.T->get()->kind == Type::ENUM_TY;
+			return kind == Type::POINTER_TY && pointer.T->get()->kind == Type::ENUM_VALUE_TY;
 		}
 
 		// TODO: handle multiple flags
