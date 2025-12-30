@@ -15,7 +15,7 @@
 #include <vector>
 
 #define VUK_DUMP_EXEC
-// #define VUK_DEBUG_IMBAR
+#define VUK_DEBUG_IMBAR
 // #define VUK_DEBUG_MEMBAR
 
 namespace vuk {
@@ -1102,17 +1102,33 @@ namespace vuk {
 				// TODO: image ptrs and generic views
 				case Node::ALLOCATE: {
 					auto allocator = node->allocate.allocator ? *node->allocate.allocator : this->allocator;
-
-					assert(node->type[0]->kind == Type::POINTER_TY);
-					auto pointed_ty = *node->type[0]->pointer.T;
-					if (pointed_ty->kind != Type::ENUM_TY) { // buffer types
-						ptr_base buf;
-						auto bci = *get_value<BufferCreateInfo>(node->allocate.src);
-						if (auto res = allocator.allocate_memory(std::span{ static_cast<ptr_base*>(&buf), 1 }, std::span{ &bci, 1 }); !res) {
-							return res;
+					void* new_value = nullptr;
+					if (node->type[0]->kind == Type::POINTER_TY) { // view types
+						auto pointed_ty = *node->type[0]->pointer.T;
+						if (pointed_ty->kind != Type::ENUM_VALUE_TY) { // buffer types
+							ptr_base buf;
+							auto bci = *get_value<BufferCreateInfo>(node->allocate.src);
+							if (auto res = allocator.allocate_memory(std::span{ static_cast<ptr_base*>(&buf), 1 }, std::span{ &bci, 1 }); !res) {
+								return res;
+							}
+							allocator.deallocate(std::span{ static_cast<ptr_base*>(&buf), 1 });
+							new_value = arena.emplace(buf);
+						} else { // imageview types
+							if (node->allocate.src.type()->kind == Type::IMAGE_TY) {
+								auto image = *get_value<Image<>>(node->allocate.src);
+								new_value = arena.emplace(image.default_view());
+							} else {
+								auto bci = *get_value<IVCI>(node->allocate.src);
+								ImageView<> iv;
+								if (auto res = allocator.allocate_image_views(std::span{ static_cast<ImageView<>*>(&iv), 1 }, std::span{ &bci, 1 }); !res) {
+									return res;
+								}
+								allocator.deallocate(std::span{ static_cast<ImageView<>*>(&iv), 1 });
+								new_value = arena.emplace(iv);
+							}
 						}
-						allocator.deallocate(std::span{ static_cast<ptr_base*>(&buf), 1 });
-						done(node, host_stream, buf);
+						recorder.init_sync(node->type[0].get(), { to_use(eNone), host_stream }, new_value);
+						done(node, host_stream, new_value);
 					} else { // image types
 						auto ici = *get_value<ICI>(node->allocate.src);
 						Image<> im;
@@ -1159,8 +1175,6 @@ namespace vuk {
 						  }
 						}*/
 					}
-					recorder.init_sync(node->type[0].get(), { to_use(eNone), host_stream }, get_value(first(node)));
-
 					break;
 				}
 

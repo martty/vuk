@@ -1,7 +1,8 @@
 #pragma once
 
-#include <type_traits>
 #include <memory>
+#include <string>
+#include <type_traits>
 #include <utility>
 
 namespace vuk {
@@ -98,6 +99,35 @@ namespace vuk {
 
 		MaskType m_mask{ 0 };
 	};
+
+	template<typename BitType>
+	std::string format_as(const Flags<BitType>& flags) {
+		using MaskType = typename Flags<BitType>::MaskType;
+
+		if (flags.m_mask == 0) {
+			return "None";
+		}
+
+		std::string result;
+		bool first = true;
+
+		// Iterate through all possible bit positions
+		for (size_t i = 0; i < sizeof(MaskType) * 8; ++i) {
+			MaskType bit_value = MaskType(1) << i;
+			if (flags.m_mask & bit_value) {
+				if (!first) {
+					result += "|";
+				}
+				first = false;
+
+				// Convert the bit back to the enum type and format it
+				BitType bit_enum = static_cast<BitType>(bit_value);
+				result += format_as(bit_enum);
+			}
+		}
+
+		return result;
+	}
 } // namespace vuk
 
 namespace std {

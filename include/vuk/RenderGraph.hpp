@@ -47,6 +47,8 @@ namespace vuk {
 	static_assert(erased_tuple_adaptor<Extent3D>::value);
 	ADAPT_STRUCT_FOR_IR(Samples, count);
 	ADAPT_STRUCT_FOR_IR(ImageViewEntry, base_level, level_count, base_layer, layer_count, format, extent, sample_count, layout);
+	ADAPT_TEMPLATED_STRUCT_FOR_IR(class, Flags, m_mask);
+	ADAPT_STRUCT_FOR_IR(ICI, image_flags, image_type, tiling, usage, extent, format, sample_count, allow_srgb_unorm_mutable, level_count, layer_count);
 	static_assert(erased_tuple_adaptor<view<BufferLike<float>>>::value);
 } // namespace vuk
 
@@ -383,16 +385,19 @@ namespace vuk {
 	}
 
 	template<Format f = Format::eUndefined>
-	[[nodiscard]] inline Value<Image<f>> allocate(Name name, Value<ICI> ici = {}, VUK_CALLSTACK) {
-		Ref ref = current_module->make_allocate(current_module->types.make_image_ty(to_IR_type<ImageLike<f>>()), ici.get_head());
-		current_module->name_output(ref, name.c_str());
-		current_module->set_source_location(ref.node, VUK_CALL);
-		return { make_ext_ref(ref) };
+	[[nodiscard]] inline Value<ImageView<f>> allocate(Name name, Value<ICI> ici = {}, VUK_CALLSTACK) {
+		Ref image_ref = current_module->make_allocate(to_IR_type<ptr<ImageLike<f>>>(), ici.get_head());
+		Ref iv_ref = current_module->make_allocate(to_IR_type<ImageView<f>>(), image_ref);
+		current_module->name_output(image_ref, name.c_str());
+		current_module->set_source_location(image_ref.node, VUK_CALL);
+		current_module->name_output(iv_ref, name.c_str());
+		current_module->set_source_location(iv_ref.node, VUK_CALL);
+		return { make_ext_ref(iv_ref) };
 	}
 
 	template<Format f = Format::eUndefined>
 	[[nodiscard]] inline Value<ImageView<f>> allocate(Name name, Value<Image<f>> image, Value<IVCI> ivci = {}, VUK_CALLSTACK) {
-		Ref ref = current_module->make_allocate(current_module->types.make_pointer_ty(to_IR_type<ImageLike<f>>()), image.get_head(), ivci.get_head());
+		Ref ref = current_module->make_allocate(to_IR_type<ImageView<f>>(), image.get_head(), ivci.get_head());
 		current_module->name_output(ref, name.c_str());
 		current_module->set_source_location(ref.node, VUK_CALL);
 		return { make_ext_ref(ref) };

@@ -47,7 +47,7 @@ namespace vuk {
 	struct is_imagelike : std::false_type {};
 
 	template<Format f>
-	struct is_imagelike<ImageLike<f>> : std::true_type {};
+	struct is_imagelike<ptr<ImageLike<f>>> : std::true_type {};
 
 	template<class T>
 	struct is_imageview : std::false_type {};
@@ -89,12 +89,17 @@ namespace vuk {
 			auto enum_type = std::shared_ptr<Type>(new Type{ .kind = Type::ENUM_TY,
 			                                                 .size = sizeof(T),
 			                                                 .debug_info = current_module->types.allocate_type_debug_info(std::string(type_name)),
-			                                                 .enumt = { .format_to = format_callback, .tag = tag } });
+			                                                 .format_to = format_callback,
+			                                                 .enumt = { .tag = tag } });
 			return current_module->types.emplace_type(enum_type);
 		} else if constexpr (is_imageview<T>::value) {
 			auto fmt_enum_ty = to_IR_type<Format>();
 			auto ev_ty = current_module->types.make_enum_value_ty(fmt_enum_ty, static_cast<uint64_t>(T::static_format));
 			return current_module->types.make_imageview_ty(ev_ty);
+		} else if constexpr (is_imagelike<T>::value) {
+			auto fmt_enum_ty = to_IR_type<Format>();
+			auto ev_ty = current_module->types.make_enum_value_ty(fmt_enum_ty, static_cast<uint64_t>(T::static_format));
+			return current_module->types.make_image_ty(ev_ty);
 		} else if constexpr (std::is_base_of_v<ptr_base, T>) {
 			return current_module->types.make_pointer_ty(to_IR_type<typename T::UnwrappedT>());
 		} else if constexpr (erased_tuple_adaptor<T>::value) {
@@ -102,23 +107,63 @@ namespace vuk {
 			    std::apply([&](auto... member_tys) { return std::vector<std::shared_ptr<Type>>{ to_IR_type<decltype(member_tys)>()... }; },
 			               erased_tuple_adaptor<T>::member_types);
 			auto offsets = std::vector<size_t>(erased_tuple_adaptor<T>::offsets.begin(), erased_tuple_adaptor<T>::offsets.end());
-			auto composite_type = current_module->types.emplace_type(
+
+			// Create format function that uses compile-time type information
+			auto format_callback = [](void* v, std::string& dst) {
+				// Try to use fmt directly if available
+				if constexpr (fmt::is_formattable<T>::value) {
+					fmt::format_to(std::back_inserter(dst), "{}", *reinterpret_cast<T*>(v));
+				} else {
+					// Fallback: format by iterating members using apply
+					dst.append(erased_tuple_adaptor<T>::name);
+					dst.append("{");
+
+					size_t member_index = 0;
+					std::apply(
+					    [&](auto... member_tys) {
+						    bool first = true;
+						    (
+						        [&]() {
+							        if (!first) {
+								        dst.append(", ");
+							        }
+							        first = false;
+							        dst.append(erased_tuple_adaptor<T>::member_names[member_index]);
+							        dst.append("=");
+
+							        // Get the member value and format it using its type's formatter
+							        using MemberType = decltype(member_tys);
+							        void* member_ptr = reinterpret_cast<char*>(v) + erased_tuple_adaptor<T>::offsets[member_index];
+
+							        // Use the child_type's format_to for this member
+							        fmt::format_to(std::back_inserter(dst), "{}", *static_cast<MemberType*>(member_ptr));
+
+							        ++member_index;
+						        }(),
+						        ...);
+					    },
+					    erased_tuple_adaptor<T>::member_types);
+
+					dst.append("}");
+				}
+			};
+
+			return current_module->types.emplace_type(
 			    std::shared_ptr<Type>(new Type{ .kind = Type::COMPOSITE_TY,
 			                                    .size = sizeof(T),
 			                                    .debug_info = current_module->types.allocate_type_debug_info(erased_tuple_adaptor<T>::name),
 			                                    .child_types = child_types,
 			                                    .offsets = offsets,
 			                                    .member_names = { erased_tuple_adaptor<T>::member_names.begin(), erased_tuple_adaptor<T>::member_names.end() },
-			                                    .composite = { .types = child_types,
-			                                                   .tag = std::hash<const char*>{}(erased_tuple_adaptor<T>::name),
-			                                                   .construct = &erased_tuple_adaptor<T>::construct,
-			                                                   .get = &erased_tuple_adaptor<T>::get,
-			                                                   .is_default = &erased_tuple_adaptor<T>::is_default,
-			                                                   .destroy = &erased_tuple_adaptor<T>::destroy,
-			                                                   .format_to = [](void* v, std::string& dst) {
-				                                                   fmt::format_to(std::back_inserter(dst), "{}", *reinterpret_cast<T*>(v));
-			                                                   } } }));
-			return composite_type;
+			                                    .format_to = format_callback,
+			                                    .composite = {
+			                                        .types = child_types,
+			                                        .tag = std::hash<const char*>{}(erased_tuple_adaptor<T>::name),
+			                                        .construct = &erased_tuple_adaptor<T>::construct,
+			                                        .get = &erased_tuple_adaptor<T>::get,
+			                                        .is_default = &erased_tuple_adaptor<T>::is_default,
+			                                        .destroy = &erased_tuple_adaptor<T>::destroy,
+			                                    } }));
 		} else {
 			static_assert(dependent_false<T>::value, "Cannot convert type to IR");
 		}

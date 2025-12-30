@@ -26,7 +26,8 @@ namespace vuk {
 		auto enum_type = std::shared_ptr<Type>(new Type{ .kind = Type::ENUM_TY,
 		                                                 .size = sizeof(T),
 		                                                 .debug_info = current_module->types.allocate_type_debug_info(std::string(type_name)),
-		                                                 .enumt = { .format_to = format_callback, .tag = tag } });
+		                                                 .format_to = format_callback,
+		                                                 .enumt = { .tag = tag } });
 		auto enum_ty = emplace_type(enum_type);
 		auto pt_ty = make_enum_value_ty(enum_ty, (uint64_t)Format::eUndefined);
 		return make_pointer_ty(pt_ty);
@@ -49,16 +50,16 @@ namespace vuk {
 				}
 			} else if (ty->kind == Type::ENUM_VALUE_TY) {
 				std::string formatted;
-				if (ty->enum_value.enum_type->get()->enumt.format_to) {
-					ty->enum_value.enum_type->get()->enumt.format_to((void*)&ty->enum_value.value, formatted);
+				if (ty->enum_value.enum_type->get()->format_to) {
+					ty->enum_value.enum_type->get()->format_to((void*)&ty->enum_value.value, formatted);
 					return formatted;
 				} else {
 					return fmt::format("{}", ty->enum_value.value);
 				}
 			} else if (ty->kind == Type::COMPOSITE_TY) {
-				if (ty->composite.format_to) {
+				if (ty->format_to) {
 					std::string result;
-					ty->composite.format_to(node->constant.value, result);
+					ty->format_to(node->constant.value, result);
 					return result;
 				}
 			}

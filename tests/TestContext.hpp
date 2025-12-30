@@ -34,7 +34,7 @@ namespace vuk {
 
 		void bringup() {
 			vkb::InstanceBuilder builder;
-			builder.request_validation_layers()
+			builder.enable_validation_layers()
 			    .set_debug_callback([](VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
 			                           VkDebugUtilsMessageTypeFlagsEXT messageType,
 			                           const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
