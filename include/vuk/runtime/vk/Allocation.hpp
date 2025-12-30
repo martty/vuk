@@ -1,6 +1,7 @@
 #pragma once
 
 #include "vuk/runtime/vk/Image.hpp"
+#include <array>
 #include <span>
 
 namespace vuk {
@@ -49,8 +50,404 @@ namespace vuk {
 	};
 	struct ImageViewEntry;
 
+	// Base classes for component access - only inherit from the one matching component_count
+	template<typename T>
+	struct ComponentAccessor1 {
+		union {
+			std::array<T, 1> data;
+			struct {
+				T r, x;
+			};
+		};
+	};
+
+	template<typename T>
+	struct ComponentAccessor2 {
+		union {
+			std::array<T, 2> data;
+			struct {
+				T r, g;
+			};
+			struct {
+				T x, y;
+			};
+		};
+	};
+
+	template<typename T>
+	struct ComponentAccessor3 {
+		union {
+			std::array<T, 3> data;
+			struct {
+				T r, g, b;
+			};
+			struct {
+				T x, y, z;
+			};
+		};
+	};
+
+	template<typename T>
+	struct ComponentAccessor4 {
+		union {
+			std::array<T, 4> data;
+			struct {
+				T r, g, b, a;
+			};
+			struct {
+				T x, y, z, w;
+			};
+		};
+	};
+
+	// Default base class for unknown/packed formats
+	template<typename T, size_t Count>
+	struct ComponentAccessorBase {
+		std::array<T, (Count > 0 ? Count : 1)> data;
+	};
+
+	// Select the appropriate base class based on component count
+	template<typename T, size_t Count, bool HasIndividual>
+	struct SelectComponentAccessor {
+		using type = ComponentAccessorBase<T, Count>;
+	};
+
+	template<typename T>
+	struct SelectComponentAccessor<T, 1, true> {
+		using type = ComponentAccessor1<T>;
+	};
+
+	template<typename T>
+	struct SelectComponentAccessor<T, 2, true> {
+		using type = ComponentAccessor2<T>;
+	};
+
+	template<typename T>
+	struct SelectComponentAccessor<T, 3, true> {
+		using type = ComponentAccessor3<T>;
+	};
+
+	template<typename T>
+	struct SelectComponentAccessor<T, 4, true> {
+		using type = ComponentAccessor4<T>;
+	};
+
+	// Map ComponentDataType to actual C++ types
+	template<ComponentDataType CDT>
+	struct data_type_to_cpp {
+		using type = uint8_t; // default for eVoid/unknown
+	};
+
+	template<>
+	struct data_type_to_cpp<ComponentDataType::eUint8> {
+		using type = uint8_t;
+	};
+	template<>
+	struct data_type_to_cpp<ComponentDataType::eInt8> {
+		using type = int8_t;
+	};
+	template<>
+	struct data_type_to_cpp<ComponentDataType::eUnorm8> {
+		using type = uint8_t;
+	};
+	template<>
+	struct data_type_to_cpp<ComponentDataType::eSnorm8> {
+		using type = int8_t;
+	};
+	template<>
+	struct data_type_to_cpp<ComponentDataType::eSrgb8> {
+		using type = uint8_t;
+	};
+	template<>
+	struct data_type_to_cpp<ComponentDataType::eUint16> {
+		using type = uint16_t;
+	};
+	template<>
+	struct data_type_to_cpp<ComponentDataType::eInt16> {
+		using type = int16_t;
+	};
+	template<>
+	struct data_type_to_cpp<ComponentDataType::eUnorm16> {
+		using type = uint16_t;
+	};
+	template<>
+	struct data_type_to_cpp<ComponentDataType::eSnorm16> {
+		using type = int16_t;
+	};
+	template<>
+	struct data_type_to_cpp<ComponentDataType::eFloat16> {
+		using type = uint16_t;
+	};
+	template<>
+	struct data_type_to_cpp<ComponentDataType::eUint32> {
+		using type = uint32_t;
+	};
+	template<>
+	struct data_type_to_cpp<ComponentDataType::eInt32> {
+		using type = int32_t;
+	};
+	template<>
+	struct data_type_to_cpp<ComponentDataType::eFloat32> {
+		using type = float;
+	};
+	template<>
+	struct data_type_to_cpp<ComponentDataType::eUint64> {
+		using type = uint64_t;
+	};
+	template<>
+	struct data_type_to_cpp<ComponentDataType::eInt64> {
+		using type = int64_t;
+	};
+	template<>
+	struct data_type_to_cpp<ComponentDataType::eFloat64> {
+		using type = double;
+	};
+	template<>
+	struct data_type_to_cpp<ComponentDataType::ePacked32> {
+		using type = uint32_t;
+	};
+
+	template<Format format>
+	struct FormatTraits {
+		static constexpr ComponentDataType cdt = format_to_component_data_type(format);
+		static constexpr size_t component_count = format_to_component_count(format);
+		static constexpr bool has_individual_components = format_has_individual_components(format);
+		using component_type = typename data_type_to_cpp<cdt>::type;
+		static constexpr size_t size_bytes = sizeof(component_type) * component_count;
+		using storage_type = std::array<component_type, (component_count > 0 ? component_count : 1)>;
+	};
+
+	// sRGB conversion helpers
+	namespace detail {
+		// Convert linear float [0,1] to sRGB uint8
+		constexpr uint8_t linear_to_srgb8(float linear) noexcept {
+			if (linear <= 0.0f)
+				return 0;
+			if (linear >= 1.0f)
+				return 255;
+			if (linear <= 0.0031308f)
+				return static_cast<uint8_t>(linear * 12.92f * 255.0f + 0.5f);
+			return static_cast<uint8_t>((1.055f * std::pow(linear, 1.0f / 2.4f) - 0.055f) * 255.0f + 0.5f);
+		}
+
+		// Convert sRGB uint8 to linear float [0,1]
+		constexpr float srgb8_to_linear(uint8_t srgb) noexcept {
+			float normalized = srgb / 255.0f;
+			if (normalized <= 0.04045f)
+				return normalized / 12.92f;
+			return std::pow((normalized + 0.055f) / 1.055f, 2.4f);
+		}
+	} // namespace detail
+
 	template<Format format = Format::eUndefined>
-	struct ImageLike : std::integral_constant<Format, format> {};
+	struct ImageLike : std::integral_constant<Format, format> {
+		static constexpr ComponentDataType cdt = format_to_component_data_type(format);
+		using component_type = typename data_type_to_cpp<cdt>::type;
+		static constexpr size_t component_count = format_to_component_count(format);
+		static constexpr bool has_individual_components = format_has_individual_components(format);
+		static constexpr size_t size_bytes = sizeof(component_type) * component_count;
+		using storage_type = typename FormatTraits<format>::storage_type;
+
+		storage_type data;
+
+		// Constructors
+		constexpr ImageLike() : data{} {}
+
+		// Constructor for single component
+		template<typename T = component_type>
+		  requires(component_count == 1)
+		constexpr ImageLike(T value) : data{ static_cast<component_type>(value) } {}
+
+		// Constructor for 2 components
+		template<typename T = component_type>
+		  requires(component_count == 2)
+		constexpr ImageLike(T r, T g) : data{ static_cast<component_type>(r), static_cast<component_type>(g) } {}
+
+		// Constructor for 3 components
+		template<typename T = component_type>
+		  requires(component_count == 3)
+		constexpr ImageLike(T r, T g, T b) : data{ static_cast<component_type>(r), static_cast<component_type>(g), static_cast<component_type>(b) } {}
+
+		// Constructor for 4 components
+		template<typename T = component_type>
+		  requires(component_count == 4)
+		constexpr ImageLike(T r, T g, T b, T a) :
+		    data{ static_cast<component_type>(r), static_cast<component_type>(g), static_cast<component_type>(b), static_cast<component_type>(a) } {}
+
+		// Constructor from packed 32-bit uint for 8-bit RGBA formats (ABGR layout in memory)
+		constexpr ImageLike(uint32_t packed)
+		  requires(component_count == 4 && sizeof(component_type) == 1)
+		    :
+		    data{ static_cast<component_type>(packed & 0xFF),
+			        static_cast<component_type>((packed >> 8) & 0xFF),
+			        static_cast<component_type>((packed >> 16) & 0xFF),
+			        static_cast<component_type>((packed >> 24) & 0xFF) } {}
+
+		// Conversion to packed 32-bit uint for 8-bit RGBA formats (ABGR layout in memory)
+		constexpr uint32_t to_packed() const noexcept
+		  requires(component_count == 4 && sizeof(component_type) == 1)
+		{
+			return static_cast<uint32_t>(data[0]) | (static_cast<uint32_t>(data[1]) << 8) | (static_cast<uint32_t>(data[2]) << 16) |
+			       (static_cast<uint32_t>(data[3]) << 24);
+		}
+
+		// Array subscript operator - raw access
+		constexpr component_type& operator[](size_t i) {
+			return data[i];
+		}
+
+		constexpr const component_type& operator[](size_t i) const {
+			return data[i];
+		}
+
+		// Component accessors with conversion for normalized formats
+		// For UNORM8: stored as uint8, converted to/from float [0, 1]
+		constexpr auto r() const noexcept
+		  requires(component_count >= 1)
+		{
+			if constexpr (cdt == ComponentDataType::eUnorm8) {
+				return data[0] / 255.0f;
+			} else if constexpr (cdt == ComponentDataType::eSnorm8) {
+				return std::max(data[0] / 127.0f, -1.0f);
+			} else if constexpr (cdt == ComponentDataType::eSrgb8) {
+				return detail::srgb8_to_linear(data[0]);
+			} else if constexpr (cdt == ComponentDataType::eUnorm16) {
+				return data[0] / 65535.0f;
+			} else if constexpr (cdt == ComponentDataType::eSnorm16) {
+				return std::max(data[0] / 32767.0f, -1.0f);
+			} else {
+				return data[0];
+			}
+		}
+
+		constexpr void r(auto value) noexcept
+		  requires(component_count >= 1)
+		{
+			if constexpr (cdt == ComponentDataType::eUnorm8) {
+				data[0] = static_cast<uint8_t>(value * 255.0f + 0.5f);
+			} else if constexpr (cdt == ComponentDataType::eSnorm8) {
+				data[0] = static_cast<int8_t>(value * 127.0f);
+			} else if constexpr (cdt == ComponentDataType::eSrgb8) {
+				data[0] = detail::linear_to_srgb8(value);
+			} else if constexpr (cdt == ComponentDataType::eUnorm16) {
+				data[0] = static_cast<uint16_t>(value * 65535.0f + 0.5f);
+			} else if constexpr (cdt == ComponentDataType::eSnorm16) {
+				data[0] = static_cast<int16_t>(value * 32767.0f);
+			} else {
+				data[0] = static_cast<component_type>(value);
+			}
+		}
+
+		constexpr auto g() const noexcept
+		  requires(component_count >= 2)
+		{
+			if constexpr (cdt == ComponentDataType::eUnorm8) {
+				return data[1] / 255.0f;
+			} else if constexpr (cdt == ComponentDataType::eSnorm8) {
+				return std::max(data[1] / 127.0f, -1.0f);
+			} else if constexpr (cdt == ComponentDataType::eSrgb8) {
+				return detail::srgb8_to_linear(data[1]);
+			} else if constexpr (cdt == ComponentDataType::eUnorm16) {
+				return data[1] / 65535.0f;
+			} else if constexpr (cdt == ComponentDataType::eSnorm16) {
+				return std::max(data[1] / 32767.0f, -1.0f);
+			} else {
+				return data[1];
+			}
+		}
+
+		constexpr void g(auto value) noexcept
+		  requires(component_count >= 2)
+		{
+			if constexpr (cdt == ComponentDataType::eUnorm8) {
+				data[1] = static_cast<uint8_t>(value * 255.0f + 0.5f);
+			} else if constexpr (cdt == ComponentDataType::eSnorm8) {
+				data[1] = static_cast<int8_t>(value * 127.0f);
+			} else if constexpr (cdt == ComponentDataType::eSrgb8) {
+				data[1] = detail::linear_to_srgb8(value);
+			} else if constexpr (cdt == ComponentDataType::eUnorm16) {
+				data[1] = static_cast<uint16_t>(value * 65535.0f + 0.5f);
+			} else if constexpr (cdt == ComponentDataType::eSnorm16) {
+				data[1] = static_cast<int16_t>(value * 32767.0f);
+			} else {
+				data[1] = static_cast<component_type>(value);
+			}
+		}
+
+		constexpr auto b() const noexcept
+		  requires(component_count >= 3)
+		{
+			if constexpr (cdt == ComponentDataType::eUnorm8) {
+				return data[2] / 255.0f;
+			} else if constexpr (cdt == ComponentDataType::eSnorm8) {
+				return std::max(data[2] / 127.0f, -1.0f);
+			} else if constexpr (cdt == ComponentDataType::eSrgb8) {
+				return detail::srgb8_to_linear(data[2]);
+			} else if constexpr (cdt == ComponentDataType::eUnorm16) {
+				return data[2] / 65535.0f;
+			} else if constexpr (cdt == ComponentDataType::eSnorm16) {
+				return std::max(data[2] / 32767.0f, -1.0f);
+			} else {
+				return data[2];
+			}
+		}
+
+		constexpr void b(auto value) noexcept
+		  requires(component_count >= 3)
+		{
+			if constexpr (cdt == ComponentDataType::eUnorm8) {
+				data[2] = static_cast<uint8_t>(value * 255.0f + 0.5f);
+			} else if constexpr (cdt == ComponentDataType::eSnorm8) {
+				data[2] = static_cast<int8_t>(value * 127.0f);
+			} else if constexpr (cdt == ComponentDataType::eSrgb8) {
+				data[2] = detail::linear_to_srgb8(value);
+			} else if constexpr (cdt == ComponentDataType::eUnorm16) {
+				data[2] = static_cast<uint16_t>(value * 65535.0f + 0.5f);
+			} else if constexpr (cdt == ComponentDataType::eSnorm16) {
+				data[2] = static_cast<int16_t>(value * 32767.0f);
+			} else {
+				data[2] = static_cast<component_type>(value);
+			}
+		}
+
+		constexpr auto a() const noexcept
+		  requires(component_count >= 4)
+		{
+			if constexpr (cdt == ComponentDataType::eUnorm8) {
+				return data[3] / 255.0f;
+			} else if constexpr (cdt == ComponentDataType::eSnorm8) {
+				return std::max(data[3] / 127.0f, -1.0f);
+			} else if constexpr (cdt == ComponentDataType::eSrgb8) {
+				// Alpha is always linear in sRGB formats
+				return data[3] / 255.0f;
+			} else if constexpr (cdt == ComponentDataType::eUnorm16) {
+				return data[3] / 65535.0f;
+			} else if constexpr (cdt == ComponentDataType::eSnorm16) {
+				return std::max(data[3] / 32767.0f, -1.0f);
+			} else {
+				return data[3];
+			}
+		}
+
+		constexpr void a(auto value) noexcept
+		  requires(component_count >= 4)
+		{
+			if constexpr (cdt == ComponentDataType::eUnorm8) {
+				data[3] = static_cast<uint8_t>(value * 255.0f + 0.5f);
+			} else if constexpr (cdt == ComponentDataType::eSnorm8) {
+				data[3] = static_cast<int8_t>(value * 127.0f);
+			} else if constexpr (cdt == ComponentDataType::eSrgb8) {
+				// Alpha is always linear in sRGB formats
+				data[3] = static_cast<uint8_t>(value * 255.0f + 0.5f);
+			} else if constexpr (cdt == ComponentDataType::eUnorm16) {
+				data[3] = static_cast<uint16_t>(value * 65535.0f + 0.5f);
+			} else if constexpr (cdt == ComponentDataType::eSnorm16) {
+				data[3] = static_cast<int16_t>(value * 32767.0f);
+			} else {
+				data[3] = static_cast<component_type>(value);
+			}
+		}
+	};
 
 	struct Resolver {
 		inline static thread_local Resolver* per_thread;

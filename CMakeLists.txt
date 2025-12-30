@@ -474,21 +474,22 @@ if(VUK_BUILD_TESTS)
 	target_sources(vuk PRIVATE tests/Test.cpp)
 	include(doctest_force_link_static_lib_in_target) # until we can use cmake 3.24
 	add_executable(vuk-tests tests/Test.cpp
-					#tests/enum_ir_type_test.cpp
-					#tests/00_misc.cpp
-					#tests/01_semantics.cpp
-					#tests/01_image.cpp
-					tests/01_image_alloc.cpp
-					#tests/02_rg_errors.cpp
-					#tests/03_commands.cpp
-					#tests/04_arrays.cpp
-					#tests/05_renderpass.cpp
-					#tests/06_mt.cpp
-					#tests/X1_SPD.cpp
-					#tests/radix_tree.cpp
-					#tests/frame_allocator.cpp
-					#tests/buffer_ptr_view.cpp
-					#tests/image_ptr_view.cpp
+				#tests/enum_ir_type_test.cpp
+				#tests/00_misc.cpp
+				#tests/01_semantics.cpp
+				#tests/01_image.cpp
+				tests/01_image_alloc.cpp
+				tests/imagelike_bridge_test.cpp
+				#tests/02_rg_errors.cpp
+				#tests/03_commands.cpp
+				#tests/04_arrays.cpp
+				#tests/05_renderpass.cpp
+				#tests/06_mt.cpp
+				#tests/X1_SPD.cpp
+				#tests/radix_tree.cpp
+				#tests/frame_allocator.cpp
+				#tests/buffer_ptr_view.cpp
+				#tests/image_ptr_view.cpp
 	)
 	#target_compile_features(vuk-tests PRIVATE cxx_std_17)
 	target_include_directories(vuk-tests PRIVATE ext/renderdoc)

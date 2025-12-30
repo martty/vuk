@@ -582,6 +582,380 @@ namespace vuk {
 		eFormatClassCompressedColour
 	};
 
+	// Get the number of components for a format (for uncompressed formats)
+	constexpr size_t format_to_component_count(Format format) noexcept {
+		switch (format) {
+		// Single component formats
+		case Format::eR8Unorm:
+		case Format::eR8Snorm:
+		case Format::eR8Uscaled:
+		case Format::eR8Sscaled:
+		case Format::eR8Uint:
+		case Format::eR8Sint:
+		case Format::eR8Srgb:
+		case Format::eR16Unorm:
+		case Format::eR16Snorm:
+		case Format::eR16Uscaled:
+		case Format::eR16Sscaled:
+		case Format::eR16Uint:
+		case Format::eR16Sint:
+		case Format::eR16Sfloat:
+		case Format::eR32Uint:
+		case Format::eR32Sint:
+		case Format::eR32Sfloat:
+		case Format::eR64Uint:
+		case Format::eR64Sint:
+		case Format::eR64Sfloat:
+			return 1;
+
+		// Two component formats
+		case Format::eR8G8Unorm:
+		case Format::eR8G8Snorm:
+		case Format::eR8G8Uscaled:
+		case Format::eR8G8Sscaled:
+		case Format::eR8G8Uint:
+		case Format::eR8G8Sint:
+		case Format::eR8G8Srgb:
+		case Format::eR16G16Unorm:
+		case Format::eR16G16Snorm:
+		case Format::eR16G16Uscaled:
+		case Format::eR16G16Sscaled:
+		case Format::eR16G16Uint:
+		case Format::eR16G16Sint:
+		case Format::eR16G16Sfloat:
+		case Format::eR32G32Uint:
+		case Format::eR32G32Sint:
+		case Format::eR32G32Sfloat:
+		case Format::eR64G64Uint:
+		case Format::eR64G64Sint:
+		case Format::eR64G64Sfloat:
+			return 2;
+
+		// Three component formats
+		case Format::eR8G8B8Unorm:
+		case Format::eR8G8B8Snorm:
+		case Format::eR8G8B8Uscaled:
+		case Format::eR8G8B8Sscaled:
+		case Format::eR8G8B8Uint:
+		case Format::eR8G8B8Sint:
+		case Format::eR8G8B8Srgb:
+		case Format::eB8G8R8Unorm:
+		case Format::eB8G8R8Snorm:
+		case Format::eB8G8R8Uscaled:
+		case Format::eB8G8R8Sscaled:
+		case Format::eB8G8R8Uint:
+		case Format::eB8G8R8Sint:
+		case Format::eB8G8R8Srgb:
+		case Format::eR16G16B16Unorm:
+		case Format::eR16G16B16Snorm:
+		case Format::eR16G16B16Uscaled:
+		case Format::eR16G16B16Sscaled:
+		case Format::eR16G16B16Uint:
+		case Format::eR16G16B16Sint:
+		case Format::eR16G16B16Sfloat:
+		case Format::eR32G32B32Uint:
+		case Format::eR32G32B32Sint:
+		case Format::eR32G32B32Sfloat:
+		case Format::eR64G64B64Uint:
+		case Format::eR64G64B64Sint:
+		case Format::eR64G64B64Sfloat:
+			return 3;
+
+		// Four component formats
+		case Format::eR8G8B8A8Unorm:
+		case Format::eR8G8B8A8Snorm:
+		case Format::eR8G8B8A8Uscaled:
+		case Format::eR8G8B8A8Sscaled:
+		case Format::eR8G8B8A8Uint:
+		case Format::eR8G8B8A8Sint:
+		case Format::eR8G8B8A8Srgb:
+		case Format::eB8G8R8A8Unorm:
+		case Format::eB8G8R8A8Snorm:
+		case Format::eB8G8R8A8Uscaled:
+		case Format::eB8G8R8A8Sscaled:
+		case Format::eB8G8R8A8Uint:
+		case Format::eB8G8R8A8Sint:
+		case Format::eB8G8R8A8Srgb:
+		case Format::eA8B8G8R8UnormPack32:
+		case Format::eA8B8G8R8SnormPack32:
+		case Format::eA8B8G8R8UscaledPack32:
+		case Format::eA8B8G8R8SscaledPack32:
+		case Format::eA8B8G8R8UintPack32:
+		case Format::eA8B8G8R8SintPack32:
+		case Format::eA8B8G8R8SrgbPack32:
+		case Format::eR16G16B16A16Unorm:
+		case Format::eR16G16B16A16Snorm:
+		case Format::eR16G16B16A16Uscaled:
+		case Format::eR16G16B16A16Sscaled:
+		case Format::eR16G16B16A16Uint:
+		case Format::eR16G16B16A16Sint:
+		case Format::eR16G16B16A16Sfloat:
+		case Format::eR32G32B32A32Uint:
+		case Format::eR32G32B32A32Sint:
+		case Format::eR32G32B32A32Sfloat:
+		case Format::eR64G64B64A64Uint:
+		case Format::eR64G64B64A64Sint:
+		case Format::eR64G64B64A64Sfloat:
+			return 4;
+
+		default:
+			return 0; // Unknown/unsupported format
+		}
+	}
+
+	// Check if a format stores components as individual values (vs packed)
+	constexpr bool format_has_individual_components(Format format) noexcept {
+		switch (format) {
+		// Individual component formats
+		case Format::eR8Unorm:
+		case Format::eR8Snorm:
+		case Format::eR8Uint:
+		case Format::eR8Sint:
+		case Format::eR16Unorm:
+		case Format::eR16Snorm:
+		case Format::eR16Uint:
+		case Format::eR16Sint:
+		case Format::eR16Sfloat:
+		case Format::eR32Uint:
+		case Format::eR32Sint:
+		case Format::eR32Sfloat:
+		case Format::eR8G8Unorm:
+		case Format::eR8G8Snorm:
+		case Format::eR8G8Uint:
+		case Format::eR8G8Sint:
+		case Format::eR16G16Unorm:
+		case Format::eR16G16Snorm:
+		case Format::eR16G16Uint:
+		case Format::eR16G16Sint:
+		case Format::eR16G16Sfloat:
+		case Format::eR32G32Uint:
+		case Format::eR32G32Sint:
+		case Format::eR32G32Sfloat:
+		case Format::eR8G8B8Unorm:
+		case Format::eR8G8B8Snorm:
+		case Format::eR8G8B8Uint:
+		case Format::eR8G8B8Sint:
+		case Format::eR16G16B16Unorm:
+		case Format::eR16G16B16Snorm:
+		case Format::eR16G16B16Uint:
+		case Format::eR16G16B16Sint:
+		case Format::eR16G16B16Sfloat:
+		case Format::eR32G32B32Uint:
+		case Format::eR32G32B32Sint:
+		case Format::eR32G32B32Sfloat:
+		case Format::eR16G16B16A16Unorm:
+		case Format::eR16G16B16A16Snorm:
+		case Format::eR16G16B16A16Uint:
+		case Format::eR16G16B16A16Sint:
+		case Format::eR16G16B16A16Sfloat:
+		case Format::eR32G32B32A32Uint:
+		case Format::eR32G32B32A32Sint:
+		case Format::eR32G32B32A32Sfloat:
+			return true;
+
+		default:
+			return false;
+		}
+	}
+
+	// Component data type categories for formats
+	enum class ComponentDataType {
+		eUint8,     // 8-bit unsigned integer
+		eInt8,      // 8-bit signed integer
+		eUnorm8,    // 8-bit unsigned normalized
+		eSnorm8,    // 8-bit signed normalized
+		eSrgb8,     // 8-bit sRGB (stored as uint8, interpreted with gamma correction)
+		eUint16,    // 16-bit unsigned integer
+		eInt16,     // 16-bit signed integer
+		eUnorm16,   // 16-bit unsigned normalized
+		eSnorm16,   // 16-bit signed normalized
+		eUint32,    // 32-bit unsigned integer
+		eInt32,     // 32-bit signed integer
+		eFloat32,   // 32-bit float
+		eFloat16,   // 16-bit float (stored as uint16)
+		eUint64,    // 64-bit unsigned integer
+		eInt64,     // 64-bit signed integer
+		eFloat64,   // 64-bit float
+		ePacked32,  // Packed format stored as uint32
+	};
+
+	// Get the component data type for a format
+	constexpr ComponentDataType format_to_component_data_type(Format format) noexcept {
+		switch (format) {
+		// R8 formats
+		case Format::eR8Uint:
+			return ComponentDataType::eUint8;
+		case Format::eR8Sint:
+			return ComponentDataType::eInt8;
+		case Format::eR8Unorm:
+			return ComponentDataType::eUnorm8;
+		case Format::eR8Snorm:
+			return ComponentDataType::eSnorm8;
+		case Format::eR8Srgb:
+			return ComponentDataType::eSrgb8;
+
+		// R16 formats
+		case Format::eR16Uint:
+			return ComponentDataType::eUint16;
+		case Format::eR16Sint:
+			return ComponentDataType::eInt16;
+		case Format::eR16Unorm:
+			return ComponentDataType::eUnorm16;
+		case Format::eR16Snorm:
+			return ComponentDataType::eSnorm16;
+		case Format::eR16Sfloat:
+			return ComponentDataType::eFloat16;
+
+		// R32 formats
+		case Format::eR32Uint:
+			return ComponentDataType::eUint32;
+		case Format::eR32Sint:
+			return ComponentDataType::eInt32;
+		case Format::eR32Sfloat:
+			return ComponentDataType::eFloat32;
+
+		// R64 formats
+		case Format::eR64Uint:
+			return ComponentDataType::eUint64;
+		case Format::eR64Sint:
+			return ComponentDataType::eInt64;
+		case Format::eR64Sfloat:
+			return ComponentDataType::eFloat64;
+
+		// R8G8 formats
+		case Format::eR8G8Uint:
+			return ComponentDataType::eUint8;
+		case Format::eR8G8Sint:
+			return ComponentDataType::eInt8;
+		case Format::eR8G8Unorm:
+			return ComponentDataType::eUnorm8;
+		case Format::eR8G8Snorm:
+			return ComponentDataType::eSnorm8;
+		case Format::eR8G8Srgb:
+			return ComponentDataType::eSrgb8;
+
+		// R16G16 formats
+		case Format::eR16G16Uint:
+			return ComponentDataType::eUint16;
+		case Format::eR16G16Sint:
+			return ComponentDataType::eInt16;
+		case Format::eR16G16Unorm:
+			return ComponentDataType::eUnorm16;
+		case Format::eR16G16Snorm:
+			return ComponentDataType::eSnorm16;
+		case Format::eR16G16Sfloat:
+			return ComponentDataType::eFloat16;
+
+		// R32G32 formats
+		case Format::eR32G32Uint:
+			return ComponentDataType::eUint32;
+		case Format::eR32G32Sint:
+			return ComponentDataType::eInt32;
+		case Format::eR32G32Sfloat:
+			return ComponentDataType::eFloat32;
+
+		// R64G64 formats
+		case Format::eR64G64Uint:
+			return ComponentDataType::eUint64;
+		case Format::eR64G64Sint:
+			return ComponentDataType::eInt64;
+		case Format::eR64G64Sfloat:
+			return ComponentDataType::eFloat64;
+
+		// R8G8B8 formats
+		case Format::eR8G8B8Uint:
+		case Format::eB8G8R8Uint:
+			return ComponentDataType::eUint8;
+		case Format::eR8G8B8Sint:
+		case Format::eB8G8R8Sint:
+			return ComponentDataType::eInt8;
+		case Format::eR8G8B8Unorm:
+		case Format::eB8G8R8Unorm:
+			return ComponentDataType::eUnorm8;
+		case Format::eR8G8B8Snorm:
+		case Format::eB8G8R8Snorm:
+			return ComponentDataType::eSnorm8;
+		case Format::eR8G8B8Srgb:
+		case Format::eB8G8R8Srgb:
+			return ComponentDataType::eSrgb8;
+
+		// R16G16B16 formats
+		case Format::eR16G16B16Uint:
+			return ComponentDataType::eUint16;
+		case Format::eR16G16B16Sint:
+			return ComponentDataType::eInt16;
+		case Format::eR16G16B16Unorm:
+			return ComponentDataType::eUnorm16;
+		case Format::eR16G16B16Snorm:
+			return ComponentDataType::eSnorm16;
+		case Format::eR16G16B16Sfloat:
+			return ComponentDataType::eFloat16;
+
+		// R32G32B32 formats
+		case Format::eR32G32B32Uint:
+			return ComponentDataType::eUint32;
+		case Format::eR32G32B32Sint:
+			return ComponentDataType::eInt32;
+		case Format::eR32G32B32Sfloat:
+			return ComponentDataType::eFloat32;
+
+		// R64G64B64 formats
+		case Format::eR64G64B64Uint:
+			return ComponentDataType::eUint64;
+		case Format::eR64G64B64Sint:
+			return ComponentDataType::eInt64;
+		case Format::eR64G64B64Sfloat:
+			return ComponentDataType::eFloat64;
+
+		// R16G16B16A16 formats
+		case Format::eR16G16B16A16Uint:
+			return ComponentDataType::eUint16;
+		case Format::eR16G16B16A16Sint:
+			return ComponentDataType::eInt16;
+		case Format::eR16G16B16A16Unorm:
+			return ComponentDataType::eUnorm16;
+		case Format::eR16G16B16A16Snorm:
+			return ComponentDataType::eSnorm16;
+		case Format::eR16G16B16A16Sfloat:
+			return ComponentDataType::eFloat16;
+
+		// R32G32B32A32 formats
+		case Format::eR32G32B32A32Uint:
+			return ComponentDataType::eUint32;
+		case Format::eR32G32B32A32Sint:
+			return ComponentDataType::eInt32;
+		case Format::eR32G32B32A32Sfloat:
+			return ComponentDataType::eFloat32;
+
+		// R64G64B64A64 formats
+		case Format::eR64G64B64A64Uint:
+			return ComponentDataType::eUint64;
+		case Format::eR64G64B64A64Sint:
+			return ComponentDataType::eInt64;
+		case Format::eR64G64B64A64Sfloat:
+			return ComponentDataType::eFloat64;
+
+		// Packed formats
+		case Format::eR8G8B8A8Unorm:
+		case Format::eR8G8B8A8Uint:
+		case Format::eR8G8B8A8Sint:
+		case Format::eR8G8B8A8Srgb:
+		case Format::eB8G8R8A8Unorm:
+		case Format::eB8G8R8A8Srgb:
+		case Format::eA8B8G8R8UnormPack32:
+		case Format::eA8B8G8R8UintPack32:
+		case Format::eA8B8G8R8SintPack32:
+		case Format::eA8B8G8R8SrgbPack32:
+			return ComponentDataType::ePacked32;
+
+		case Format::eUndefined:
+			return ComponentDataType::ePacked32;
+		default:
+			assert(0);
+			return ComponentDataType::ePacked32;
+		}
+	}
+
 	// return the texel block size of a format
 	uint32_t format_to_texel_block_size(Format) noexcept;
 	// return the 3D texel block extent of a format
