@@ -40,6 +40,8 @@ namespace vuk {
 		bool operator==(const ICI& o) const noexcept = default;
 	};
 
+	std::string format_as(const ICI& ici);
+
 	struct ImageEntry : ICI {
 		VkImage image;
 		void* allocation;
@@ -397,6 +399,8 @@ namespace vuk {
 	template<Format f>
 	struct ptr<ImageLike<f>> : ptr_base {
 		static constexpr bool imagelike = true;
+		static constexpr Format static_format = f;
+
 		using pointed_T = ImageLike<f>;
 		using UnwrappedT = detail::unwrap<ImageLike<f>>::T;
 

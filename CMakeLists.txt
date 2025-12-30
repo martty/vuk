@@ -477,7 +477,8 @@ if(VUK_BUILD_TESTS)
 					#tests/enum_ir_type_test.cpp
 					#tests/00_misc.cpp
 					#tests/01_semantics.cpp
-					tests/01_image.cpp
+					#tests/01_image.cpp
+					tests/01_image_alloc.cpp
 					#tests/02_rg_errors.cpp
 					#tests/03_commands.cpp
 					#tests/04_arrays.cpp

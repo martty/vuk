@@ -63,15 +63,15 @@ namespace vuk {
 				fmt::format_to(std::back_inserter(msg), "<mem>");
 			} else if (ty->kind == Type::ENUM_VALUE_TY) {
 				std::string formatted;
-				if (ty->enum_value.enum_type->get()->enumt.format_to) {
-					ty->enum_value.enum_type->get()->enumt.format_to((void*)&ty->enum_value.value, formatted);
+				if (ty->enum_value.enum_type->get()->format_to) {
+					ty->enum_value.enum_type->get()->format_to((void*)&ty->enum_value.value, formatted);
 					fmt::format_to(std::back_inserter(msg), "{}", formatted);
 				} else {
 					fmt::format_to(std::back_inserter(msg), "{}", ty->enum_value.value);
 				}
 			} else if (ty->kind == Type::COMPOSITE_TY) {
-				if (ty->composite.format_to) {
-					ty->composite.format_to(parm.node->constant.value, msg);
+				if (ty->format_to) {
+					ty->format_to(parm.node->constant.value, msg);
 				} else {
 					fmt::format_to(std::back_inserter(msg), "<composite>");
 				}

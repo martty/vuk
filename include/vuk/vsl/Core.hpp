@@ -239,8 +239,8 @@ namespace vuk {
 			bc.imageSubresource.baseArrayLayer = dst_ve.base_layer;
 			assert(dst_ve.layer_count == 1); // unsupported yet
 			bc.imageSubresource.layerCount = dst_ve.layer_count;
-			bc.bufferOffset = cbuf.get_context().ptr_to_buffer_offset(src.ptr).offset; // TODO: PAV: bad
-			cbuf.copy_buffer_to_image(src, dst, bc);
+			bc.bufferOffset = cbuf.get_context().ptr_to_buffer_offset(src->ptr).offset; // TODO: PAV: bad
+			cbuf.copy_buffer_to_image(src->to_byte_view(), dst, bc);
 			return dst;
 		});
 

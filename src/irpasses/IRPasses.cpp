@@ -536,6 +536,9 @@ namespace vuk {
 				if (node->links->reads.size() > 0) { // we are trying to read from it :(
 					auto reads = node->links->reads.to_span(impl->pass_reads);
 					for (auto offender : reads) {
+						if (offender.node->kind == Node::ALLOCATE) { // not an actual read
+							continue;
+						}
 						auto message0 = format_graph_message(Level::eError, offender.node, "tried to read something that was never written:\n");
 						std::string message1;
 						if (node->debug_info && node->debug_info->result_names.size() > 0) {

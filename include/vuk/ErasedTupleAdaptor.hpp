@@ -22,9 +22,7 @@ namespace vuk {
 	} // namespace detail
 
 	template<class T>
-	struct erased_tuple_adaptor : std::false_type {
-		static_assert(!std::is_same_v<T, Extent3D>);
-	};
+	struct erased_tuple_adaptor : std::false_type {};
 
 // https://stackoverflow.com/a/44479664
 #define EVAL(...)                                                                                                          __VA_ARGS__

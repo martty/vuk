@@ -81,6 +81,11 @@ namespace vuk {
 		return ImageCreateFlags(bit0) ^ bit1;
 	}
 
+	std::string format_as(const ImageUsageFlagBits& bit);
+	std::string format_as(const ImageCreateFlagBits& bit);
+	std::string format_as(const ImageType& type);
+	std::string format_as(const ImageTiling& tiling);
+
 	enum class SharingMode { eExclusive = VK_SHARING_MODE_EXCLUSIVE, eConcurrent = VK_SHARING_MODE_CONCURRENT };
 
 	struct ImageCreateInfo {

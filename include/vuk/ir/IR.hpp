@@ -59,6 +59,7 @@ namespace vuk {
 		std::vector<size_t> offsets;                // for now only useful for composites
 		std::unique_ptr<UserCallbackType> callback; // only useful for user CBs
 		std::vector<const char*> member_names;
+		void (*format_to)(void* value, std::string&) = nullptr;
 
 		union {
 			struct {
@@ -99,10 +100,8 @@ namespace vuk {
 				void* (*get)(void* value, size_t index) = nullptr;
 				bool (*is_default)(void* value, size_t index) = nullptr;
 				void (*destroy)(void* dst) = nullptr;
-				void (*format_to)(void* value, std::string& dst) = nullptr;
 			} composite;
 			struct {
-				void (*format_to)(void* value, std::string&) = nullptr;
 				size_t tag;
 			} enumt;
 			struct {
@@ -183,7 +182,10 @@ namespace vuk {
 				hash_combine_direct(v, (uintptr_t)t->shader_fn.shader & 0xffffffff);
 				return v;
 			case POINTER_TY:
-				hash_combine_direct(v, Type::hash(t->array.T->get()));
+				hash_combine_direct(v, Type::hash(t->pointer.T->get()));
+				return v;
+			case IMAGE_TY:
+				hash_combine_direct(v, Type::hash(t->pointer.T->get()));
 				return v;
 			case ENUM_TY:
 				hash_combine_direct(v, (uint32_t)t->enumt.tag);
@@ -331,9 +333,9 @@ namespace vuk {
 				return "enum:" + std::to_string(t->enumt.tag);
 			case ENUM_VALUE_TY: {
 				std::string result;
-				if (t->enum_value.enum_type->get()->enumt.format_to) {
+				if (t->enum_value.enum_type->get()->format_to) {
 					std::string formatted;
-					t->enum_value.enum_type->get()->enumt.format_to((void*)&t->enum_value.value, formatted);
+					t->enum_value.enum_type->get()->format_to((void*)&t->enum_value.value, formatted);
 					result += formatted;
 				} else {
 					result += std::to_string(t->enum_value.value);
@@ -697,8 +699,9 @@ namespace vuk {
 			base = cur = tail->next->arena;
 		}
 
-		T* emplace(T v) {
-			return new (ensure_space(sizeof(T))) T(std::move(v));
+		template<class U>
+		U* emplace(U v) {
+			return new (ensure_space(sizeof(U))) U(std::move(v));
 		}
 
 		std::string_view allocate_string(std::string_view sv) {
@@ -915,7 +918,7 @@ namespace vuk {
 			};
 
 			std::shared_ptr<Type> make_enum_ty(size_t tag, void (*format_to)(void*, std::string&) = nullptr, size_t size = 4) {
-				auto t = new Type{ .kind = Type::ENUM_TY, .size = size, .enumt = { .format_to = format_to, .tag = tag } };
+				auto t = new Type{ .kind = Type::ENUM_TY, .size = size, .format_to = format_to, .enumt = { .tag = tag } };
 				return emplace_type(std::shared_ptr<Type>(t));
 			}
 
@@ -1092,7 +1095,7 @@ namespace vuk {
 					destroy(t->aliased.T->get(), v);
 				} else if (t->kind == Type::OPAQUE_TY) {
 					// nothing to do - opaque types don't own their values
-				} else if (t->kind == Type::ARRAY_TY || t->kind == Type::UNION_TY) {
+				} else if (t->kind == Type::ARRAY_TY || t->kind == Type::UNION_TY || t->kind == Type::IMAGE_TY) {
 					// currently arrays and unions don't own their values
 					/* auto cv = (char*)v;
 					for (auto i = 0; i < t->array.count; i++) {

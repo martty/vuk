@@ -121,6 +121,112 @@ namespace vuk {
 		return fmt::format("{}x", (uint32_t)samples.count);
 	}
 
+	std::string format_as(const ICI& ici) {
+		return fmt::format("ICI{{type={}, format={}, extent={}, samples={}, mips={}, layers={}, usage={}, tiling={}}}",
+		                   ici.image_type,
+		                   ici.format,
+		                   ici.extent,
+		                   ici.sample_count,
+		                   ici.level_count,
+		                   ici.layer_count,
+		                   ici.usage,
+		                   ici.tiling);
+	}
+
+	std::string format_as(const ImageUsageFlagBits& bit) {
+		switch (bit) {
+		case ImageUsageFlagBits::eTransferSrc:
+			return "TransferSrc";
+		case ImageUsageFlagBits::eTransferDst:
+			return "TransferDst";
+		case ImageUsageFlagBits::eSampled:
+			return "Sampled";
+		case ImageUsageFlagBits::eStorage:
+			return "Storage";
+		case ImageUsageFlagBits::eColorAttachment:
+			return "ColorAttachment";
+		case ImageUsageFlagBits::eDepthStencilAttachment:
+			return "DepthStencilAttachment";
+		case ImageUsageFlagBits::eTransientAttachment:
+			return "TransientAttachment";
+		case ImageUsageFlagBits::eInputAttachment:
+			return "InputAttachment";
+		case ImageUsageFlagBits::eShadingRateImageNV:
+			return "ShadingRateImageNV";
+		case ImageUsageFlagBits::eFragmentDensityMapEXT:
+			return "FragmentDensityMapEXT";
+		case ImageUsageFlagBits::eInfer:
+			return "Infer";
+		default:
+			return fmt::format("Unknown({:#x})", static_cast<VkImageUsageFlags>(bit));
+		}
+	}
+
+	std::string format_as(const ImageCreateFlagBits& bit) {
+		switch (bit) {
+		case ImageCreateFlagBits::eSparseBinding:
+			return "SparseBinding";
+		case ImageCreateFlagBits::eSparseResidency:
+			return "SparseResidency";
+		case ImageCreateFlagBits::eSparseAliased:
+			return "SparseAliased";
+		case ImageCreateFlagBits::eMutableFormat:
+			return "MutableFormat";
+		case ImageCreateFlagBits::eCubeCompatible:
+			return "CubeCompatible";
+		case ImageCreateFlagBits::eAlias:
+			return "Alias";
+		case ImageCreateFlagBits::eSplitInstanceBindRegions:
+			return "SplitInstanceBindRegions";
+		case ImageCreateFlagBits::e2DArrayCompatible:
+			return "2DArrayCompatible";
+		case ImageCreateFlagBits::eBlockTexelViewCompatible:
+			return "BlockTexelViewCompatible";
+		case ImageCreateFlagBits::eExtendedUsage:
+			return "ExtendedUsage";
+		case ImageCreateFlagBits::eProtected:
+			return "Protected";
+		case ImageCreateFlagBits::eDisjoint:
+			return "Disjoint";
+		case ImageCreateFlagBits::eCornerSampledNV:
+			return "CornerSampledNV";
+		case ImageCreateFlagBits::eSampleLocationsCompatibleDepthEXT:
+			return "SampleLocationsCompatibleDepthEXT";
+		case ImageCreateFlagBits::eSubsampledEXT:
+			return "SubsampledEXT";
+		default:
+			return fmt::format("Unknown({:#x})", static_cast<VkImageCreateFlags>(bit));
+		}
+	}
+
+	std::string format_as(const ImageType& type) {
+		switch (type) {
+		case ImageType::e1D:
+			return "1D";
+		case ImageType::e2D:
+			return "2D";
+		case ImageType::e3D:
+			return "3D";
+		case ImageType::eInfer:
+			return "Infer";
+		default:
+			return "Unknown";
+		}
+	}
+
+	std::string format_as(const ImageTiling& tiling) {
+		switch (tiling) {
+		case ImageTiling::eOptimal:
+			return "Optimal";
+		case ImageTiling::eLinear:
+			return "Linear";
+		case ImageTiling::eDrmFormatModifierEXT:
+			return "DrmFormatModifierEXT";
+		default:
+			return "Unknown";
+		}
+	}
+
 	std::string format_as(const ImageViewEntry& entry) {
 		return fmt::format("ImageViewEntry{{format={}, extent={}, samples={}, base_level={}, level_count={}, base_layer={}, layer_count={}}}",
 		                   entry.format,
