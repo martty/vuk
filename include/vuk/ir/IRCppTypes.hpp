@@ -2,6 +2,7 @@
 
 #include "vuk/ErasedTupleAdaptor.hpp"
 #include "vuk/ir/IR.hpp"
+#include <array>
 #include <fmt/format.h>
 
 namespace vuk {
@@ -55,6 +56,13 @@ namespace vuk {
 	template<Format f>
 	struct is_imageview<view<ImageLike<f>, dynamic_extent>> : std::true_type {};
 
+	// Helper to detect std::array
+	template<class T>
+	struct is_std_array : std::false_type {};
+
+	template<class T, size_t N>
+	struct is_std_array<std::array<T, N>> : std::true_type {};
+
 	template<class T>
 	inline std::shared_ptr<Type> to_IR_type() {
 		if constexpr (ir_type_provider<T>::has_custom_ir_type) {
@@ -68,6 +76,11 @@ namespace vuk {
 
 		if constexpr (std::is_void_v<T>) {
 			return current_module->types.make_void_ty();
+		} else if constexpr (is_std_array<T>::value) {
+			using element_type = typename T::value_type;
+			constexpr size_t count = std::tuple_size_v<T>;
+			auto element_ir_type = to_IR_type<element_type>();
+			return current_module->types.make_array_ty(element_ir_type, count);
 		} else if constexpr (std::is_integral_v<T>) {
 			return current_module->types.make_scalar_ty(Type::INTEGER_TY, sizeof(T) * 8);
 		} else if constexpr (std::is_floating_point_v<T>) {
@@ -136,7 +149,11 @@ namespace vuk {
 							        void* member_ptr = reinterpret_cast<char*>(v) + erased_tuple_adaptor<T>::offsets[member_index];
 
 							        // Use the child_type's format_to for this member
-							        fmt::format_to(std::back_inserter(dst), "{}", *static_cast<MemberType*>(member_ptr));
+							        if constexpr (fmt::is_formattable<MemberType>::value) {
+								        fmt::format_to(std::back_inserter(dst), "{}", *static_cast<MemberType*>(member_ptr));
+							        } else {
+								        fmt::format_to(std::back_inserter(dst), "<>");
+							        }
 
 							        ++member_index;
 						        }(),
