@@ -3,7 +3,6 @@
 #include <type_traits>
 
 namespace vuk {
-	struct Extent3D;
 	namespace detail {
 		template<class T>
 		struct member_type_helper;

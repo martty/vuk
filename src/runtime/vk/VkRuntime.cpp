@@ -949,7 +949,7 @@ namespace vuk {
 
 	uint32_t Resolver::add_image_view(ImageViewEntry ive) {
 		auto& image_entry = resolve_image(ive.image);
-		
+
 		// Realize the concrete range based on the parent image
 		// Handle VK_REMAINING_MIP_LEVELS (0xffff in our compact format)
 		if (ive.base_level == 0xffff) {
@@ -959,7 +959,7 @@ namespace vuk {
 			// Calculate remaining mip levels from base_level
 			ive.level_count = image_entry.level_count - ive.base_level;
 		}
-		
+
 		// Handle VK_REMAINING_ARRAY_LAYERS (0xffff in our compact format)
 		if (ive.base_layer == 0xffff) {
 			ive.base_layer = 0;
@@ -968,11 +968,11 @@ namespace vuk {
 			// Calculate remaining layers from base_layer
 			ive.layer_count = image_entry.layer_count - ive.base_layer;
 		}
-		
+
 		// Store the extent and sample count from the parent image
 		ive.extent = image_entry.extent;
 		ive.sample_count = image_entry.sample_count;
-		
+
 		// check if we already have this image view
 		ive.hash = std::hash<ImageViewEntry>()(ive);
 		for (auto index : image_entry.image_view_indices) {

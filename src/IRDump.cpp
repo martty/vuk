@@ -61,6 +61,12 @@ namespace vuk {
 				}
 			} else if (ty->kind == Type::MEMORY_TY) {
 				fmt::format_to(std::back_inserter(msg), "<mem>");
+			} else if (ty->kind == Type::ENUM_TY) {
+				if (ty->format_to) {
+					ty->format_to(parm.node->constant.value, msg);
+				} else {
+					fmt::format_to(std::back_inserter(msg), "<enum>");
+				}
 			} else if (ty->kind == Type::ENUM_VALUE_TY) {
 				std::string formatted;
 				if (ty->enum_value.enum_type->get()->format_to) {

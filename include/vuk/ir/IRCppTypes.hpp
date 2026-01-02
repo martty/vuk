@@ -48,7 +48,13 @@ namespace vuk {
 	struct is_imagelike : std::false_type {};
 
 	template<Format f>
-	struct is_imagelike<ptr<ImageLike<f>>> : std::true_type {};
+	struct is_imagelike<ImageLike<f>> : std::true_type {};
+
+	template<class T>
+	struct is_image : std::false_type {};
+
+	template<Format f>
+	struct is_image<ptr<ImageLike<f>>> : std::true_type {};
 
 	template<class T>
 	struct is_imageview : std::false_type {};
@@ -89,9 +95,8 @@ namespace vuk {
 			// Use typeid hash for the tag and format_as for formatting
 			size_t tag = typeid(T).hash_code();
 			auto format_callback = [](void* v, std::string& dst) {
-				if constexpr (requires { format_as(*reinterpret_cast<T*>(v)); }) {
-					auto formatted = format_as(*reinterpret_cast<T*>(v));
-					dst.append(formatted);
+				if constexpr (fmt::is_formattable<T>::value) {
+					fmt::format_to(std::back_inserter(dst), "{}", *static_cast<T*>(v));
 				} else {
 					// Fallback: format as underlying integer type
 					fmt::format_to(std::back_inserter(dst), "{}", static_cast<std::underlying_type_t<T>>(*reinterpret_cast<T*>(v)));
@@ -105,11 +110,18 @@ namespace vuk {
 			                                                 .format_to = format_callback,
 			                                                 .enumt = { .tag = tag } });
 			return current_module->types.emplace_type(enum_type);
+		} else if constexpr (is_imagelike<T>::value) {
+			// ImageLike<Format> maps to enum_value_ty representing the specific format
+			auto component_count = T::component_count;
+			auto component_type = to_IR_type<typename T::storage_type>();
+
+			auto ev_ty = current_module->types.make_array_ty(component_type, component_count);
+			return ev_ty;
 		} else if constexpr (is_imageview<T>::value) {
 			auto fmt_enum_ty = to_IR_type<Format>();
 			auto ev_ty = current_module->types.make_enum_value_ty(fmt_enum_ty, static_cast<uint64_t>(T::static_format));
 			return current_module->types.make_imageview_ty(ev_ty);
-		} else if constexpr (is_imagelike<T>::value) {
+		} else if constexpr (is_image<T>::value) {
 			auto fmt_enum_ty = to_IR_type<Format>();
 			auto ev_ty = current_module->types.make_enum_value_ty(fmt_enum_ty, static_cast<uint64_t>(T::static_format));
 			return current_module->types.make_image_ty(ev_ty);
@@ -175,7 +187,7 @@ namespace vuk {
 			                                    .format_to = format_callback,
 			                                    .composite = {
 			                                        .types = child_types,
-			                                        .tag = std::hash<const char*>{}(erased_tuple_adaptor<T>::name),
+			                                        .tag = std::hash<std::string_view>{}(get_type_name<T>()),
 			                                        .construct = &erased_tuple_adaptor<T>::construct,
 			                                        .get = &erased_tuple_adaptor<T>::get,
 			                                        .is_default = &erased_tuple_adaptor<T>::is_default,
