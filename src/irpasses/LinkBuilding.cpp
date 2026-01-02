@@ -242,7 +242,36 @@ namespace vuk {
 					}
 					auto& base = *arg_ty->imbued.T;
 					if (do_ssa && base->is_imageview()) {
-						auto def = eval<ImageView<>>(parm);
+						Ref parm_ = parm;
+						if (parm_.node->links) {
+							auto link = &parm_.link();
+							if (link->def) {
+								while (link->prev && link->prev->def) {
+									link = link->prev;
+								}
+								parm_ = link->def;
+							}
+						}
+						if (parm_.node->kind == Node::ALLOCATE) { // allocation of the IV
+							parm_ = parm_.node->allocate.src;
+							auto link = &parm_.link();
+							if (link->def) {
+								while (link->prev && link->prev->def) {
+									link = link->prev;
+								}
+								parm_ = link->def;
+							}
+							if (parm_.node->kind == Node::ALLOCATE) { // allocation of the I
+								parm_ = parm_.node->allocate.src;
+								auto res = eval(parm_);
+								if (res) {
+									auto& ici = *static_cast<ICI*>(*res);
+									access_to_usage(ici.usage, access);
+								} else {
+									(void)res.error();
+								}
+							}
+						}
 						/* if (def.holds_value() && !def->image) { // TODO : PAV : we need observe only allocates here..
 						  access_to_usage(def->usage, access);
 						}*/
