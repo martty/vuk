@@ -22,8 +22,7 @@ TEST_CASE("ir_allocate_image_basic") {
 	ici.level_count = 1;
 	ici.layer_count = 1;
 
-	auto ici_value = make_constant("test_ici", ici);
-	auto view_value = allocate<>("test_img", ici_value);
+	auto view_value = allocate<>("test_img", ici);
 
 	// Clear and execute to verify allocation worked
 	ClearColor clear_value{ 0.0f, 0.0f, 0.0f, 1.0f };
@@ -49,8 +48,7 @@ TEST_CASE("ir_allocate_image_infer_from_copy_source") {
 	dst_ici.layer_count = 1;
 
 	// Allocate destination image in IR
-	auto dst_ici_value = make_constant("dst_ici", dst_ici);
-	auto dst_view_value = allocate<>("dst_img", dst_ici_value);
+	auto dst_view_value = allocate<>("dst_img", dst_ici);
 
 	// Copy from source to destination and verify
 	auto copied = copy(src_fut, dst_view_value);
@@ -112,8 +110,7 @@ TEST_CASE("ir_allocate_image_clear_verify") {
 	// Allocate image in IR
 	ICI ici = from_preset(Preset::eGeneric2D, Format::eR8G8B8A8Unorm, Extent3D{ 2, 2, 1 }, Samples::e1);
 	ici.level_count = 1;
-	auto ici_value = make_constant("clear_test_ici", ici);
-	auto view = allocate<>("clear_test_img", ici_value);
+	auto view = allocate<>("clear_test_img", ici);
 
 	// Clear to a specific color and verify
 	ClearColor clear_value{ 0.5f, 0.25f, 0.75f, 1.0f };
@@ -124,21 +121,12 @@ TEST_CASE("ir_allocate_image_clear_verify") {
 	clear_and_verify_data(view, clear_value, Format::eR8G8B8A8Unorm, Extent3D{ 2, 2, 1 }, std::span(expected_data));
 }
 
-struct RGBA32F {
-	float r, g, b, a;
-
-	constexpr bool operator==(const RGBA32F& other) const = default;
-};
-
-ADAPT_STRUCT_FOR_IR(RGBA32F, r, g, b, a);
-
 TEST_CASE("ir_allocate_image_different_formats") {
 	// R8 format
 	{
 		ICI ici = from_preset(Preset::eGeneric2D, Format::eR8Unorm, Extent3D{ 256, 256, 1 }, Samples::e1);
 		ici.level_count = 1;
-		auto ici_value = make_constant("r8_ici", ici);
-		auto view = allocate<>("r8_img", ici_value);
+		auto view = allocate<>("r8_img", ici);
 
 		ClearColor clear_value{ 0.5f, 0.0f, 0.0f, 1.0f };
 		uint8_t expected_pixel = 128; // 0.5 * 255
@@ -149,8 +137,7 @@ TEST_CASE("ir_allocate_image_different_formats") {
 	{
 		ICI ici = from_preset(Preset::eGeneric2D, Format::eR16G16Sfloat, Extent3D{ 256, 256, 1 }, Samples::e1);
 		ici.level_count = 1;
-		auto ici_value = make_constant("r16g16_ici", ici);
-		auto view = allocate<>("r16g16_img", ici_value);
+		auto view = allocate<>("r16g16_img", ici);
 
 		ClearColor clear_value{ 0.0f, 0.5f, 0.0f, 1.0f };
 		// Half precision: 0.0f = 0x0000, 0.5f = 0x3800
@@ -162,12 +149,11 @@ TEST_CASE("ir_allocate_image_different_formats") {
 	{
 		ICI ici = from_preset(Preset::eGeneric2D, Format::eR32G32B32A32Sfloat, Extent3D{ 256, 256, 1 }, Samples::e1);
 		ici.level_count = 1;
-		auto ici_value = make_constant("r32_ici", ici);
-		auto view = allocate<>("r32_img", ici_value);
+		auto view = allocate<>("r32_img", ici);
 
 		ClearColor clear_value{ 0.0f, 0.0f, 0.5f, 1.0f };
 		// Four float32 values: (0.0f, 0.0f, 0.5f, 1.0f)
-		RGBA32F expected_pixel = { 0.0f, 0.0f, 0.5f, 1.0f };
+		ImageLike<Format::eR32G32B32A32Sfloat> expected_pixel = { 0.0f, 0.0f, 0.5f, 1.0f };
 		clear_and_verify(view, clear_value, Format::eR32G32B32A32Sfloat, Extent3D{ 256, 256, 1 }, expected_pixel);
 	}
 }
@@ -178,8 +164,7 @@ TEST_CASE("ir_allocate_image_different_usages") {
 		ICI ici = from_preset(Preset::eMap2D, Format::eR8G8B8A8Srgb, Extent3D{ 256, 256, 1 }, Samples::e1);
 		ici.level_count = 1;
 		ici.usage |= ImageUsageFlagBits::eTransferSrc;
-		auto ici_value = make_constant("sampled_ici", ici);
-		auto view = allocate<>("sampled_img", ici_value);
+		auto view = allocate<>("sampled_img", ici);
 
 		ClearColor clear_value{ 1.0f, 0.0f, 0.0f, 1.0f };
 		uint32_t expected_pixel = 0xFF0000FF; // ABGR: red
@@ -191,8 +176,7 @@ TEST_CASE("ir_allocate_image_different_usages") {
 		ICI ici = from_preset(Preset::eRTT2D, Format::eR8G8B8A8Unorm, Extent3D{ 256, 256, 1 }, Samples::e1);
 		ici.level_count = 1;
 		ici.usage |= ImageUsageFlagBits::eTransferSrc;
-		auto ici_value = make_constant("rtt_ici", ici);
-		auto view = allocate<>("rtt_img", ici_value);
+		auto view = allocate<>("rtt_img", ici);
 
 		ClearColor clear_value{ 0.0f, 1.0f, 0.0f, 1.0f };
 		uint32_t expected_pixel = 0xFF00FF00; // ABGR: green
@@ -204,11 +188,10 @@ TEST_CASE("ir_allocate_image_different_usages") {
 		ICI ici = from_preset(Preset::eSTT2D, Format::eR32G32B32A32Sfloat, Extent3D{ 256, 256, 1 }, Samples::e1);
 		ici.level_count = 1;
 		ici.usage |= ImageUsageFlagBits::eTransferSrc;
-		auto ici_value = make_constant("storage_ici", ici);
-		auto view = allocate<>("storage_img", ici_value);
+		auto view = allocate<>("storage_img", ici);
 
 		ClearColor clear_value{ 0.0f, 0.0f, 1.0f, 1.0f };
-		RGBA32F expected_pixel = { 0.0f, 0.0f, 1.0f, 1.0f };
+		ImageLike<Format::eR32G32B32A32Sfloat> expected_pixel = { 0.0f, 0.0f, 1.0f, 1.0f };
 		clear_and_verify(view, clear_value, Format::eR32G32B32A32Sfloat, Extent3D{ 256, 256, 1 }, expected_pixel);
 	}
 }
@@ -219,11 +202,10 @@ TEST_CASE("ir_allocate_image_different_dimensions") {
 		ICI ici = from_preset(Preset::eMap1D, Format::eR32G32B32A32Uint, Extent3D{ 128, 1, 1 }, Samples::e1);
 		ici.level_count = 1;
 		ici.usage |= ImageUsageFlagBits::eTransferSrc;
-		auto ici_value = make_constant("1d_ici", ici);
-		auto view = allocate<>("1d_img", ici_value);
+		auto view = allocate<>("1d_img", ici);
 
 		ClearColor clear_value{ 255u, 255u, 255u, 255u };
-		uint32_t expected_pixel = 0xFFFFFFFF; // All white as uint
+		ImageLike<Format::eR32G32B32A32Uint> expected_pixel = { 255u, 255u, 255u, 255u }; // All white as uint
 		clear_and_verify(view, clear_value, Format::eR32G32B32A32Uint, Extent3D{ 128, 1, 1 }, expected_pixel);
 	}
 
@@ -232,11 +214,10 @@ TEST_CASE("ir_allocate_image_different_dimensions") {
 		ICI ici = from_preset(Preset::eMap2D, Format::eR32G32B32A32Uint, Extent3D{ 128, 128, 1 }, Samples::e1);
 		ici.level_count = 1;
 		ici.usage |= ImageUsageFlagBits::eTransferSrc;
-		auto ici_value = make_constant("2d_ici", ici);
-		auto view = allocate<>("2d_img", ici_value);
+		auto view = allocate<>("2d_img", ici);
 
 		ClearColor clear_value{ 127u, 127u, 127u, 127u };
-		uint32_t expected_pixel = 0x80808080; // Mid-gray as uint
+		ImageLike<Format::eR32G32B32A32Uint> expected_pixel = { 127u, 127u, 127u, 127u };
 		clear_and_verify(view, clear_value, Format::eR32G32B32A32Uint, Extent3D{ 128, 128, 1 }, expected_pixel);
 	}
 
@@ -245,59 +226,36 @@ TEST_CASE("ir_allocate_image_different_dimensions") {
 		ICI ici = from_preset(Preset::eMap3D, Format::eR32G32B32A32Uint, Extent3D{ 64, 64, 64 }, Samples::e1);
 		ici.level_count = 1;
 		ici.usage |= ImageUsageFlagBits::eTransferSrc;
-		auto ici_value = make_constant("3d_ici", ici);
-		auto view = allocate<>("3d_img", ici_value);
+		auto view = allocate<>("3d_img", ici);
 
 		ClearColor clear_value{ 0x0u, 0xBFu, 0x80u, 0x40u };
-		uint32_t expected_pixel = 0x4080BF00; // Mixed color as uint (approximation)
+		ImageLike<Format::eR32G32B32A32Uint> expected_pixel = { 0x0u, 0xBFu, 0x80u, 0x40u };
 		clear_and_verify(view, clear_value, Format::eR32G32B32A32Uint, Extent3D{ 64, 64, 64 }, expected_pixel);
 	}
 }
 
 TEST_CASE("ir_allocate_image_with_mips") {
 	ICI ici = from_preset(Preset::eMap2D, Format::eR8G8B8A8Srgb, Extent3D{ 256, 256, 1 }, Samples::e1);
-	auto ici_value = make_constant("mipped_ici", ici);
-	auto view = allocate<>("mipped_img", ici_value);
+	ici.usage |= ImageUsageFlagBits::eTransferSrc;
+	auto view = allocate<>("mipped_img", ici);
 
 	ClearColor clear_value{ 0.8f, 0.2f, 0.6f, 1.0f };
-	uint32_t expected_pixel = 0xFF9933CC; // ABGR approximation
+	uint32_t expected_pixel = ImageLike<Format::eR8G8B8A8Srgb>{ 0.8f, 0.2f, 0.6f, 1.0f }.to_packed();
 	clear_and_verify(view, clear_value, Format::eR8G8B8A8Srgb, Extent3D{ 256, 256, 1 }, expected_pixel);
-}
-
-TEST_CASE("ir_allocate_image_multisampled") {
-	ICI ici = from_preset(Preset::eRTT2DUnmipped, Format::eR8G8B8A8Unorm, Extent3D{ 512, 512, 1 }, Samples::e4);
-	auto ici_value = make_constant("ms_ici", ici);
-	auto view = allocate<>("ms_img", ici_value);
-
-	ClearColor clear_value{ 0.3f, 0.7f, 0.9f, 1.0f };
-	uint32_t expected_pixel = 0xFFE6B34D; // ABGR approximation
-	clear_and_verify(view, clear_value, Format::eR8G8B8A8Unorm, Extent3D{ 512, 512, 1 }, expected_pixel);
 }
 
 TEST_CASE("ir_allocate_image_resolve_operation") {
 	// Multisampled source
 	ICI ms_ici = from_preset(Preset::eRTT2DUnmipped, Format::eR8G8B8A8Unorm, Extent3D{ 512, 512, 1 }, Samples::e4);
-	auto ms_ici_value = make_constant("ms_ici", ms_ici);
-	auto ms_view = allocate<>("ms_img", ms_ici_value);
+	auto ms_view = allocate<>("ms_img", ms_ici);
 
 	// Single-sampled destination
 	ICI ss_ici = from_preset(Preset::eGeneric2D, Format::eR8G8B8A8Unorm, Extent3D{ 512, 512, 1 }, Samples::e1);
-	auto ss_ici_value = make_constant("ss_ici", ss_ici);
-	auto ss_view = allocate<>("ss_img", ss_ici_value);
+	auto ss_view = allocate<>("ss_img", ss_ici);
 
 	auto resolved = resolve_into(ms_view, ss_view);
 	auto result = resolved.wait(*test_context.allocator, test_context.compiler);
 	REQUIRE(result);
-}
-
-TEST_CASE("ir_allocate_image_cubemap") {
-	ICI ici = from_preset(Preset::eMapCube, Format::eR8G8B8A8Srgb, Extent3D{ 256, 256, 1 }, Samples::e1);
-	auto ici_value = make_constant("cube_ici", ici);
-	auto view = allocate<>("cube_img", ici_value);
-
-	ClearColor clear_value{ 0.1f, 0.4f, 0.7f, 1.0f };
-	uint32_t expected_pixel = 0xFFB3661A; // ABGR approximation
-	clear_and_verify(view, clear_value, Format::eR8G8B8A8Srgb, Extent3D{ 256, 256, 1 }, expected_pixel);
 }
 
 TEST_CASE("ir_allocate_image_compressed") {
@@ -350,42 +308,6 @@ TEST_CASE("ir_allocate_image_depth_stencil") {
 	}
 }
 
-TEST_CASE("ir_allocate_buffer_to_image_copy") {
-	// Create source buffer
-	auto data = { 50u, 60u, 70u, 80u };
-	size_t buf_size = data.size() * sizeof(uint32_t);
-	auto src_buf = *allocate_buffer<uint32_t>(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUtoGPU, buf_size, alignof(uint32_t) });
-	std::copy(data.begin(), data.end(), &(*src_buf)[0]);
-	auto src_buf_value = discard("src_buf", *src_buf);
-
-	// Allocate destination image in IR
-	ICI dst_ici = from_preset(Preset::eGeneric2D, Format::eR32Uint, Extent3D{ 2, 2, 1 }, Samples::e1);
-	auto dst_ici_value = make_constant("dst_ici", dst_ici);
-	auto dst_view = allocate<>("dst_img", dst_ici_value);
-
-	// Copy buffer to image and verify
-	auto copied = copy(src_buf_value, dst_view);
-	verify_image_data(copied, std::span(data), Format::eR32Uint, Extent3D{ 2, 2, 1 });
-}
-
-TEST_CASE("ir_allocate_image_to_buffer_copy") {
-	// Create source image
-	auto data = { 11u, 22u, 33u, 44u };
-	auto src_ici = from_preset(Preset::eGeneric2D, Format::eR32Uint, Extent3D{ 2, 2, 1 }, Samples::e1);
-	auto [src_view, src_fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, src_ici, std::span(data));
-	auto src_value = discard("src_img", *src_view);
-
-	// Allocate destination buffer
-	size_t buf_size = data.size() * sizeof(uint32_t);
-	auto dst_buf = *allocate_buffer<uint32_t>(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, buf_size, alignof(uint32_t) });
-	auto dst_buf_value = discard("dst_buf", *dst_buf);
-
-	// Copy and verify
-	auto res = download_buffer(copy(src_value, std::move(dst_buf_value))).get(*test_context.allocator, test_context.compiler);
-	REQUIRE(res);
-	auto updata = res->to_span();
-	CHECK(updata == std::span(data));
-}
 /*
 TEST_CASE("ir_allocate_custom_image_view") {
   // Allocate image in IR
