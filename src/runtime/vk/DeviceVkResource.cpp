@@ -278,9 +278,25 @@ namespace vuk {
 			VkImage vkimg;
 			VmaAllocation allocation;
 			VkImageCreateInfo vkici = cis[i];
-			if (cis[i].usage & (vuk::ImageUsageFlagBits::eColorAttachment | vuk::ImageUsageFlagBits::eDepthStencilAttachment)) {
+			if (cis[i].usage & (ImageUsageFlagBits::eColorAttachment | ImageUsageFlagBits::eDepthStencilAttachment)) {
 				// this is a rendertarget, put it into the dedicated memory
 				aci.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
+			}
+
+			VkImageFormatListCreateInfo listci = { VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO };
+			VkFormat formats[2];
+			if (format_to_component_data_type(cis[i].format) == ComponentDataType::eSrgb8 ||
+			    format_to_component_data_type(cis[i].format) == ComponentDataType::eUnorm8) {
+				auto unorm_fmt = srgb_to_unorm(cis[i].format);
+				auto srgb_fmt = unorm_to_srgb(cis[i].format);
+				formats[0] = (VkFormat)cis[i].format;
+				formats[1] = unorm_fmt == Format::eUndefined ? (VkFormat)srgb_fmt : (VkFormat)unorm_fmt;
+				listci.pViewFormats = formats;
+				listci.viewFormatCount = formats[1] == VK_FORMAT_UNDEFINED ? 1 : 2;
+				if (listci.viewFormatCount > 1) {
+					vkici.flags |= (VkImageCreateFlagBits)ImageCreateFlagBits::eMutableFormat;
+					vkici.pNext = &listci;
+				}
 			}
 
 			auto res = vmaCreateImage(impl->allocator, &vkici, &aci, &vkimg, &allocation, nullptr);

@@ -48,7 +48,7 @@ namespace vuk {
 	ADAPT_STRUCT_FOR_IR(Samples, count);
 	ADAPT_STRUCT_FOR_IR(ImageViewEntry, base_level, level_count, base_layer, layer_count, format, extent, sample_count, layout);
 	ADAPT_TEMPLATED_STRUCT_FOR_IR(class, Flags, m_mask);
-	ADAPT_STRUCT_FOR_IR(ICI, image_flags, image_type, tiling, usage, extent, format, sample_count, allow_srgb_unorm_mutable, level_count, layer_count);
+	ADAPT_STRUCT_FOR_IR(ICI, image_flags, image_type, tiling, usage, extent, format, sample_count, level_count, layer_count);
 	static_assert(erased_tuple_adaptor<view<BufferLike<float>>>::value);
 } // namespace vuk
 

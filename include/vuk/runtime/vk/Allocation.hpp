@@ -5,7 +5,28 @@
 #include <span>
 
 namespace vuk {
-	struct AllocationEntry;
+	// TODO: PAV: unify this with the code in ETA
+	template<class T>
+	struct member_type_helper;
+
+	template<class C, class T>
+	struct member_type_helper<T C::*> {
+		using type = C;
+	};
+
+	template<class T>
+	struct member_type : member_type_helper<typename std::remove_cvref<T>::type> {};
+
+	// Helper type
+	template<class T>
+	using member_type_t = member_type<T>::type;
+
+	template<auto MemberPtr>
+	struct member_placeholder {
+		/// @brief Returns the placeholder value for this member.
+		static constexpr auto value = member_type_t<decltype(MemberPtr)>{}.*MemberPtr;
+	};
+
 	struct ICI {
 		ImageCreateFlags image_flags = {};
 		ImageType image_type = ImageType::e2D;
@@ -14,7 +35,6 @@ namespace vuk {
 		Extent3D extent = {};
 		Format format = Format::eUndefined;
 		Samples sample_count = Samples::eInfer;
-		bool allow_srgb_unorm_mutable = false;
 		uint32_t level_count = VK_REMAINING_MIP_LEVELS;
 		uint32_t layer_count = VK_REMAINING_ARRAY_LAYERS;
 
@@ -43,94 +63,27 @@ namespace vuk {
 
 	std::string format_as(const ICI& ici);
 
+	template<>
+	struct member_placeholder<&ICI::image_flags> {
+		static constexpr ImageCreateFlags value = ImageCreateFlags(-1);
+	};
+
+	template<>
+	struct member_placeholder<&ICI::image_type> {
+		static constexpr ImageType value = ImageType(-1);
+	};
+
+	template<>
+	struct member_placeholder<&ICI::tiling> {
+		static constexpr ImageTiling value = ImageTiling(-1);
+	};
+
 	struct ImageEntry : ICI {
 		VkImage image;
 		void* allocation;
 		std::vector<uint32_t> image_view_indices;
 	};
 	struct ImageViewEntry;
-
-	// Base classes for component access - only inherit from the one matching component_count
-	template<typename T>
-	struct ComponentAccessor1 {
-		union {
-			std::array<T, 1> data;
-			struct {
-				T r, x;
-			};
-		};
-	};
-
-	template<typename T>
-	struct ComponentAccessor2 {
-		union {
-			std::array<T, 2> data;
-			struct {
-				T r, g;
-			};
-			struct {
-				T x, y;
-			};
-		};
-	};
-
-	template<typename T>
-	struct ComponentAccessor3 {
-		union {
-			std::array<T, 3> data;
-			struct {
-				T r, g, b;
-			};
-			struct {
-				T x, y, z;
-			};
-		};
-	};
-
-	template<typename T>
-	struct ComponentAccessor4 {
-		union {
-			std::array<T, 4> data;
-			struct {
-				T r, g, b, a;
-			};
-			struct {
-				T x, y, z, w;
-			};
-		};
-	};
-
-	// Default base class for unknown/packed formats
-	template<typename T, size_t Count>
-	struct ComponentAccessorBase {
-		std::array<T, (Count > 0 ? Count : 1)> data;
-	};
-
-	// Select the appropriate base class based on component count
-	template<typename T, size_t Count, bool HasIndividual>
-	struct SelectComponentAccessor {
-		using type = ComponentAccessorBase<T, Count>;
-	};
-
-	template<typename T>
-	struct SelectComponentAccessor<T, 1, true> {
-		using type = ComponentAccessor1<T>;
-	};
-
-	template<typename T>
-	struct SelectComponentAccessor<T, 2, true> {
-		using type = ComponentAccessor2<T>;
-	};
-
-	template<typename T>
-	struct SelectComponentAccessor<T, 3, true> {
-		using type = ComponentAccessor3<T>;
-	};
-
-	template<typename T>
-	struct SelectComponentAccessor<T, 4, true> {
-		using type = ComponentAccessor4<T>;
-	};
 
 	// Map ComponentDataType to actual C++ types
 	template<ComponentDataType CDT>
@@ -256,23 +209,62 @@ namespace vuk {
 		// Constructor for single component
 		template<typename T = component_type>
 		  requires(component_count == 1)
-		constexpr ImageLike(T value) : data{ static_cast<component_type>(value) } {}
+		constexpr ImageLike(T value) {
+			// For sRGB formats with float input, convert from linear to sRGB
+			if constexpr (cdt == ComponentDataType::eSrgb8 && std::is_floating_point_v<T>) {
+				data[0] = detail::linear_to_srgb8(value);
+			} else {
+				data[0] = static_cast<component_type>(value);
+			}
+		}
 
 		// Constructor for 2 components
 		template<typename T = component_type>
 		  requires(component_count == 2)
-		constexpr ImageLike(T r, T g) : data{ static_cast<component_type>(r), static_cast<component_type>(g) } {}
+		constexpr ImageLike(T r, T g) {
+			// For sRGB formats with float input, convert from linear to sRGB
+			if constexpr (cdt == ComponentDataType::eSrgb8 && std::is_floating_point_v<T>) {
+				data[0] = detail::linear_to_srgb8(r);
+				data[1] = detail::linear_to_srgb8(g);
+			} else {
+				data[0] = static_cast<component_type>(r);
+				data[1] = static_cast<component_type>(g);
+			}
+		}
 
 		// Constructor for 3 components
 		template<typename T = component_type>
 		  requires(component_count == 3)
-		constexpr ImageLike(T r, T g, T b) : data{ static_cast<component_type>(r), static_cast<component_type>(g), static_cast<component_type>(b) } {}
+		constexpr ImageLike(T r, T g, T b) {
+			// For sRGB formats with float input, convert from linear to sRGB
+			if constexpr (cdt == ComponentDataType::eSrgb8 && std::is_floating_point_v<T>) {
+				data[0] = detail::linear_to_srgb8(r);
+				data[1] = detail::linear_to_srgb8(g);
+				data[2] = detail::linear_to_srgb8(b);
+			} else {
+				data[0] = static_cast<component_type>(r);
+				data[1] = static_cast<component_type>(g);
+				data[2] = static_cast<component_type>(b);
+			}
+		}
 
 		// Constructor for 4 components
 		template<typename T = component_type>
 		  requires(component_count == 4)
-		constexpr ImageLike(T r, T g, T b, T a) :
-		    data{ static_cast<component_type>(r), static_cast<component_type>(g), static_cast<component_type>(b), static_cast<component_type>(a) } {}
+		constexpr ImageLike(T r, T g, T b, T a) {
+			// For sRGB formats with float input, convert from linear to sRGB
+			if constexpr (cdt == ComponentDataType::eSrgb8 && std::is_floating_point_v<T>) {
+				data[0] = detail::linear_to_srgb8(r);
+				data[1] = detail::linear_to_srgb8(g);
+				data[2] = detail::linear_to_srgb8(b);
+				data[3] = static_cast<component_type>(a * 255.0f + 0.5f); // Alpha is always linear
+			} else {
+				data[0] = static_cast<component_type>(r);
+				data[1] = static_cast<component_type>(g);
+				data[2] = static_cast<component_type>(b);
+				data[3] = static_cast<component_type>(a);
+			}
+		}
 
 		// Constructor from packed 32-bit uint for 8-bit RGBA formats (ABGR layout in memory)
 		constexpr ImageLike(uint32_t packed)
@@ -449,6 +441,7 @@ namespace vuk {
 		}
 	};
 
+	struct AllocationEntry;
 	struct Resolver {
 		inline static thread_local Resolver* per_thread;
 
@@ -559,27 +552,6 @@ namespace vuk {
 		VkDeviceSize alignment = 1;
 
 		std::strong_ordering operator<=>(const BufferCreateInfo&) const noexcept = default;
-	};
-
-	template<class T>
-	struct member_type_helper;
-
-	template<class C, class T>
-	struct member_type_helper<T C::*> {
-		using type = C;
-	};
-
-	template<class T>
-	struct member_type : member_type_helper<typename std::remove_cvref<T>::type> {};
-
-	// Helper type
-	template<class T>
-	using member_type_t = member_type<T>::type;
-
-	template<auto MemberPtr>
-	struct member_placeholder {
-		/// @brief Returns the placeholder value for this member.
-		static constexpr auto value = member_type_t<decltype(MemberPtr)>{}.*MemberPtr;
 	};
 
 	template<>
@@ -834,7 +806,6 @@ namespace vuk {
 #pragma pack(push, 1)
 	struct IVCI {
 		uint32_t image_view_flags : 2;
-		uint32_t allow_srgb_unorm_mutable : 1 = false;
 		ImageViewType view_type : 3 = ImageViewType::e2D;
 		ComponentSwizzle r_swizzle : 3 = ComponentSwizzle::eIdentity;
 		ComponentSwizzle g_swizzle : 3 = ComponentSwizzle::eIdentity;
