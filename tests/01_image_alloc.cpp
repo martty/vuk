@@ -9,40 +9,6 @@
 using namespace vuk;
 
 // ============================================================================
-// Helper Functions
-// ============================================================================
-
-// Helper to verify image contents match expected data
-template<typename T>
-void verify_image_data(Value<ImageView<>> image, std::span<T> expected_data, Format format, Extent3D extent) {
-	size_t alignment = format_to_texel_block_size(format);
-	size_t size = compute_image_size(format, extent);
-	auto download_buf = *allocate_buffer<T>(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
-	auto download_buf_value = discard("verify_download", *download_buf);
-	auto res = download_buffer(copy(image, std::move(download_buf_value))).get(*test_context.allocator, test_context.compiler);
-	auto actual_data = res->to_span();
-	CHECK(std::equal(actual_data.begin(), actual_data.end(), expected_data.begin()));
-}
-
-// Helper to clear an image and verify it executes successfully with expected clear value
-template<typename T>
-void clear_and_verify(Value<ImageView<>> image, Clear clear_value, Format format, Extent3D extent, T expected_clear_value) {
-	auto cleared = clear_image(image, clear_value);
-
-	// Download and verify all pixels are cleared to the expected value
-	size_t pixel_count = extent.width * extent.height * extent.depth;
-	std::vector<T> expected_data(pixel_count, expected_clear_value);
-	verify_image_data(cleared, std::span(expected_data), format, extent);
-}
-
-// Helper to clear an image and verify the clear value with custom expected data
-template<typename T>
-void clear_and_verify_data(Value<ImageView<>> image, Clear clear_value, Format format, Extent3D extent, std::span<const T> expected_data) {
-	auto cleared = clear_image(image, clear_value);
-	verify_image_data(cleared, expected_data, format, extent);
-}
-
-// ============================================================================
 // IR-based Image Allocation and Parameter Inference Tests
 // ============================================================================
 

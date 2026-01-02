@@ -54,7 +54,7 @@ namespace vuk {
 
 	struct ImageCreateInfo;
 	using byte = std::byte;
-	inline constexpr size_t dynamic_extent = -1;
+	inline constexpr size_t dynamic_extent = static_cast<size_t>(-1);
 
 	template<class Type, size_t Extent = dynamic_extent>
 	struct view;

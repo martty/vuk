@@ -1,6 +1,7 @@
 #pragma once
 #include "renderdoc_app.h"
 #include "vuk/Config.hpp"
+#include "vuk/ir/IR.hpp"
 #include "vuk/RenderGraph.hpp"
 #include "vuk/runtime/CommandBuffer.hpp"
 #include "vuk/runtime/ThisThreadExecutor.hpp"
@@ -8,7 +9,8 @@
 #include "vuk/runtime/vk/AllocatorHelpers.hpp"
 #include "vuk/runtime/vk/DeviceFrameResource.hpp"
 #include "vuk/runtime/vk/VkRuntime.hpp"
-#include <vuk/ir/IR.hpp>
+#include "vuk/vsl/Core.hpp"
+#include <doctest/doctest.h>
 #ifdef WIN32
 #include <Windows.h>
 #endif
@@ -17,6 +19,10 @@
 #include <mutex>
 
 namespace vuk {
+	// ============================================================================
+	// Test Context
+	// ============================================================================
+
 	struct TestContext {
 		Compiler compiler;
 		bool has_rt;
@@ -220,3 +226,55 @@ template<vuk::Access acc>
 auto image_use = vuk::make_pass("image use", [](vuk::CommandBuffer& cbuf, VUK_IA(acc) img) { return img; });
 template<vuk::Access acc>
 auto buffer_use = vuk::make_pass("buffer use", [](vuk::CommandBuffer& cbuf, VUK_BA(acc) buf) { return buf; });
+
+// ============================================================================
+// Test Helper Functions
+// ============================================================================
+namespace vuk {
+	// Helper to verify image contents match expected data
+	template<typename T>
+	void verify_image_data(Value<ImageView<>> image, std::span<T> expected_data, Format format, Extent3D extent) {
+		size_t alignment = format_to_texel_block_size(format);
+		size_t size = compute_image_size(format, extent);
+		auto download_buf = *allocate_buffer<T>(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
+		auto download_buf_value = discard("verify_download", *download_buf);
+		auto res = download_buffer(copy(image, std::move(download_buf_value))).get(*test_context.allocator, test_context.compiler);
+		auto actual_data = res->to_span();
+		CHECK(std::equal(actual_data.begin(), actual_data.end(), expected_data.begin()));
+	}
+
+	// Helper to clear an image and verify it executes successfully with expected clear value
+	template<typename T>
+	void clear_and_verify(Value<ImageView<>> image, Clear clear_value, Format format, Extent3D extent, T expected_clear_value) {
+		auto cleared = clear_image(image, clear_value);
+
+		// Download and verify all pixels are cleared to the expected value
+		size_t pixel_count = extent.width * extent.height * extent.depth;
+		std::vector<T> expected_data(pixel_count, expected_clear_value);
+		verify_image_data(cleared, std::span(expected_data), format, extent);
+	}
+
+	// Helper to clear an image and verify the clear value with custom expected data
+	template<typename T>
+	void clear_and_verify_data(Value<ImageView<>> image, Clear clear_value, Format format, Extent3D extent, std::span<T> expected_data) {
+		auto cleared = clear_image(image, clear_value);
+		verify_image_data(cleared, expected_data, format, extent);
+	}
+
+	// Helper to verify buffer contents match expected data
+	template<typename T, size_t Extent = dynamic_extent>
+	void verify_buffer_data(Value<Buffer<T>> buffer, std::span<T, Extent> expected_data, RenderGraphCompileOptions options = {}) {
+		auto res = download_buffer(buffer).get(*test_context.allocator, test_context.compiler, options);
+		REQUIRE(res);
+		auto actual_data = res->to_span();
+		CHECK(std::equal(actual_data.begin(), actual_data.end(), expected_data.begin()));
+	}
+
+	// Helper to fill a buffer and verify it executes successfully
+	template<typename T>
+	void fill_and_verify(Value<Buffer<T>> buffer, T fill_value, size_t count) {
+		fill(buffer, fill_value);
+		std::vector<T> expected_data(count, fill_value);
+		verify_buffer_data(buffer, std::span(expected_data));
+	}
+} // namespace vuk

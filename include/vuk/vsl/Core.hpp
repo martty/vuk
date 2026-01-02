@@ -107,16 +107,16 @@ namespace vuk {
 	/// @brief Allocates & fills a buffer with explicitly managed lifetime
 	/// @param allocator Allocator to allocate this Buffer from
 	/// @param memory_usage Where to allocate the buffer (host visible buffers will be automatically mapped)
-	template<class T>
+	template<class T, size_t Extent = dynamic_extent>
 	std::pair<Unique<Buffer<std::remove_const_t<T>>>, Value<Buffer<std::remove_const_t<T>>>>
-	create_buffer(Allocator& allocator, MemoryUsage memory_usage, DomainFlagBits domain, std::span<T> data, size_t alignment = 1, VUK_CALLSTACK) {
+	create_buffer(Allocator& allocator, MemoryUsage memory_usage, DomainFlagBits domain, std::span<T, Extent> data, size_t alignment = 1, VUK_CALLSTACK) {
 		Unique<Buffer<std::remove_const_t<T>>> buf(allocator);
 		BufferCreateInfo bci{ memory_usage, sizeof(T) * data.size(), alignment };
 		ptr_base ptr_;
 		auto ret = allocator.allocate_memory(std::span{ &ptr_, 1 }, std::span{ &bci, 1 }); // TODO: dropping error
 		buf->ptr = static_cast<ptr<BufferLike<std::remove_const_t<T>>>&>(ptr_);
 		buf->sz_bytes = data.size_bytes();
-		return { std::move(buf), host_data_to_buffer(allocator, domain, buf.get(), data, VUK_CALL) };
+		return { std::move(buf), host_data_to_buffer(allocator, domain, buf.get(), std::span<T, dynamic_extent>(data), VUK_CALL) };
 	}
 
 	inline std::pair<Unique<ImageView<>>, Value<ImageView<>>>
@@ -217,11 +217,15 @@ namespace vuk {
 	template<class T>
 	inline void fill(Value<Buffer<T>> dst, T value, VUK_CALLSTACK) {
 		uint32_t value_as_uint;
-		static_assert(sizeof(T) == sizeof(uint32_t), "T must be 4 bytes");
-		memcpy(&value_as_uint, &value, sizeof(T));
-		auto buf2buf = vuk::make_pass(
-		    "fill buffer", [value_as_uint](vuk::CommandBuffer& command_buffer, VUK_BA(vuk::eClear) dst) { command_buffer.fill_buffer(dst, value_as_uint); });
-		buf2buf(dst.template cast<byte>(), VUK_CALL);
+		unsigned char* p = reinterpret_cast<unsigned char*>(&value_as_uint);
+		static_assert(sizeof(T) <= sizeof(uint32_t), "T must be at most 4 bytes");
+		for (size_t i = 0; i < (sizeof(uint32_t) / sizeof(T)); i++) {
+			memcpy(p + i * sizeof(T), &value, sizeof(T));
+		}
+		auto buf2buf = vuk::make_pass("fill buffer", [value_as_uint](vuk::CommandBuffer& command_buffer, VUK_ARG(Buffer<T>, vuk::eClear) dst) {
+			command_buffer.fill_buffer(dst->to_byte_view(), value_as_uint);
+		});
+		buf2buf(dst, VUK_CALL);
 	}
 
 	template<class T>

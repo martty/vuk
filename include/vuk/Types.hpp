@@ -760,23 +760,23 @@ namespace vuk {
 
 	// Component data type categories for formats
 	enum class ComponentDataType {
-		eUint8,     // 8-bit unsigned integer
-		eInt8,      // 8-bit signed integer
-		eUnorm8,    // 8-bit unsigned normalized
-		eSnorm8,    // 8-bit signed normalized
-		eSrgb8,     // 8-bit sRGB (stored as uint8, interpreted with gamma correction)
-		eUint16,    // 16-bit unsigned integer
-		eInt16,     // 16-bit signed integer
-		eUnorm16,   // 16-bit unsigned normalized
-		eSnorm16,   // 16-bit signed normalized
-		eUint32,    // 32-bit unsigned integer
-		eInt32,     // 32-bit signed integer
-		eFloat32,   // 32-bit float
-		eFloat16,   // 16-bit float (stored as uint16)
-		eUint64,    // 64-bit unsigned integer
-		eInt64,     // 64-bit signed integer
-		eFloat64,   // 64-bit float
-		ePacked32,  // Packed format stored as uint32
+		eUint8,    // 8-bit unsigned integer
+		eInt8,     // 8-bit signed integer
+		eUnorm8,   // 8-bit unsigned normalized
+		eSnorm8,   // 8-bit signed normalized
+		eSrgb8,    // 8-bit sRGB (stored as uint8, interpreted with gamma correction)
+		eUint16,   // 16-bit unsigned integer
+		eInt16,    // 16-bit signed integer
+		eUnorm16,  // 16-bit unsigned normalized
+		eSnorm16,  // 16-bit signed normalized
+		eUint32,   // 32-bit unsigned integer
+		eInt32,    // 32-bit signed integer
+		eFloat32,  // 32-bit float
+		eFloat16,  // 16-bit float (stored as uint16)
+		eUint64,   // 64-bit unsigned integer
+		eInt64,    // 64-bit signed integer
+		eFloat64,  // 64-bit float
+		ePacked32, // Packed format stored as uint32
 	};
 
 	// Get the component data type for a format
@@ -935,13 +935,19 @@ namespace vuk {
 		case Format::eR64G64B64A64Sfloat:
 			return ComponentDataType::eFloat64;
 
-		// Packed formats
 		case Format::eR8G8B8A8Unorm:
+			return ComponentDataType::eUnorm8;
 		case Format::eR8G8B8A8Uint:
+			return ComponentDataType::eUint8;
 		case Format::eR8G8B8A8Sint:
+			return ComponentDataType::eInt8;
 		case Format::eR8G8B8A8Srgb:
+			return ComponentDataType::eSrgb8;
 		case Format::eB8G8R8A8Unorm:
+			return ComponentDataType::eUnorm8;
 		case Format::eB8G8R8A8Srgb:
+			return ComponentDataType::eSrgb8;
+		// Packed formats
 		case Format::eA8B8G8R8UnormPack32:
 		case Format::eA8B8G8R8UintPack32:
 		case Format::eA8B8G8R8SintPack32:
