@@ -1305,6 +1305,7 @@ namespace vuk {
 		std::string graph_label;
 		ProfilingCallbacks callbacks;
 		bool dump_graph = false;
+		bool dump_linear = false;
 	};
 
 	enum class DescriptorSetStrategyFlagBits {

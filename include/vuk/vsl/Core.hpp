@@ -222,7 +222,7 @@ namespace vuk {
 		for (size_t i = 0; i < (sizeof(uint32_t) / sizeof(T)); i++) {
 			memcpy(p + i * sizeof(T), &value, sizeof(T));
 		}
-		auto buf2buf = vuk::make_pass("fill buffer", [value_as_uint](vuk::CommandBuffer& command_buffer, VUK_ARG(Buffer<T>, vuk::eClear) dst) {
+		auto buf2buf = vuk::make_pass("fill buffer", [value_as_uint](vuk::CommandBuffer& command_buffer, VUK_ARG(Buffer<T>, vuk::eTransferWrite) dst) {
 			command_buffer.fill_buffer(dst->to_byte_view(), value_as_uint);
 		});
 		buf2buf(dst, VUK_CALL);

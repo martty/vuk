@@ -406,6 +406,7 @@ namespace vuk {
 			for (auto& node : impl.nodes) {
 				node->flag = 0;
 			}
+			impl.nodes.clear();
 			for (auto& node : impl.ref_nodes) {
 				work_queue.push_back(node);
 			}
@@ -435,8 +436,9 @@ namespace vuk {
 				}
 				if (work_queue.size() == sz) { // leaf node or all children processed, process
 					if (node->flag == 0) {
-						node->flag = 1;
+						node->flag = 2;
 						f(node);
+						impl.nodes.push_back(node);
 					}
 					work_queue.pop_back();
 				}

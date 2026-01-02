@@ -124,7 +124,7 @@ namespace vuk {
 
 		Result<void> build_nodes();
 		Result<void> build_links_implicit(Runtime& runtime, std::pmr::vector<Node*>& working_set, std::pmr::polymorphic_allocator<std::byte> allocator);
-		Result<void> build_links(Runtime& runtime, std::vector<Node*>& working_set, std::pmr::polymorphic_allocator<std::byte> allocator);
+		Result<void> build_links(Runtime& runtime, std::pmr::polymorphic_allocator<std::byte> allocator);
 		Result<void> implicit_linking(Allocator& alloc, IRModule* module, std::pmr::polymorphic_allocator<std::byte> allocator);
 		Result<void> build_sync();
 		Result<void> collect_chains();
@@ -136,7 +136,14 @@ namespace vuk {
 
 		std::vector<ir_pass_factory> ir_passes;
 
-		Result<void> run_passes(Runtime& runtime, std::pmr::polymorphic_allocator<std::byte> allocator);
+		enum PassRunOptions : uint8_t {
+			eNone = 0,
+			eDumpLinear = 1 << 0,
+			eDumpGraph = 1 << 1,
+
+		};
+
+		Result<void> run_passes(Runtime& runtime, std::pmr::polymorphic_allocator<std::byte> allocator, PassRunOptions options = PassRunOptions::eNone);
 	};
 #undef INIT
 
