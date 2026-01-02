@@ -372,7 +372,7 @@ namespace vuk {
 			break;
 		case Node::ALLOCATE:
 			add_read(node, node->allocate.src, 0);
-			add_result(node, 0, node->allocate.src);
+			add_breaking_result(node, 0);
 			break;
 		default:
 			assert(0);

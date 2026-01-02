@@ -29,6 +29,8 @@ namespace vuk {
 
 		template<class Allocator>
 		void append(std::vector<T, Allocator>& base, T value) {
+			assert(offset0 <= base.size());
+			assert(offset1 <= base.size());
 			// easy case: we have space at the end of the vector
 			if (offset1 == base.size()) {
 				base.push_back(std::move(value));

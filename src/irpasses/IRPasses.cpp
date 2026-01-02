@@ -25,39 +25,58 @@ namespace {
 } // namespace
 
 namespace vuk {
-	Result<void> RGCImpl::run_passes(Runtime& runtime, std::pmr::polymorphic_allocator<std::byte> allocator) {
+	Result<void> RGCImpl::run_passes(Runtime& runtime, std::pmr::polymorphic_allocator<std::byte> allocator, PassRunOptions options) {
+		auto dump_linear = [&]() {
+			auto linear_res = linearize(runtime, allocator);
+			if (!linear_res) {
+				return linear_res;
+			}
+			// we succeeded at linearizing, so lets dump the IR
+			fmt::println("IR listing");
+			size_t instr_counter = 0;
+			for (auto& pitem : item_list) {
+				auto& item = *pitem;
+				auto node = item.execable;
+				instr_counter++;
+				fmt::println("[{:#06x}] {}", instr_counter, exec_to_string(item));
+			}
+		};
+
 		Result<void> result = { expected_value };
+		std::string last_pass = "outside";
 		for (auto& pass_factory : ir_passes) {
 			auto pass = pass_factory(*this, runtime, allocator);
+			if (options & PassRunOptions::eDumpLinear) {
+				fmt::println("{} >>> {}", last_pass, typeid(*pass.get()).name());
+				dump_linear();
+			}
+			if (options & PassRunOptions::eDumpGraph) {
+				GraphDumper::begin_cluster(fmt::format("{}_{}", last_pass, typeid(*pass.get()).name()));
+				GraphDumper::dump_graph(nodes, false, false);
+				GraphDumper::end_cluster();
+			}
+			last_pass = typeid(*pass.get()).name();
 			result = (*pass)();
 			if (!result) {
 				// we failed. lets see what we can do.
 				// we are always before linearization here, so lets try to linearize
-				auto linear_res = linearize(runtime, allocator);
-				if (!linear_res) {
+				auto linear_result = dump_linear();
+				if (!linear_result) {
 					// we also failed at linearization, so we are going to dump the graph and bail out
 					// TODO: dump graph
 					return result;
 				}
-				// we succeeded at linearizing, so lets dump the IR
-				fmt::println("IR listing");
-				size_t instr_counter = 0;
-				for (auto& pitem : item_list) {
-					auto& item = *pitem;
-					auto node = item.execable;
-					instr_counter++;
-					fmt::println("[{:#06x}] {}", instr_counter, exec_to_string(item));
-				}
-				return result;
 			}
 			(void)result;
-			if (pass->node_set_modified() || new_nodes.size() > 0) {
+			bool rebuild_nodes = pass->node_set_modified() || new_nodes.size() > 0;
+			if (rebuild_nodes) {
 				nodes.insert(nodes.end(), new_nodes.begin(), new_nodes.end());
 				new_nodes.clear();
 				VUK_DO_OR_RETURN(build_nodes());
 			}
-			if (pass->node_set_modified() || new_nodes.size() > 0 || pass->node_connections_modified()) {
-				VUK_DO_OR_RETURN(build_links(runtime, nodes, allocator));
+			bool rebuild_links = pass->node_set_modified() || new_nodes.size() > 0 || pass->node_connections_modified();
+			if (rebuild_links) {
+				VUK_DO_OR_RETURN(build_links(runtime, allocator));
 			}
 		}
 
@@ -71,7 +90,7 @@ namespace vuk {
 	}
 
 	void IRModule::collect_garbage(std::pmr::polymorphic_allocator<std::byte> allocator) {
-		enum { DEAD = 1, ALIVE = 2, ALIVE_REC = 3 };
+		enum { DEAD = 3, ALIVE = 4, ALIVE_REC = 5 };
 
 		// initial set of live nodes
 		for (auto it = op_arena.begin(); it != op_arena.end();) {
@@ -209,6 +228,10 @@ namespace vuk {
 					if (arg->flag == 0) {
 						arg->flag = 1;
 						work_queue.push_back(arg);
+					} else {
+						auto node_it = std::find(nodes.begin(), nodes.end(), arg) != nodes.end();
+						auto wq_it = std::find(work_queue.begin(), work_queue.end(), arg) != work_queue.end();
+						assert(node_it || wq_it);
 					}
 				}
 			} else {
@@ -217,6 +240,10 @@ namespace vuk {
 					if (arg->flag == 0) {
 						arg->flag = 1;
 						work_queue.push_back(arg);
+					} else {
+						auto node_it = std::find(nodes.begin(), nodes.end(), arg) != nodes.end();
+						auto wq_it = std::find(work_queue.begin(), work_queue.end(), arg) != work_queue.end();
+						assert(node_it || wq_it);
 					}
 				}
 			}
@@ -611,6 +638,15 @@ namespace vuk {
 		std::pmr::vector<Node*> nodes(allocator);
 
 		for (auto& node : module->op_arena) {
+			if (node.index < (module->module_id << 32 | module->link_frontier)) { // already linked
+				nodes.push_back(&node);
+			}
+		}
+		std::sort(nodes.begin(), nodes.end(), [](Node* a, Node* b) { return a->index < b->index; });
+		this->nodes.assign(nodes.begin(), nodes.end());
+		build_links(alloc.get_context(), allocator);
+
+		for (auto& node : module->op_arena) {
 			if (node.index < (module->module_id << 32 | module->link_frontier) && node.kind != Node::ACQUIRE) { // already linked
 				continue;
 			}
@@ -680,7 +716,7 @@ namespace vuk {
 		return link_building(*this, runtime, allocator).implicit_linking(working_set);
 	}
 
-	Result<void> RGCImpl::build_links(Runtime& runtime, std::vector<Node*>& working_set, std::pmr::polymorphic_allocator<std::byte> allocator) {
+	Result<void> RGCImpl::build_links(Runtime& runtime, std::pmr::polymorphic_allocator<std::byte> allocator) {
 		return link_building(*this, runtime, allocator)();
 	}
 
@@ -749,16 +785,23 @@ namespace vuk {
 		VUK_DO_OR_RETURN(impl->build_nodes());
 
 		std::shuffle(impl->nodes.begin(), impl->nodes.end(), _random_generator);
-		VUK_DO_OR_RETURN(impl->build_links(alloc.get_context(), impl->nodes, allocator));
+		VUK_DO_OR_RETURN(impl->build_links(alloc.get_context(), allocator));
 		GraphDumper::next_cluster("modules", "full");
 		GraphDumper::dump_graph(impl->nodes, false, false);
 
 		VUK_DO_OR_RETURN(impl->build_nodes());
-		VUK_DO_OR_RETURN(impl->build_links(alloc.get_context(), impl->nodes, allocator));
+		VUK_DO_OR_RETURN(impl->build_links(alloc.get_context(), allocator));
 		impl->ir_passes = {
 			{ make_ir_pass<constant_folding>(), make_ir_pass<reify_inference>(), make_ir_pass<constant_folding>(), make_ir_pass<validate_duplicated_resource_ref>() }
 		};
-		impl->run_passes(alloc.get_context(), allocator);
+		RGCImpl::PassRunOptions run_opts = RGCImpl::PassRunOptions::eNone;
+		if (compile_options.dump_linear) {
+			run_opts = RGCImpl::PassRunOptions(run_opts | RGCImpl::PassRunOptions::eDumpLinear);
+		}
+		if (compile_options.dump_graph) {
+			run_opts = RGCImpl::PassRunOptions(run_opts | RGCImpl::PassRunOptions::eDumpGraph);
+		}
+		impl->run_passes(alloc.get_context(), allocator, run_opts);
 		VUK_DO_OR_RETURN(validate_read_undefined());
 		VUK_DO_OR_RETURN(validate_same_argument_different_access());
 

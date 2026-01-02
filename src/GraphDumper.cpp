@@ -9,6 +9,7 @@
 
 #include "vuk/ir/IR.hpp"
 #include <fmt/format.h>
+#include <regex>
 
 #include "vuk/ir/GraphDumper.hpp"
 
@@ -26,6 +27,8 @@ namespace vuk {
 		}
 
 		void begin_cluster(std::string label) {
+			label = std::regex_replace(label, std::regex(" +"), "_");
+			label = std::regex_replace(label, std::regex(":+"), "_");
 			current_cluster = label;
 			ss << "subgraph cluster_" << label << "{\n";
 			ss << "cl_" << label << "[shape = point style = invis];\n";

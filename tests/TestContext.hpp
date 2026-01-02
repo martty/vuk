@@ -272,9 +272,9 @@ namespace vuk {
 
 	// Helper to fill a buffer and verify it executes successfully
 	template<typename T>
-	void fill_and_verify(Value<Buffer<T>> buffer, T fill_value, size_t count) {
+	void fill_and_verify(Value<Buffer<T>> buffer, T fill_value, size_t count, RenderGraphCompileOptions options = {}) {
 		fill(buffer, fill_value);
 		std::vector<T> expected_data(count, fill_value);
-		verify_buffer_data(buffer, std::span(expected_data));
+		verify_buffer_data(buffer, std::span(expected_data), options);
 	}
 } // namespace vuk

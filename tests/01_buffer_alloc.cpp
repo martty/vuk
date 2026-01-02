@@ -266,11 +266,15 @@ TEST_CASE("ir_allocate_buffer_multiple") {
 	// Verify each buffer independently
 	{
 		std::vector<uint32_t> expected(128, 0x11111111u);
-		verify_buffer_data(buffer1, std::span(expected), RenderGraphCompileOptions{ .dump_graph = true });
+		verify_buffer_data(buffer1, std::span(expected), RenderGraphCompileOptions{});
 	}
 	{
 		std::vector<uint32_t> expected(256, 0x22222222u);
-		verify_buffer_data(buffer2, std::span(expected), RenderGraphCompileOptions{ .dump_graph = true });
+		auto db = download_buffer(buffer2);
+		auto res = db.get(*test_context.allocator, test_context.compiler, RenderGraphCompileOptions{});
+		REQUIRE(res);
+		auto actual_data = res->to_span();
+		CHECK(std::equal(actual_data.begin(), actual_data.end(), expected.begin()));
 	}
 	{
 		std::vector<uint32_t> expected(64, 0x33333333u);

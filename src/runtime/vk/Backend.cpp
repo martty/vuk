@@ -1098,8 +1098,6 @@ namespace vuk {
 					break;
 				}
 
-				// we can allocate ptrs and generic views
-				// TODO: image ptrs and generic views
 				case Node::ALLOCATE: {
 					auto allocator = node->allocate.allocator ? *node->allocate.allocator : this->allocator;
 					void* new_value = nullptr;
