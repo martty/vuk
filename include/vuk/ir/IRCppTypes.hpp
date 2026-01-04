@@ -177,6 +177,12 @@ namespace vuk {
 				}
 			};
 
+			void (*sync_fn)(void*, struct SyncHelper&) = nullptr;
+			if constexpr (Synchronized<T>)
+				sync_fn = +[](void* v, struct SyncHelper& helper) {
+					synchronize(*static_cast<T*>(v), helper);
+				};
+
 			return current_module->types.emplace_type(
 			    std::shared_ptr<Type>(new Type{ .kind = Type::COMPOSITE_TY,
 			                                    .size = sizeof(T),
@@ -185,14 +191,13 @@ namespace vuk {
 			                                    .offsets = offsets,
 			                                    .member_names = { erased_tuple_adaptor<T>::member_names.begin(), erased_tuple_adaptor<T>::member_names.end() },
 			                                    .format_to = format_callback,
-			                                    .composite = {
-			                                        .types = child_types,
-			                                        .tag = std::hash<std::string_view>{}(get_type_name<T>()),
-			                                        .construct = &erased_tuple_adaptor<T>::construct,
-			                                        .get = &erased_tuple_adaptor<T>::get,
-			                                        .is_default = &erased_tuple_adaptor<T>::is_default,
-			                                        .destroy = &erased_tuple_adaptor<T>::destroy,
-			                                    } }));
+			                                    .composite = { .types = child_types,
+			                                                   .tag = std::hash<std::string_view>{}(get_type_name<T>()),
+			                                                   .construct = &erased_tuple_adaptor<T>::construct,
+			                                                   .get = &erased_tuple_adaptor<T>::get,
+			                                                   .is_default = &erased_tuple_adaptor<T>::is_default,
+			                                                   .destroy = &erased_tuple_adaptor<T>::destroy,
+			                                                   .synchronize = sync_fn } }));
 		} else {
 			static_assert(dependent_false<T>::value, "Cannot convert type to IR");
 		}

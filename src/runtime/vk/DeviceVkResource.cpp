@@ -285,8 +285,8 @@ namespace vuk {
 
 			VkImageFormatListCreateInfo listci = { VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO };
 			VkFormat formats[2];
-			if (format_to_component_data_type(cis[i].format) == ComponentDataType::eSrgb8 ||
-			    format_to_component_data_type(cis[i].format) == ComponentDataType::eUnorm8) {
+			if (format_to_aspect(cis[i].format) == ImageAspectFlagBits::eColor && (format_to_component_data_type(cis[i].format) == ComponentDataType::eSrgb8 ||
+			                                                                       format_to_component_data_type(cis[i].format) == ComponentDataType::eUnorm8)) {
 				auto unorm_fmt = srgb_to_unorm(cis[i].format);
 				auto srgb_fmt = unorm_to_srgb(cis[i].format);
 				formats[0] = (VkFormat)cis[i].format;

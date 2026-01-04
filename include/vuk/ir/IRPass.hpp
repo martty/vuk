@@ -253,13 +253,21 @@ namespace vuk {
 				return { expected_value, eval_binop(math_binary.op, ref.type(), a, b) };
 
 			} break;
-			case Node::GET_IV_META: {
-				auto iv_ = eval(ref.node->get_iv_meta.imageview);
-				if (!iv_) {
-					return iv_;
+			case Node::GET_CI: {
+				auto src = ref.node->get_ci.src;
+				auto src_ = eval(src);
+				if (!src_) {
+					return src_;
 				}
-				auto& iv = *static_cast<ImageView<>*>(*iv_);
-				return { expected_value, &iv.get_meta() };
+				if (src.type()->is_imageview()) {
+					auto& iv = *static_cast<ImageView<>*>(*src_);
+					return { expected_value, &iv.get_ci() };
+				} else if (src.type()->kind == Type::IMAGE_TY) {
+					auto& i = *static_cast<Image<>*>(*src_);
+					return { expected_value, &i.get_ci() };
+				} else {
+					assert(false);
+				}
 			} break;
 			case Node::SLICE: {
 				if (ref.index == 1) {

@@ -339,7 +339,7 @@ namespace vuk {
 		case Node::SLICE: {
 			add_read(node, node->slice.start, 1);
 			add_read(node, node->slice.count, 2);
-			if (node->type[0]->kind == Type::INTEGER_TY) {
+			if (!node->type[0]->is_synchronized()) {
 				add_read(node, node->slice.src, 0, false);
 			} else {
 				add_write(node, node->slice.src, 0);
@@ -395,8 +395,8 @@ namespace vuk {
 			add_read(node, node->get_allocation_size.ptr, 0);
 			add_breaking_result(node, 0);
 			break;
-		case Node::GET_IV_META:
-			add_read(node, node->get_iv_meta.imageview, 0);
+		case Node::GET_CI:
+			add_read(node, node->get_ci.src, 0);
 			add_breaking_result(node, 0);
 			break;
 		case Node::ALLOCATE:

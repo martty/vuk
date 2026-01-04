@@ -777,6 +777,10 @@ namespace vuk {
 			auto& ie = Resolver::per_thread->resolve_image(*this);
 			return view<ImageLike<f>, dynamic_extent>{ ie.image_view_indices[0] };
 		}
+
+		ICI& get_ci() const noexcept {
+			return Resolver::per_thread->resolve_image(*this);
+		}
 	};
 
 	template<Format f = {}>
@@ -786,22 +790,6 @@ namespace vuk {
 	struct create_info<Image<f>> {
 		using type = ImageCreateInfo;
 	};
-
-	/*
-	* 		Image<> image;
-	  Format format = Format::eUndefined;
-	  bool allow_srgb_unorm_mutable;
-	  ImageViewCreateFlags image_view_flags;
-	  ImageViewType view_type;
-	  ComponentMapping components;
-	  ImageLayout layout = ImageLayout::eUndefined;
-	  ImageUsageFlags view_usage = {};
-
-	  uint32_t base_level = VK_REMAINING_MIP_LEVELS;
-	  uint32_t level_count = VK_REMAINING_MIP_LEVELS;
-
-	  uint32_t base_layer = VK_REMAINING_ARRAY_LAYERS;
-	  uint32_t layer_count = VK_REMAINING_ARRAY_LAYERS;*/
 
 #pragma pack(push, 1)
 	struct IVCI {
@@ -1067,6 +1055,10 @@ namespace vuk {
 			return Resolver::per_thread->resolve_image_view(view_key);
 		}
 
+		IVCI& get_ci() const noexcept {
+			return Resolver::per_thread->resolve_image_view(view_key);
+		}
+
 		Format format() const noexcept {
 			return get_meta().format;
 		}
@@ -1134,7 +1126,7 @@ namespace vuk {
 	};
 
 	template<Format f = {}>
-	void synchronize(ImageView<f>, struct SyncHelper&);
+	void synchronize(ImageView<f>, struct SyncHelper&) {}
 
 	struct ImageWithIdentity {
 		Image<> image;

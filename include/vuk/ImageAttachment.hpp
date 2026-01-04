@@ -56,7 +56,7 @@ namespace vuk {
 		SamplerCreateInfo sci = {};
 	};
 
-	void synchronize(struct SampledImage, struct SyncHelper&);
+	inline void synchronize(struct SampledImage, struct SyncHelper&) {}
 } // namespace vuk
 
 namespace std {

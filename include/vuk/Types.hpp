@@ -907,6 +907,20 @@ namespace vuk {
 		case Format::eR64G64B64Sfloat:
 			return ComponentDataType::eFloat64;
 
+		// R8G8B8A8 formats
+		case Format::eR8G8B8A8Unorm:
+			return ComponentDataType::eUnorm8;
+		case Format::eR8G8B8A8Uint:
+			return ComponentDataType::eUint8;
+		case Format::eR8G8B8A8Sint:
+			return ComponentDataType::eInt8;
+		case Format::eR8G8B8A8Srgb:
+			return ComponentDataType::eSrgb8;
+		case Format::eB8G8R8A8Unorm:
+			return ComponentDataType::eUnorm8;
+		case Format::eB8G8R8A8Srgb:
+			return ComponentDataType::eSrgb8;
+
 		// R16G16B16A16 formats
 		case Format::eR16G16B16A16Uint:
 			return ComponentDataType::eUint16;
@@ -935,24 +949,34 @@ namespace vuk {
 		case Format::eR64G64B64A64Sfloat:
 			return ComponentDataType::eFloat64;
 
-		case Format::eR8G8B8A8Unorm:
-			return ComponentDataType::eUnorm8;
-		case Format::eR8G8B8A8Uint:
-			return ComponentDataType::eUint8;
-		case Format::eR8G8B8A8Sint:
-			return ComponentDataType::eInt8;
-		case Format::eR8G8B8A8Srgb:
-			return ComponentDataType::eSrgb8;
-		case Format::eB8G8R8A8Unorm:
-			return ComponentDataType::eUnorm8;
-		case Format::eB8G8R8A8Srgb:
-			return ComponentDataType::eSrgb8;
 		// Packed formats
 		case Format::eA8B8G8R8UnormPack32:
 		case Format::eA8B8G8R8UintPack32:
 		case Format::eA8B8G8R8SintPack32:
 		case Format::eA8B8G8R8SrgbPack32:
 			return ComponentDataType::ePacked32;
+
+		// Compressed formats
+		case Format::eBc1RgbaSrgbBlock:
+		case Format::eBc1RgbSrgbBlock:
+		case Format::eBc7SrgbBlock:
+			return ComponentDataType::eSrgb8;
+
+		case Format::eBc1RgbaUnormBlock:
+		case Format::eBc1RgbUnormBlock:
+		case Format::eBc7UnormBlock:
+			return ComponentDataType::eUnorm8;
+
+		// Depth formats
+		case Format::eD16Unorm:
+			return ComponentDataType::eUnorm16;
+
+		case Format::eD32Sfloat:
+			return ComponentDataType::eFloat32;
+
+		// Stencil formats
+		case Format::eS8Uint:
+			return ComponentDataType::eUint8;
 
 		case Format::eUndefined:
 			return ComponentDataType::ePacked32;
@@ -1330,9 +1354,9 @@ namespace vuk {
 	}
 
 	template<class T>
-	void synchronize(Buffer<T>, struct SyncHelper&);
+	void synchronize(Buffer<T>, struct SyncHelper&) {}
 	template<class T, size_t Extent>
-	void synchronize(Buffer<T, Extent>, struct SyncHelper&);
+	void synchronize(Buffer<T, Extent>, struct SyncHelper&) {}
 
 	template<class T>
 	concept Synchronized = requires(std::remove_all_extents_t<T> a, SyncHelper& sh) {

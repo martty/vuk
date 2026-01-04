@@ -220,9 +220,17 @@ namespace vuk {
 		}
 	}
 
-	Ref IRModule::make_get_iv_meta(Ref ptr) {
-		auto ty = new std::shared_ptr<Type>[1]{ to_IR_type<ImageViewEntry>() };
-		return first(emplace_op(Node{ .kind = Node::GET_IV_META, .type = std::span{ ty, 1 }, .get_iv_meta = { .imageview = ptr } }));
+	Ref IRModule::make_get_ci(Ref ptr) {
+		std::shared_ptr<Type> ty;
+		auto src_ty = Type::stripped(ptr.type());
+		if (src_ty->is_imageview()) {
+			ty = to_IR_type<IVCI>();
+		} else if (src_ty->kind == Type::IMAGE_TY) {
+			ty = to_IR_type<ICI>();
+		} else {
+			assert(false);
+		}
+		return first(emplace_op(Node{ .kind = Node::GET_CI, .type = std::span{ new std::shared_ptr<Type>[1]{ ty }, 1 }, .get_ci = { .src = ptr } }));
 	}
 } // namespace vuk
 

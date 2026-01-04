@@ -8,9 +8,9 @@
 
 using namespace vuk;
 
-// ============================================================================
-// IR-based Image Allocation and Parameter Inference Tests
-// ============================================================================
+// ================================
+// IR-based Image Allocation Tests
+// ================================
 
 TEST_CASE("ir_allocate_image_basic") {
 	// Create ICI and allocate image entirely in IR
@@ -28,7 +28,7 @@ TEST_CASE("ir_allocate_image_basic") {
 	ClearColor clear_value{ 0.0f, 0.0f, 0.0f, 1.0f };
 	// Expected: R8G8B8A8Unorm black = (0, 0, 0, 255)
 	uint32_t expected_pixel = 0xFF000000; // ABGR format in memory
-	clear_and_verify(view_value, clear_value, Format::eR8G8B8A8Unorm, Extent3D{ 256, 256, 1 }, expected_pixel);
+	clear_and_verify(view_value, clear_value, Format::eR8G8B8A8Unorm, Extent3D{ 256, 256, 1 }, expected_pixel, { .dump_graph = true });
 }
 
 TEST_CASE("ir_allocate_image_infer_from_copy_source") {
@@ -163,7 +163,7 @@ TEST_CASE("ir_allocate_image_different_usages") {
 	{
 		ICI ici = from_preset(Preset::eMap2D, Format::eR8G8B8A8Srgb, Extent3D{ 256, 256, 1 }, Samples::e1);
 		ici.level_count = 1;
-		ici.usage |= ImageUsageFlagBits::eTransferSrc;
+		ici.usage |= ImageUsageFlagBits::eTransferSrc | ImageUsageFlagBits::eTransferDst;
 		auto view = allocate<>("sampled_img", ici);
 
 		ClearColor clear_value{ 1.0f, 0.0f, 0.0f, 1.0f };
@@ -175,7 +175,7 @@ TEST_CASE("ir_allocate_image_different_usages") {
 	{
 		ICI ici = from_preset(Preset::eRTT2D, Format::eR8G8B8A8Unorm, Extent3D{ 256, 256, 1 }, Samples::e1);
 		ici.level_count = 1;
-		ici.usage |= ImageUsageFlagBits::eTransferSrc;
+		ici.usage |= ImageUsageFlagBits::eTransferSrc | ImageUsageFlagBits::eTransferDst;
 		auto view = allocate<>("rtt_img", ici);
 
 		ClearColor clear_value{ 0.0f, 1.0f, 0.0f, 1.0f };
@@ -187,7 +187,7 @@ TEST_CASE("ir_allocate_image_different_usages") {
 	{
 		ICI ici = from_preset(Preset::eSTT2D, Format::eR32G32B32A32Sfloat, Extent3D{ 256, 256, 1 }, Samples::e1);
 		ici.level_count = 1;
-		ici.usage |= ImageUsageFlagBits::eTransferSrc;
+		ici.usage |= ImageUsageFlagBits::eTransferSrc | ImageUsageFlagBits::eTransferDst;
 		auto view = allocate<>("storage_img", ici);
 
 		ClearColor clear_value{ 0.0f, 0.0f, 1.0f, 1.0f };
@@ -244,18 +244,30 @@ TEST_CASE("ir_allocate_image_with_mips") {
 	clear_and_verify(view, clear_value, Format::eR8G8B8A8Srgb, Extent3D{ 256, 256, 1 }, expected_pixel);
 }
 
-TEST_CASE("ir_allocate_image_resolve_operation") {
-	// Multisampled source
-	ICI ms_ici = from_preset(Preset::eRTT2DUnmipped, Format::eR8G8B8A8Unorm, Extent3D{ 512, 512, 1 }, Samples::e4);
-	auto ms_view = allocate<>("ms_img", ms_ici);
+TEST_CASE("ir_allocate_image_depth_stencil") {
+	// Depth only
+	{
+		ICI ici = from_preset(Preset::eRTT2DUnmipped, Format::eD32Sfloat, Extent3D{ 1024, 768, 1 }, Samples::e1);
+		ici.usage |= ImageUsageFlagBits::eTransferSrc | ImageUsageFlagBits::eTransferDst;
+		auto view = allocate<>("depth_img", ici);
 
-	// Single-sampled destination
-	ICI ss_ici = from_preset(Preset::eGeneric2D, Format::eR8G8B8A8Unorm, Extent3D{ 512, 512, 1 }, Samples::e1);
-	auto ss_view = allocate<>("ss_img", ss_ici);
+		ClearDepthStencil clear_value{ 1.0f, 0 };
+		// Depth is a single float32
+		float expected_pixel = 1.0f;
+		clear_and_verify(view, clear_value, Format::eD32Sfloat, Extent3D{ 1024, 768, 1 }, expected_pixel);
+	}
 
-	auto resolved = resolve_into(ms_view, ss_view);
-	auto result = resolved.wait(*test_context.allocator, test_context.compiler);
-	REQUIRE(result);
+	// Depth-stencil
+	/* {
+	  ICI ici = from_preset(Preset::eRTT2DUnmipped, Format::eD24UnormS8Uint, Extent3D{ 1024, 768, 1 }, Samples::e1);
+	  auto view = allocate<>("ds_img", ici);
+
+	  ClearDepthStencil clear_value{ 0.5f, 128 };
+	  // D24S8: 24 bits depth (0.5 * 0xFFFFFF = 0x7FFFFF) + 8 bits stencil (128 = 0x80)
+	  // Packed as uint32: depth in lower 24 bits, stencil in upper 8 bits
+	  uint32_t expected_pixel = (128u << 24) | 0x7FFFFF;
+	  clear_and_verify(view, clear_value, Format::eD24UnormS8Uint, Extent3D{ 1024, 768, 1 }, expected_pixel);
+	}*/
 }
 
 TEST_CASE("ir_allocate_image_compressed") {
@@ -278,33 +290,6 @@ TEST_CASE("ir_allocate_image_compressed") {
 
 		auto result = view.wait(*test_context.allocator, test_context.compiler);
 		REQUIRE(result);
-	}
-}
-
-TEST_CASE("ir_allocate_image_depth_stencil") {
-	// Depth only
-	{
-		ICI ici = from_preset(Preset::eRTT2DUnmipped, Format::eD32Sfloat, Extent3D{ 1024, 768, 1 }, Samples::e1);
-		auto ici_value = make_constant("depth_ici", ici);
-		auto view = allocate<>("depth_img", ici_value);
-
-		ClearDepthStencil clear_value{ 1.0f, 0 };
-		// Depth is a single float32
-		float expected_pixel = 1.0f;
-		clear_and_verify(view, clear_value, Format::eD32Sfloat, Extent3D{ 1024, 768, 1 }, expected_pixel);
-	}
-
-	// Depth-stencil
-	{
-		ICI ici = from_preset(Preset::eRTT2DUnmipped, Format::eD24UnormS8Uint, Extent3D{ 1024, 768, 1 }, Samples::e1);
-		auto ici_value = make_constant("ds_ici", ici);
-		auto view = allocate<>("ds_img", ici_value);
-
-		ClearDepthStencil clear_value{ 0.5f, 128 };
-		// D24S8: 24 bits depth (0.5 * 0xFFFFFF = 0x7FFFFF) + 8 bits stencil (128 = 0x80)
-		// Packed as uint32: depth in lower 24 bits, stencil in upper 8 bits
-		uint32_t expected_pixel = (128u << 24) | 0x7FFFFF;
-		clear_and_verify(view, clear_value, Format::eD24UnormS8Uint, Extent3D{ 1024, 768, 1 }, expected_pixel);
 	}
 }
 

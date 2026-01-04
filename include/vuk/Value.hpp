@@ -354,50 +354,51 @@ namespace vuk {
 		Value<ImageView<f>>() = default;
 
 		Value<ImageView<f>>(Ref ref) : ValueBase<ImageView<f>>(ref) {
-			auto meta = current_module->make_get_iv_meta(this->get_head());
-			base_level = Value<uint16_t>(current_module->make_extract(meta, 0));
-			level_count = Value<uint16_t>(current_module->make_extract(meta, 1));
-			base_layer = Value<uint16_t>(current_module->make_extract(meta, 2));
-			layer_count = Value<uint16_t>(current_module->make_extract(meta, 3));
-			format = Value<Format>(current_module->make_extract(meta, 4));
-			extent = Value<Extent3D>(current_module->make_extract(meta, 5));
-			sample_count = Value<Samples>(current_module->make_extract(meta, 6));
+			auto ivci = current_module->make_get_ci(this->get_head());
+			base_level = Value<uint16_t>(current_module->make_extract(ivci, 0));
+			level_count = Value<uint16_t>(current_module->make_extract(ivci, 1));
+			base_layer = Value<uint16_t>(current_module->make_extract(ivci, 2));
+			layer_count = Value<uint16_t>(current_module->make_extract(ivci, 3));
+			auto image = current_module->make_extract(ivci, 4);
+			auto ici = current_module->make_get_ci(image);
+			format = Value<Format>(current_module->make_extract(ivci, 5));
+			extent = Value<Extent3D>(current_module->make_extract(ici, 4));
+			sample_count = Value<Samples>(current_module->make_extract(ici, 6));
 		}
 
 		Value<ImageView<f>>(ExtRef extref) : Value<ImageView<f>>(Ref(extref.node->get_node(), extref.index)) {}
 
-		Value<ImageViewEntry> get_meta() {
-			return Value<ImageViewEntry>(current_module->make_get_iv_meta(this->get_head()));
+		Value<ImageViewEntry> get_ci() {
+			return Value<IVCI>(current_module->make_get_ci(this->get_head()));
 		}
 
 		// Image inferences
 		void same_extent_as(const Value<ImageView<f>>& src) {
 			this->node->deps.push_back(src.node);
-			this->set_with_extract(this->get_head(), src.get_head(), 0);
-			this->set_with_extract(this->get_head(), src.get_head(), 1);
-			this->set_with_extract(this->get_head(), src.get_head(), 2);
+			current_module->set_value(extent.get_head(), src.extent.get_head());
 		}
 
 		/// @brief Inference target has the same width & height as the source
 		void same_2D_extent_as(const Value<ImageView<f>>& src) {
 			this->node->deps.push_back(src.node);
-			this->set_with_extract(this->get_head(), src.get_head(), 0);
-			this->set_with_extract(this->get_head(), src.get_head(), 1);
+			current_module->set_value(extent->width.get_head(), src.extent->width.get_head());
+			current_module->set_value(extent->height.get_head(), src.extent->height.get_head());
 		}
 
 		/// @brief Inference target has the same format as the source
 		void same_format_as(const Value<ImageView<f>>& src) {
 			this->node->deps.push_back(src.node);
-			this->set_with_extract(this->get_head(), src.get_head(), 3);
+			current_module->set_value(format.get_head(), src.format.get_head());
 		}
 
 		/// @brief Inference target has the same shape(extent, layers, levels) as the source
 		void same_shape_as(const Value<ImageView<f>>& src) {
 			same_extent_as(src);
 
-			for (auto i = 6; i < 10; i++) { /* 6 - 9 : layers, levels */
-				this->set_with_extract(this->get_head(), src.get_head(), i - 1);
-			}
+			current_module->set_value(base_layer.get_head(), src.base_layer.get_head());
+			current_module->set_value(layer_count.get_head(), src.layer_count.get_head());
+			current_module->set_value(base_level.get_head(), src.base_level.get_head());
+			current_module->set_value(level_count.get_head(), src.level_count.get_head());
 		}
 
 		/// @brief Inference target is similar to(same shape, same format, same sample count) the source
