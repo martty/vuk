@@ -233,25 +233,85 @@ auto buffer_use = vuk::make_pass("buffer use", [](vuk::CommandBuffer& cbuf, VUK_
 namespace vuk {
 	// Helper to verify image contents match expected data
 	template<typename T>
-	void verify_image_data(Value<ImageView<>> image, std::span<T> expected_data, Format format, Extent3D extent) {
+	void verify_image_data(Value<ImageView<>> image, std::span<T> expected_data, Format format, Extent3D extent, RenderGraphCompileOptions opts = {}) {
 		size_t alignment = format_to_texel_block_size(format);
 		size_t size = compute_image_size(format, extent);
 		auto download_buf = *allocate_buffer<T>(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
 		auto download_buf_value = discard("verify_download", *download_buf);
-		auto res = download_buffer(copy(image, std::move(download_buf_value))).get(*test_context.allocator, test_context.compiler);
+		auto res = download_buffer(copy(image, std::move(download_buf_value))).get(*test_context.allocator, test_context.compiler, opts);
 		auto actual_data = res->to_span();
 		CHECK(std::equal(actual_data.begin(), actual_data.end(), expected_data.begin()));
 	}
 
+	// Helper to render a fullscreen triangle to clear or fill an attachment
+	// This is useful in render passes where clear_image cannot be used
+	inline Value<ImageView<>> render_fullscreen_color(Value<ImageView<>> target, std::array<float, 4> color) {
+		static const char* fullscreen_vert = R"(#version 450
+#pragma shader_stage(vertex)
+
+out gl_PerVertex {
+    vec4 gl_Position;
+};
+
+layout (location = 0) out vec2 uv;
+
+void main() {
+	if(gl_VertexIndex == 0){
+		gl_Position = vec4(-1, -1, 0.0, 1.0);
+		uv = vec2(0, 0);
+	} else if (gl_VertexIndex == 1){
+		gl_Position = vec4(-1, 3, 0.0, 1.0);
+		uv = vec2(0, 2);
+	} else {
+		gl_Position = vec4(3, -1, 0.0, 1.0);
+		uv = vec2(2, 0);
+	}
+}
+)";
+		static const char* solid_color_frag = R"(#version 450
+#pragma shader_stage(fragment)
+
+layout(location = 0) out vec4 fColor;
+layout(push_constant) uniform PushConstants {
+    vec4 color;
+} pc;
+
+void main() {
+    fColor = pc.color;
+}
+)";
+		PipelineBaseCreateInfo pci;
+		pci.add_glsl(fullscreen_vert, "<>");
+		pci.add_glsl(solid_color_frag, "<>");
+		auto pipeline = test_context.runtime->get_pipeline(pci);
+
+		auto pass = make_pass(
+		    "fullscreen_color",
+		    [color, pipeline](CommandBuffer& cbuf, VUK_IA(Access::eColorWrite) rt) {
+			    cbuf.set_viewport(0, Rect2D::framebuffer());
+			    cbuf.set_scissor(0, Rect2D::framebuffer());
+			    cbuf.set_rasterization({});
+			    cbuf.set_color_blend(rt, {});
+			    cbuf.bind_graphics_pipeline(pipeline);
+			    cbuf.push_constants(ShaderStageFlagBits::eFragment, 0, color);
+			    cbuf.draw(3, 1, 0, 0);
+			    return rt;
+		    },
+		    DomainFlagBits::eGraphicsQueue);
+
+		return pass(std::move(target));
+	}
+
 	// Helper to clear an image and verify it executes successfully with expected clear value
 	template<typename T>
-	void clear_and_verify(Value<ImageView<>> image, Clear clear_value, Format format, Extent3D extent, T expected_clear_value) {
+	void
+	clear_and_verify(Value<ImageView<>> image, Clear clear_value, Format format, Extent3D extent, T expected_clear_value, RenderGraphCompileOptions opts = {}) {
 		auto cleared = clear_image(image, clear_value);
 
 		// Download and verify all pixels are cleared to the expected value
 		size_t pixel_count = extent.width * extent.height * extent.depth;
 		std::vector<T> expected_data(pixel_count, expected_clear_value);
-		verify_image_data(cleared, std::span(expected_data), format, extent);
+		verify_image_data(cleared, std::span(expected_data), format, extent, opts);
 	}
 
 	// Helper to clear an image and verify the clear value with custom expected data

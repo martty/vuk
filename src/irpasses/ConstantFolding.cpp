@@ -23,14 +23,17 @@ namespace vuk {
 		/*COMPILE_PIPELINE*/ DomainFlagBits::eConstant,
 		/*ALLOCATE*/ DomainFlagBits::eHost,
 		/*GET_ALLOCATION_SIZE*/ DomainFlagBits::eConstant,
+		/*GET_CI*/ DomainFlagBits::eConstant,
 		/*GARBAGE*/ DomainFlagBits::ePlaceholder
 	};
+
+	static_assert(sizeof(op_compute_class) == Node::Kind::NODE_KIND_MAX * sizeof(DomainFlags));
 
 	Result<void> constant_folding::operator()() {
 		rewrite([this](Node* node, Replacer& r) {
 			switch (node->kind) {
 			case Node::SLICE: {
-				if (node->type[0]->kind == Type::INTEGER_TY) {
+				if (!node->type[0]->is_synchronized()) {
 					// direct slicing of a composite
 					if (node->slice.src.node->kind == Node::CONSTRUCT && node->slice.axis == Node::NamedAxis::FIELD) {
 						auto field_idx = constant<uint64_t>(node->slice.start);
@@ -104,7 +107,7 @@ namespace vuk {
 							    arg = current_module->make_constant(arg.type(), *result);
 							    add_node(arg.node);
 						    }
-					    } else if (arg.type()->kind == Type::INTEGER_TY && arg.node->kind != Node::CONSTANT) {
+					    } else if (!arg.type()->is_synchronized() && arg.node->kind != Node::CONSTANT) {
 						    auto result = eval(arg);
 						    if (result.holds_value()) {
 							    arg = current_module->make_constant(arg.type(), *result);

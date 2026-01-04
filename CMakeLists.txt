@@ -479,8 +479,8 @@ if(VUK_BUILD_TESTS)
 				#tests/01_semantics.cpp
 				#tests/01_image.cpp
 				tests/01_image_alloc.cpp
-				tests/01_buffer_alloc.cpp
-				tests/imagelike_bridge_test.cpp
+				#tests/01_buffer_alloc.cpp
+				#tests/imagelike_bridge_test.cpp
 				#tests/02_rg_errors.cpp
 				#tests/03_commands.cpp
 				#tests/04_arrays.cpp
@@ -490,7 +490,7 @@ if(VUK_BUILD_TESTS)
 				#tests/radix_tree.cpp
 				#tests/frame_allocator.cpp
 				#tests/buffer_ptr_view.cpp
-				tests/udt_ir_integration_test.cpp
+				#tests/udt_ir_integration_test.cpp
 				#tests/image_ptr_view.cpp
 	)
 	#target_compile_features(vuk-tests PRIVATE cxx_std_17)

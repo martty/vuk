@@ -1556,11 +1556,17 @@ namespace vuk {
 					done(node, item.scheduled_stream, size);
 					break;
 				}
-				case Node::GET_IV_META: {
-					auto& img_att = *get_value<ImageView<>>(node->get_iv_meta.imageview);
-					auto& ve = img_att.get_meta();
-
-					done(node, item.scheduled_stream, (void*)&ve);
+				case Node::GET_CI: {
+					auto src = node->get_ci.src;
+					if (src.type()->is_imageview()) {
+						auto& iv = *get_value<ImageView<>>(src);
+						done(node, item.scheduled_stream, (void*)&iv.get_ci());
+					} else if (src.type()->kind == Type::IMAGE_TY) {
+						auto& image = *get_value<Image<>>(src);
+						done(node, item.scheduled_stream, (void*)&image.get_ci());
+					} else {
+						assert(false);
+					}
 					break;
 				}
 				default:

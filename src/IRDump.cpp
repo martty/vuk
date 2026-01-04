@@ -284,8 +284,8 @@ namespace vuk {
 		case Node::GET_ALLOCATION_SIZE: {
 			print_args_to_string({ &node->get_allocation_size.ptr, 1 }, line);
 		} break;
-		case Node::GET_IV_META: {
-			print_args_to_string({ &node->get_iv_meta.imageview, 1 }, line);
+		case Node::GET_CI: {
+			print_args_to_string({ &node->get_ci.src, 1 }, line);
 		} break;
 		}
 	}

@@ -102,7 +102,11 @@ namespace vuk {
 						impl.schedule_dependency(node->acquire_next_image.swapchain, RW::eWrite);
 					} break;
 					case Node::SLICE: {
-						impl.schedule_dependency(node->slice.src, RW::eWrite);
+						if (!node->type[0]->is_synchronized()) {
+							impl.schedule_dependency(node->slice.src, RW::eRead);
+						} else {
+							impl.schedule_dependency(node->slice.src, RW::eWrite);
+						}
 						impl.schedule_dependency(node->slice.start, RW::eRead);
 						impl.schedule_dependency(node->slice.count, RW::eRead);
 					} break;

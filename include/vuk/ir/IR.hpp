@@ -100,6 +100,7 @@ namespace vuk {
 				void* (*get)(void* value, size_t index) = nullptr;
 				bool (*is_default)(void* value, size_t index) = nullptr;
 				void (*destroy)(void* dst) = nullptr;
+				void (*synchronize)(void*, struct SyncHelper&) = nullptr;
 			} composite;
 			struct {
 				size_t tag;
@@ -212,6 +213,25 @@ namespace vuk {
 			return kind == Type::POINTER_TY && pointer.T->get()->kind == Type::ENUM_VALUE_TY;
 		}
 
+		bool is_synchronized() {
+			if (kind == Type::COMPOSITE_TY && composite.synchronize != nullptr) {
+				return true;
+			}
+			if (kind == Type::IMBUED_TY) {
+				return imbued.T->get()->is_synchronized();
+			}
+			if (kind == Type::ALIASED_TY) {
+				return aliased.T->get()->is_synchronized();
+			}
+			if (kind == Type::UNION_TY) {
+				return true;
+			}
+			if (is_bufferlike_view() || is_imageview()) {
+				return true;
+			}
+			return false;
+		}
+
 		// TODO: handle multiple flags
 		static std::string_view to_sv(Access acc) {
 			switch (acc) {
@@ -295,6 +315,18 @@ namespace vuk {
 				return "TessS";
 			case vuk::eTessellationUniformRead:
 				return "TessU";
+			case eCopyRead:
+				return "CopyR";
+			case eCopyWrite:
+				return "CopyW";
+			case eCopyRW:
+				return "CopyRW";
+			case eBlitRead:
+				return "BlitR";
+			case eBlitWrite:
+				return "BlitW";
+			case eBlitRW:
+				return "BlitRW";
 			default:
 				return "<multiple>";
 			}
@@ -350,6 +382,8 @@ namespace vuk {
 				return to_string(t->pointer.T->get()) + "*";
 			case OPAQUE_TY:
 				return "opaque:" + std::to_string(t->opaque.tag);
+			case IMAGE_TY:
+				return "image";
 			default:
 				assert(0);
 				return "?";
@@ -416,8 +450,9 @@ namespace vuk {
 			COMPILE_PIPELINE,
 			ALLOCATE,
 			GET_ALLOCATION_SIZE,
-			GET_IV_META,
-			GARBAGE
+			GET_CI,
+			GARBAGE,
+			NODE_KIND_MAX
 		} kind;
 		uint8_t flag = 0;
 		std::span<std::shared_ptr<Type>> type;
@@ -537,8 +572,8 @@ namespace vuk {
 				Ref ptr;
 			} get_allocation_size;
 			struct : Fixed<1> {
-				Ref imageview;
-			} get_iv_meta;
+				Ref src;
+			} get_ci;
 			struct {
 				uint8_t arg_count;
 			} generic_node;
@@ -590,8 +625,8 @@ namespace vuk {
 				return "lcopy";
 			case GET_ALLOCATION_SIZE:
 				return "get_allocation_size";
-			case GET_IV_META:
-				return "get_iv_meta";
+			case GET_CI:
+				return "get_ci";
 			case COMPILE_PIPELINE:
 				return "compile_pipeline";
 			case ALLOCATE:
@@ -1066,8 +1101,7 @@ namespace vuk {
 
 			// TODO: PAV: this changes
 			void destroy(Type* t, void* v) {
-				if (t->kind == Type::INTEGER_TY) {
-				} else if (t->hash_value == builtin_sampled_image) {
+				if (t->hash_value == builtin_sampled_image) {
 					std::destroy_at<SampledImage>((SampledImage*)v);
 				} else if (t->hash_value == builtin_sampler) {
 					std::destroy_at<SamplerCreateInfo>((SamplerCreateInfo*)v);
@@ -1370,7 +1404,7 @@ namespace vuk {
 			auto ty = new std::shared_ptr<Type>[1]{ types.u64() };
 			return first(emplace_op(Node{ .kind = Node::GET_ALLOCATION_SIZE, .type = std::span{ ty, 1 }, .get_allocation_size = { .ptr = ptr } }));
 		}
-		Ref make_get_iv_meta(Ref ptr);
+		Ref make_get_ci(Ref ptr);
 
 		// slice splits a range into two halves
 		// converge is essentially an unslice -> it returns back to before the slice was made
