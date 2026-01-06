@@ -1,13 +1,13 @@
 #include "vuk/Hash.hpp" // for create
 #include "vuk/IRProcess.hpp"
 #include "vuk/RenderGraph.hpp"
-#include "vuk/SyncLowering.hpp"
 #include "vuk/runtime/CommandBuffer.hpp"
 #include "vuk/runtime/Stream.hpp"
 #include "vuk/runtime/vk/AllocatorHelpers.hpp"
 #include "vuk/runtime/vk/RenderPass.hpp"
 #include "vuk/runtime/vk/VkQueueExecutor.hpp"
 #include "vuk/runtime/vk/VkRuntime.hpp"
+#include "vuk/SyncLowering.hpp"
 
 #include <fmt/format.h>
 #include <unordered_set>
@@ -1037,6 +1037,9 @@ namespace vuk {
 				}
 			} else if (base_ty->hash_value == current_module->types.builtin_buffer) {
 				auto& att = *reinterpret_cast<Buffer*>(value);
+				if (att.size == 0) {
+					return;
+				}
 				std::vector<Subrange::Buffer, inline_alloc<Subrange::Buffer, 1024>> work_queue(this->arena);
 				work_queue.emplace_back(Subrange::Buffer{ att.offset, att.size });
 

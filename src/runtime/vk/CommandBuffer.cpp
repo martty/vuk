@@ -1,9 +1,9 @@
-#include "vuk/runtime/CommandBuffer.hpp"
 #include "vuk/RenderGraph.hpp"
-#include "vuk/SyncLowering.hpp"
+#include "vuk/runtime/CommandBuffer.hpp"
 #include "vuk/runtime/Stream.hpp"
 #include "vuk/runtime/vk/AllocatorHelpers.hpp"
 #include "vuk/runtime/vk/VkRuntime.hpp"
+#include "vuk/SyncLowering.hpp"
 
 #include <cmath>
 #include <fmt/printf.h>
@@ -794,6 +794,9 @@ namespace vuk {
 		VUK_EARLY_RET();
 
 		assert(src.size == dst.size);
+		if (src.size == 0) {
+			return *this;
+		}
 
 		if (src.buffer == dst.buffer) {
 			bool overlap_a = src.offset > dst.offset && src.offset < (dst.offset + dst.size);
@@ -811,11 +814,17 @@ namespace vuk {
 	}
 
 	CommandBuffer& CommandBuffer::fill_buffer(const Buffer& dst, uint32_t data) {
+		if (dst.size == 0) {
+			return *this;
+		}
 		ctx.vkCmdFillBuffer(command_buffer, dst.buffer, dst.offset, dst.size, data);
 		return *this;
 	}
 
 	CommandBuffer& CommandBuffer::update_buffer(const Buffer& dst, const void* data) {
+		if (dst.size == 0) {
+			return *this;
+		}
 		ctx.vkCmdUpdateBuffer(command_buffer, dst.buffer, dst.offset, dst.size, data);
 		return *this;
 	}

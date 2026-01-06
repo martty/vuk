@@ -502,3 +502,80 @@ TEST_CASE("release sync") {
 
 	CHECK(i2->layout == ImageLayout::eReadOnlyOptimalKHR);
 }
+
+TEST_CASE("zero-length buffer handling") {
+	std::string execution;
+
+	// Test 1: Allocate zero-length buffer
+	auto buf0 = allocate_buffer(*test_context.allocator, { .mem_usage = MemoryUsage::eGPUonly, .size = 0 });
+	CHECK(buf0);
+
+	// Test 2: Declare zero-length buffer
+	auto decl_buf = declare_buf("zero_length", { .size = 0, .memory_usage = MemoryUsage::eGPUonly });
+
+	// Test 3: Discard zero-length buffer
+	auto discarded = discard_buf("zero_discard", **buf0);
+
+	// Test 4: Write operation on zero-length buffer
+	auto write = make_pass("write_zero", [&](CommandBuffer& cbuf, VUK_BA(Access::eTransferWrite) dst) {
+		execution += "w";
+		return dst;
+	});
+
+	// Test 5: Read operation on zero-length buffer
+	auto read = make_pass("read_zero", [&](CommandBuffer& cbuf, VUK_BA(Access::eTransferRead) src) {
+		execution += "r";
+		return src;
+	});
+
+	// Test 6: Copy operation with zero-length buffers
+	auto copy = make_pass("copy_zero", [&](CommandBuffer& cbuf, VUK_BA(Access::eTransferWrite) dst, VUK_BA(Access::eTransferRead) src) {
+		cbuf.copy_buffer(src, dst);
+		execution += "c";
+		return dst;
+	});
+
+	// Test 7: Chain operations on zero-length buffer
+	auto buf1 = allocate_buffer(*test_context.allocator, { .mem_usage = MemoryUsage::eGPUonly, .size = 0 });
+	auto b0 = discard_buf("src0", **buf0);
+	auto b1 = discard_buf("src1", **buf1);
+
+	auto written = write(b0);
+	auto read_result = read(written);
+	auto copied = copy(b1, read_result);
+
+	copied.wait(*test_context.allocator, test_context.compiler);
+	CHECK(execution == "wrc");
+	execution = "";
+
+	// Test 8: Multiple zero-length buffers in a single pass
+	auto buf2 = allocate_buffer(*test_context.allocator, { .mem_usage = MemoryUsage::eGPUonly, .size = 0 });
+	auto multi_zero = make_pass(
+	    "multi_zero", [&](CommandBuffer& cbuf, VUK_BA(Access::eTransferWrite) d0, VUK_BA(Access::eTransferWrite) d1, VUK_BA(Access::eTransferWrite) d2) {
+		    execution += "m";
+		    return std::tuple{ d0, d1, d2 };
+	    });
+
+	auto [r0, r1, r2] = multi_zero(discard_buf("z0", **buf0), discard_buf("z1", **buf1), discard_buf("z2", **buf2));
+	r0.wait(*test_context.allocator, test_context.compiler);
+	CHECK(execution == "m");
+	execution = "";
+
+	// Test 9: Fill operation on zero-length buffer (should not crash)
+	auto fill_zero = make_pass("fill_zero", [&](CommandBuffer& cbuf, VUK_BA(Access::eTransferWrite) dst) {
+		cbuf.fill_buffer(dst, 0xff);
+		execution += "f";
+		return dst;
+	});
+
+	auto [buf_, b2] = create_buffer(*test_context.allocator, MemoryUsage::eGPUonly, DomainFlagBits::eTransferOnGraphics, std::span<int>());
+	fill_zero(b2).wait(*test_context.allocator, test_context.compiler);
+	CHECK(execution == "f");
+	execution = "";
+
+	// Test 10: Download zero-length buffer
+	auto written_zero = write(discard_buf("download_src", **buf0));
+	auto downloaded = download_buffer(written_zero).get(*test_context.allocator, test_context.compiler);
+	CHECK(downloaded);
+	CHECK(execution == "w");
+}

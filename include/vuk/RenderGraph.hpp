@@ -560,7 +560,7 @@ public:
 	}
 
 	[[nodiscard]] inline Value<Buffer> acquire_buf(Name name, Buffer buf, Access access, VUK_CALLSTACK) {
-		assert(buf.buffer != VK_NULL_HANDLE);
+		assert(buf.buffer != VK_NULL_HANDLE || buf.size == 0);
 		Ref ref = current_module->acquire(current_module->types.get_builtin_buffer(), nullptr, buf);
 		auto ext_ref = ExtRef(std::make_shared<ExtNode>(ref.node, to_use(access)), ref);
 		current_module->name_output(ref, name.c_str());
