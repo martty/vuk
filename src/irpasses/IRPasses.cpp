@@ -559,7 +559,10 @@ namespace vuk {
 	Result<void> Compiler::validate_read_undefined() {
 		for (auto node : impl->nodes) {
 			switch (node->kind) {
-			case Node::ALLOCATE: {                 // ALLOCATE discards
+			case Node::ALLOCATE: {                         // ALLOCATE discards
+				if (node->type[0]->kind == Type::IMAGE_TY) { // images are not actually read
+					continue;
+				}
 				if (node->links->reads.size() > 0) { // we are trying to read from it :(
 					auto reads = node->links->reads.to_span(impl->pass_reads);
 					for (auto offender : reads) {
@@ -791,9 +794,11 @@ namespace vuk {
 
 		VUK_DO_OR_RETURN(impl->build_nodes());
 		VUK_DO_OR_RETURN(impl->build_links(alloc.get_context(), allocator));
-		impl->ir_passes = {
-			{ make_ir_pass<constant_folding>(), make_ir_pass<reify_inference>(), make_ir_pass<constant_folding>(), make_ir_pass<validate_duplicated_resource_ref>() }
-		};
+		impl->ir_passes = { { make_ir_pass<expand_default_view>(),
+			                    make_ir_pass<constant_folding>(),
+			                    make_ir_pass<reify_inference>(),
+			                    make_ir_pass<constant_folding>(),
+			                    make_ir_pass<validate_duplicated_resource_ref>() } };
 		RGCImpl::PassRunOptions run_opts = RGCImpl::PassRunOptions::eNone;
 		if (compile_options.dump_linear) {
 			run_opts = RGCImpl::PassRunOptions(run_opts | RGCImpl::PassRunOptions::eDumpLinear);

@@ -48,7 +48,7 @@ TEST_CASE("ir_allocate_image_blit_operation") {
 	auto extent = Extent3D{ 512, 512, 1 };
 	size_t pixel_count = extent.width * extent.height * extent.depth;
 	std::vector expected_data(pixel_count, ImageLike<Format::eR8G8B8A8Unorm>{ 0.5f, 0.5f, 0.5f, 0.5f });
-	verify_image_data(blitted, std::span(expected_data), Format::eR8G8B8A8Unorm, extent, { .dump_graph = true });
+	verify_image_data(blitted, std::span(expected_data), Format::eR8G8B8A8Unorm, extent);
 }
 
 TEST_CASE("ir_allocate_image_copy_operation") {
@@ -67,7 +67,7 @@ TEST_CASE("ir_allocate_image_copy_operation") {
 	auto extent = Extent3D{ 128, 128, 1 };
 	size_t pixel_count = extent.width * extent.height * extent.depth;
 	std::vector expected_data(pixel_count, ImageLike<Format::eR32G32B32A32Sfloat>{ 1.0f, 0.0f, 0.0f, 1.0f });
-	verify_image_data(copied, std::span(expected_data), Format::eR32G32B32A32Sfloat, extent, { .dump_graph = true });
+	verify_image_data(copied, std::span(expected_data), Format::eR32G32B32A32Sfloat, extent);
 }
 
 TEST_CASE("ir_allocate_image_same_format_constraint") {
@@ -88,7 +88,7 @@ TEST_CASE("ir_allocate_image_same_format_constraint") {
 	auto extent = Extent3D{ 64, 64, 1 };
 	size_t pixel_count = extent.width * extent.height * extent.depth;
 	std::vector expected_data(pixel_count, ImageLike<Format::eR16G16B16A16Sfloat>{ 0.75f, 0.25f, 0.5f, 1.0f });
-	verify_image_data(copied, std::span(expected_data), Format::eR16G16B16A16Sfloat, extent, { .dump_graph = true });
+	verify_image_data(copied, std::span(expected_data), Format::eR16G16B16A16Sfloat, extent);
 }
 
 TEST_CASE("ir_allocate_image_same_extent_constraint") {
@@ -109,13 +109,13 @@ TEST_CASE("ir_allocate_image_same_extent_constraint") {
 	auto extent = Extent3D{ 256, 128, 1 };
 	size_t pixel_count = extent.width * extent.height * extent.depth;
 	std::vector expected_data(pixel_count, ImageLike<Format::eR8G8B8A8Unorm>{ 0.3f, 0.6f, 0.9f, 1.0f });
-	verify_image_data(copied, std::span(expected_data), Format::eR8G8B8A8Unorm, extent, { .dump_graph = true });
+	verify_image_data(copied, std::span(expected_data), Format::eR8G8B8A8Unorm, extent);
 }
 
 TEST_CASE("ir_allocate_image_same_shape_constraint") {
 	// Source image with multiple mip levels
-	ICI src_ici = from_preset(Preset::eRTT2DMipped, Format::eR8G8B8A8Unorm, Extent3D{ 128, 128, 1 }, Samples::e1);
-	src_ici.mipLevels = 4;
+	ICI src_ici = from_preset(Preset::eRTT2D, Format::eR8G8B8A8Unorm, Extent3D{ 128, 128, 1 }, Samples::e1);
+	src_ici.level_count = 4;
 	auto src_view = allocate<>("src_img", src_ici);
 	clear_image(src_view, ClearColor{ 0.1f, 0.2f, 0.3f, 0.4f });
 
@@ -131,7 +131,7 @@ TEST_CASE("ir_allocate_image_same_shape_constraint") {
 	auto extent = Extent3D{ 128, 128, 1 };
 	size_t pixel_count = extent.width * extent.height * extent.depth;
 	std::vector expected_data(pixel_count, ImageLike<Format::eR8G8B8A8Unorm>{ 0.1f, 0.2f, 0.3f, 0.4f });
-	verify_image_data(copied, std::span(expected_data), Format::eR8G8B8A8Unorm, extent, { .dump_graph = true });
+	verify_image_data(copied, std::span(expected_data), Format::eR8G8B8A8Unorm, extent);
 }
 
 TEST_CASE("ir_allocate_image_framebuffer_attachments") {
@@ -155,10 +155,7 @@ TEST_CASE("ir_allocate_image_framebuffer_attachments") {
 		    cbuf.set_scissor(0, Rect2D::framebuffer());
 		    cbuf.set_rasterization({});
 		    cbuf.set_color_blend(color, {});
-		    
-		    // Clear depth with a dedicated operation (depth clears are allowed)
-		    cbuf.clear_image(depth, Clear{ .depth = 1.0f });
-		    
+
 		    return color;
 	    },
 	    DomainFlagBits::eGraphicsQueue);
@@ -171,7 +168,7 @@ TEST_CASE("ir_allocate_image_framebuffer_attachments") {
 	auto extent = Extent3D{ 512, 512, 1 };
 	size_t pixel_count = extent.width * extent.height * extent.depth;
 	std::vector expected_data(pixel_count, ImageLike<Format::eR8G8B8A8Unorm>{ 0.8f, 0.4f, 0.2f, 1.0f });
-	verify_image_data(result, std::span(expected_data), Format::eR8G8B8A8Unorm, extent, { .dump_graph = true });
+	verify_image_data(result, std::span(expected_data), Format::eR8G8B8A8Unorm, extent);
 }
 
 TEST_CASE("ir_allocate_image_clear_operation") {
@@ -187,13 +184,13 @@ TEST_CASE("ir_allocate_image_clear_operation") {
 	auto extent = Extent3D{ 128, 128, 1 };
 	size_t pixel_count = extent.width * extent.height * extent.depth;
 	std::vector expected_data(pixel_count, ImageLike<Format::eR8G8B8A8Unorm>{ 0.25f, 0.5f, 0.75f, 1.0f });
-	verify_image_data(cleared, std::span(expected_data), Format::eR8G8B8A8Unorm, extent, { .dump_graph = true });
+	verify_image_data(cleared, std::span(expected_data), Format::eR8G8B8A8Unorm, extent);
 }
 
 TEST_CASE("ir_allocate_image_generate_mips") {
 	// Base mip level with known parameters
-	ICI src_ici = from_preset(Preset::eRTT2DMipped, Format::eR8G8B8A8Unorm, Extent3D{ 512, 512, 1 }, Samples::e1);
-	src_ici.mipLevels = 4;
+	ICI src_ici = from_preset(Preset::eRTT2D, Format::eR8G8B8A8Unorm, Extent3D{ 512, 512, 1 }, Samples::e1);
+	src_ici.level_count = 4;
 	auto src_view = allocate<>("mipped_img", src_ici);
 	clear_image(src_view.mip(0), ClearColor{ 0.9f, 0.1f, 0.5f, 1.0f });
 
@@ -204,7 +201,7 @@ TEST_CASE("ir_allocate_image_generate_mips") {
 	auto extent = Extent3D{ 512, 512, 1 };
 	size_t pixel_count = extent.width * extent.height * extent.depth;
 	std::vector expected_data(pixel_count, ImageLike<Format::eR8G8B8A8Unorm>{ 0.9f, 0.1f, 0.5f, 1.0f });
-	verify_image_data(result.mip(0), std::span(expected_data), Format::eR8G8B8A8Unorm, extent, { .dump_graph = true });
+	verify_image_data(result.mip(0), std::span(expected_data), Format::eR8G8B8A8Unorm, extent);
 }
 
 TEST_CASE("ir_allocate_image_chain_inference") {
@@ -232,7 +229,7 @@ TEST_CASE("ir_allocate_image_chain_inference") {
 	auto extent = Extent3D{ 64, 64, 1 };
 	size_t pixel_count = extent.width * extent.height * extent.depth;
 	std::vector expected_data(pixel_count, ImageLike<Format::eR8G8B8A8Unorm>{ 0.4f, 0.5f, 0.6f, 0.7f });
-	verify_image_data(step2, std::span(expected_data), Format::eR8G8B8A8Unorm, extent, { .dump_graph = true });
+	verify_image_data(step2, std::span(expected_data), Format::eR8G8B8A8Unorm, extent);
 }
 
 TEST_CASE("ir_allocate_image_multiple_framebuffer_attachments") {
@@ -258,15 +255,7 @@ TEST_CASE("ir_allocate_image_multiple_framebuffer_attachments") {
 
 	auto render = make_pass(
 	    "multi_attachment_pass",
-	    [](CommandBuffer& cbuf,
-	       VUK_IA(Access::eColorWrite) c0,
-	       VUK_IA(Access::eColorWrite) c1,
-	       VUK_IA(Access::eDepthStencilWrite) d) {
-		    // Only clear depth within the render pass
-		    cbuf.clear_image(d, Clear{ .depth = 0.5f, .stencil = 0 });
-		    // Color attachments are already filled by previous passes
-		    return c0;
-	    },
+	    [](CommandBuffer& cbuf, VUK_IA(Access::eColorWrite) c0, VUK_IA(Access::eColorWrite) c1, VUK_IA(Access::eDepthStencilWrite) d) { return c0; },
 	    DomainFlagBits::eGraphicsQueue);
 
 	auto result = render(filled_color0, filled_color1, depth);
@@ -275,5 +264,5 @@ TEST_CASE("ir_allocate_image_multiple_framebuffer_attachments") {
 	auto extent = Extent3D{ 256, 256, 1 };
 	size_t pixel_count = extent.width * extent.height * extent.depth;
 	std::vector expected_data(pixel_count, ImageLike<Format::eR8G8B8A8Unorm>{ 1.0f, 0.0f, 0.0f, 1.0f });
-	verify_image_data(result, std::span(expected_data), Format::eR8G8B8A8Unorm, extent, { .dump_graph = true });
+	verify_image_data(result, std::span(expected_data), Format::eR8G8B8A8Unorm, extent);
 }

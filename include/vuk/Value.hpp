@@ -401,6 +401,11 @@ namespace vuk {
 			current_module->set_value(level_count.get_head(), src.level_count.get_head());
 		}
 
+		/// @brief Inference target has the same number of layers as the source
+		void same_layers_as(const Value<ImageView<f>>& src) {
+			current_module->set_value(layer_count.get_head(), src.layer_count.get_head());
+		}
+
 		/// @brief Inference target is similar to(same shape, same format, same sample count) the source
 		void similar_to(const Value<ImageView<f>>& src) {
 			same_shape_as(src);

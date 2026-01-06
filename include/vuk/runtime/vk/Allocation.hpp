@@ -59,6 +59,8 @@ namespace vuk {
 		}
 
 		bool operator==(const ICI& o) const noexcept = default;
+
+		struct IVCI get_default_view_create_info() const noexcept;
 	};
 
 	std::string format_as(const ICI& ici);
@@ -76,6 +78,11 @@ namespace vuk {
 	template<>
 	struct member_placeholder<&ICI::tiling> {
 		static constexpr ImageTiling value = ImageTiling(-1);
+	};
+
+	template<>
+	struct member_placeholder<&ICI::usage> {
+		static constexpr ImageUsageFlags value = ImageUsageFlags(-1);
 	};
 
 	struct ImageEntry : ICI {

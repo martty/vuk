@@ -30,6 +30,11 @@ namespace vuk {
 
 		Result<void> operator()() override;
 	};
+	struct expand_default_view : IRPass {
+		using IRPass::IRPass;
+
+		Result<void> operator()() override;
+	};
 	struct constant_folding : IRPass {
 		using IRPass::IRPass;
 

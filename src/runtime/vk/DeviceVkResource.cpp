@@ -314,36 +314,9 @@ namespace vuk {
 			ie.allocation = allocation;
 			dst[i] = Image<>{ get_context().add_image(ie) };
 			// allocate the default view
+			IVCI ivci = cis[i].get_default_view_create_info();
+			ivci.image = dst[i];
 
-			ImageViewType view_type = ImageViewType::e2D; // default
-
-			// Determine view type from image type and extents
-			switch (cis[i].image_type) {
-			case ImageType::e1D:
-				view_type = (cis[i].layer_count > 1) ? ImageViewType::e1DArray : ImageViewType::e1D;
-				break;
-			case ImageType::e2D:
-				if (cis[i].image_flags & ImageCreateFlagBits::eCubeCompatible) {
-					view_type = (cis[i].layer_count > 6) ? ImageViewType::eCubeArray : ImageViewType::eCube;
-				} else {
-					view_type = (cis[i].layer_count > 1) ? ImageViewType::e2DArray : ImageViewType::e2D;
-				}
-				break;
-			case ImageType::e3D:
-				view_type = ImageViewType::e3D;
-				break;
-			}
-			// the default view covers all mips and layers, has the same format as the image and the view type is inferred from the image type and array layer count
-
-			IVCI ivci{
-				.view_type = view_type,
-				.base_level = 0,
-				.level_count = (uint16_t)VK_REMAINING_MIP_LEVELS,
-				.base_layer = 0,
-				.layer_count = (uint16_t)VK_REMAINING_ARRAY_LAYERS,
-				.image = dst[i],
-				.format = cis[i].format,
-			};
 			ImageView<> dst_iv;
 			auto res2 = allocate_image_views(std::span{ &dst_iv, 1 }, std::span{ &ivci, 1 }, loc);
 			if (!res2) {
