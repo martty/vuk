@@ -397,8 +397,8 @@ namespace vuk {
 	}
 
 	template<Format f = Format::eUndefined>
-	[[nodiscard]] inline Value<ImageView<f>> allocate(Name name, Value<Image<f>> image, Value<IVCI> ivci = {}, VUK_CALLSTACK) {
-		Ref ref = current_module->make_allocate(to_IR_type<ImageView<f>>(), image.get_head(), ivci.get_head());
+	[[nodiscard]] inline Value<ImageView<f>> allocate(Name name, Value<IVCI> ivci = {}, VUK_CALLSTACK) {
+		Ref ref = current_module->make_allocate(to_IR_type<ImageView<f>>(), ivci.get_head());
 		current_module->name_output(ref, name.c_str());
 		current_module->set_source_location(ref.node, VUK_CALL);
 		return { make_ext_ref(ref) };

@@ -327,6 +327,12 @@ namespace vuk {
 				return "BlitW";
 			case eBlitRW:
 				return "BlitRW";
+			case eResolveRead:
+				return "ResolvR";
+			case eResolveWrite:
+				return "ResolvW";
+			case eResolveRW:
+				return "ResolvRW";
 			default:
 				return "<multiple>";
 			}

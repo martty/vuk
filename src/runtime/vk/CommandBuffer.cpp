@@ -825,22 +825,27 @@ namespace vuk {
 
 		VkImageResolve ir;
 
-		ImageSubresourceLayers isl;
-		ImageAspectFlagBits aspect;
-		if (dst_ve.format == Format::eD32Sfloat) {
-			aspect = ImageAspectFlagBits::eDepth;
-		} else {
-			aspect = ImageAspectFlagBits::eColor;
-		}
-		isl.aspectMask = aspect;
-		isl.baseArrayLayer = 0;
-		isl.layerCount = 1;
-		isl.mipLevel = 0;
+		ImageSubresourceLayers isl_src;
+		isl_src.aspectMask = format_to_aspect(dst_ve.format);
+		isl_src.baseArrayLayer = src_ve.base_layer;
+		isl_src.layerCount = src_ve.layer_count;
+		isl_src.mipLevel = src_ve.base_level;
+
+		ImageSubresourceLayers isl_dst;
+		isl_dst.aspectMask = isl_src.aspectMask;
+		isl_dst.baseArrayLayer = dst_ve.base_layer;
+		isl_dst.layerCount = src_ve.layer_count;
+		isl_dst.mipLevel = dst_ve.base_level;
+
+		assert(src_ve.layer_count == dst_ve.layer_count);
+		assert(src_ve.level_count = 1);
+		assert(dst_ve.level_count = 1);
+		assert(src_ve.extent == dst_ve.extent);
 
 		ir.srcOffset = Offset3D{};
-		ir.srcSubresource = isl;
+		ir.srcSubresource = isl_src;
 		ir.dstOffset = Offset3D{};
-		ir.dstSubresource = isl;
+		ir.dstSubresource = isl_dst;
 		ir.extent = static_cast<Extent3D>(src_ve.extent);
 
 		ctx.vkCmdResolveImage(command_buffer, src_ie.image, (VkImageLayout)src_ve.layout, dst_ie.image, (VkImageLayout)dst_ve.layout, 1, &ir);
