@@ -43,6 +43,7 @@ namespace {
 
 	const size_t num_cubes = 10;
 	std::vector<glm::vec3> cube_positions;
+	std::vector<uint32_t> texture_indices;
 
 	std::uniform_int_distribution<size_t> rand_indices(0, 2);
 	std::optional<vuk::BindlessArray> bindless_textures;
@@ -157,9 +158,12 @@ namespace {
 		      // Initially add all three textures
 		      vuk::Sampler default_sampler = allocator.get_context().acquire_sampler({}, allocator.get_context().get_frame_count());
 
-		      // Generate random textures for the cubes
+		      // Generate random textures for the cubes and store their indices
+		      texture_indices.reserve(num_cubes);
 		      for (size_t i = 0; i < num_cubes; i++) {
-			      bindless_textures->push_back(*doge_image_views[rand_indices(gen)], default_sampler, vuk::ImageLayout::eReadOnlyOptimalKHR);
+			      // push_back returns the index where the resource was added
+			      uint32_t idx = bindless_textures->push_back(*doge_image_views[rand_indices(gen)], default_sampler, vuk::ImageLayout::eReadOnlyOptimalKHR);
+			      texture_indices.push_back(idx);
 		      }
 
 		      // Generate random positions for cubes
@@ -195,11 +199,14 @@ namespace {
 			      vuk::Sampler default_sampler = frame_allocator.get_context().acquire_sampler({}, frame_allocator.get_context().get_frame_count());
 
 			      // Remove the first cube's texture and add a new random one
-			      // This demonstrates that indices can be freed and reused efficiently
-			      bindless_textures->erase(bindless_textures->get_active_indices()[0]);
+			      bindless_textures->erase(texture_indices[0]);
+			      texture_indices.erase(texture_indices.begin());
 
-			      // Add a texture back with a random variant
-			      bindless_textures->push_back(*doge_image_views[rand_indices(gen)], default_sampler, vuk::ImageLayout::eReadOnlyOptimalKHR);
+			      // Add a new texture with a random variant - push_back returns the new index
+			      uint32_t new_idx = bindless_textures->push_back(*doge_image_views[rand_indices(gen)], default_sampler, vuk::ImageLayout::eReadOnlyOptimalKHR);
+
+			      // Update our texture indices
+			      texture_indices.push_back(new_idx);
 		      }
 		      // Commit any pending descriptor updates before rendering
 		      bindless_textures->commit();
@@ -231,13 +238,13 @@ namespace {
 			          *model = static_cast<glm::mat4>(glm::angleAxis(glm::radians(angle), glm::vec3(0.f, 1.f, 0.f)));
 
 			          // Draw cubes at random positions with textures from the bindless array
-			          auto indices = bindless_textures->get_active_indices();
-			          for (size_t i = 0; i < indices.size(); i++) {
+			          // Use the tracked indices to index into the descriptor array
+			          for (size_t i = 0; i < texture_indices.size(); i++) {
 				          // Push the position for this cube
 				          command_buffer.push_constants(vuk::ShaderStageFlagBits::eVertex, 0, cube_positions[i]);
 				          // Draw the cube with the corresponding texture index
-				          // We use the instance index as another "push constant" to index the textures
-				          command_buffer.draw_indexed(box.second.size(), 1, 0, 0, indices[i]);
+				          // The instance index is used to reference the texture in the bindless array
+				          command_buffer.draw_indexed(box.second.size(), 1, 0, 0, texture_indices[i]);
 			          }
 
 			          return color;
