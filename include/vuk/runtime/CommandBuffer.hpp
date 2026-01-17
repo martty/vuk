@@ -687,6 +687,11 @@ namespace vuk {
 
 		// commands for render pass-less command buffers
 
+		/// @brief Begin an attachmentless rendering explicitly (remains active for the whole pass)
+		/// @param extent dimensions of the framebuffer
+		/// @param samples sample count of the renderpass
+		CommandBuffer& set_attachmentless_framebuffer(Extent2D extent, SampleCountFlagBits samples);
+
 		/// @brief Clear an image
 		/// @param dst the Name of the Resource to be cleared
 		/// @param clear_value value to clear with

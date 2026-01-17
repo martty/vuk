@@ -376,3 +376,68 @@ void main() {
 	auto test = { 2u, 4u, 6u };
 	CHECK(std::span((uint32_t*)res->mapped_ptr, 3) == std::span(test));
 }
+
+TEST_CASE("attachmentless fb") {
+	auto data = { 1u, 1u, 1u, 1u };
+	auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, Samples::e1);
+	ia.level_count = 1;
+	auto [img, img_val] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data));
+
+	auto cleared_img = clear_image(img_val, ClearColor(0u, 0u, 0u, 0u));
+
+	vuk::PipelineBaseCreateInfo pbci;
+	pbci.add_glsl(
+	    R"(#version 450
+			#pragma shader_stage(vertex)
+			
+			vec2 positions[3] = vec2[](
+				vec2(-1.0, -1.0),
+				vec2( 3.0, -1.0),
+				vec2(-1.0,  3.0)
+			);
+			
+			void main() {
+				gl_Position = vec4(positions[gl_VertexIndex], 0.0, 1.0);
+			}
+			)",
+	    "<vert>");
+	pbci.add_glsl(
+	    R"(#version 450
+			#pragma shader_stage(fragment)
+			
+			layout(binding = 0, r32ui) uniform writeonly uimage2D outputImage;
+			
+			void main() {
+				ivec2 coord = ivec2(gl_FragCoord.xy);
+				imageStore(outputImage, coord, uvec4(42, 0, 0, 0));
+			}
+			)",
+	    "<frag>");
+
+	// Dispatch a fullscreen triangle in an attachmentless renderpass that writes to a storage image
+	auto render_pass = make_pass("attachmentless pass", [pbci](CommandBuffer& cbuf, VUK_IA(Access::eFragmentWrite) output_img) {
+		cbuf.set_attachmentless_framebuffer(Extent2D{ 2, 2 }, SampleCountFlagBits::e1);
+
+		// Bind a graphics pipeline that writes to a storage image
+		cbuf.bind_graphics_pipeline(test_context.runtime->get_pipeline(pbci));
+		cbuf.bind_image(0, 0, output_img);
+		cbuf.set_rasterization({});
+		cbuf.broadcast_color_blend({});
+		cbuf.set_viewport(0, Rect2D::framebuffer());
+		cbuf.set_scissor(0, Rect2D::framebuffer());
+		cbuf.draw(3, 1, 0, 0);
+
+		return output_img;
+	});
+
+	auto rendered_img = render_pass(cleared_img);
+
+	size_t alignment = format_to_texel_block_size(rendered_img->format);
+	size_t size = compute_image_size(rendered_img->format, rendered_img->extent);
+	auto dst = *allocate_buffer(*test_context.allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
+	auto dst_buf = discard_buf("dst", *dst);
+
+	auto res = download_buffer(image2buf(rendered_img, dst_buf)).get(*test_context.allocator, test_context.compiler);
+	auto updata = std::span((uint32_t*)res->mapped_ptr, 4);
+	CHECK(std::all_of(updata.begin(), updata.end(), [](auto& elem) { return elem == 42; }));
+}

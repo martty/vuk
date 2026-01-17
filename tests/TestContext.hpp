@@ -98,6 +98,7 @@ namespace vuk {
 			vk10features.features.fillModeNonSolid = true;
 			vk10features.features.tessellationShader = true;
 			vk10features.features.shaderInt64 = true;
+			vk10features.features.fragmentStoresAndAtomics = true;
 			VkPhysicalDeviceSynchronization2FeaturesKHR sync_feat{ .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES_KHR,
 				                                                     .synchronization2 = true };
 			VkPhysicalDeviceAccelerationStructureFeaturesKHR accelFeature{ .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR,

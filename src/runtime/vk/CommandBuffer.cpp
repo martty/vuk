@@ -2,6 +2,7 @@
 #include "vuk/runtime/CommandBuffer.hpp"
 #include "vuk/runtime/Stream.hpp"
 #include "vuk/runtime/vk/AllocatorHelpers.hpp"
+#include "vuk/runtime/vk/RenderPass.hpp"
 #include "vuk/runtime/vk/VkRuntime.hpp"
 #include "vuk/SyncLowering.hpp"
 
@@ -726,6 +727,77 @@ namespace vuk {
 		return *this;
 	}
 
+	CommandBuffer& CommandBuffer::set_attachmentless_framebuffer(Extent2D extent, SampleCountFlagBits samples) {
+		VUK_EARLY_RET();
+
+		// Verify no ongoing renderpass
+		if (ongoing_render_pass.has_value()) {
+			current_error = Result<void>{ expected_error, AllocateException{ VK_ERROR_UNKNOWN } };
+			return *this;
+		}
+
+		// Create an empty renderpass (attachmentless)
+		RenderPassCreateInfo rpci;
+		SubpassDescription subpass_desc;
+		subpass_desc.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+		subpass_desc.colorAttachmentCount = 0;
+		subpass_desc.pColorAttachments = nullptr;
+		subpass_desc.pDepthStencilAttachment = nullptr;
+		rpci.subpass_descriptions.push_back(subpass_desc);
+		rpci.subpassCount = 1;
+		rpci.pSubpasses = rpci.subpass_descriptions.data();
+
+		VkRenderPass render_pass = VK_NULL_HANDLE;
+		auto res = allocator->allocate_render_passes(std::span{ &render_pass, 1 }, std::span{ &rpci, 1 });
+		if (!res) {
+			current_error = std::move(res);
+			return *this;
+		}
+
+		// Create an attachmentless framebuffer
+		FramebufferCreateInfo fbci;
+		fbci.renderPass = render_pass;
+		fbci.width = extent.width;
+		fbci.height = extent.height;
+		fbci.layers = 1;
+		fbci.attachmentCount = 0;
+		fbci.pAttachments = nullptr;
+		fbci.sample_count = Samples{ samples };
+
+		VkFramebuffer framebuffer = VK_NULL_HANDLE;
+		auto fb_res = allocator->allocate_framebuffers(std::span{ &framebuffer, 1 }, std::span{ &fbci, 1 });
+		if (!fb_res) {
+			allocator->deallocate(std::span{ &render_pass, 1 });
+			current_error = std::move(fb_res);
+			return *this;
+		}
+
+		// Begin the renderpass
+		VkRenderPassBeginInfo rbi{ .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO };
+		rbi.renderPass = render_pass;
+		rbi.framebuffer = framebuffer;
+		rbi.renderArea = VkRect2D{ Offset2D{}, extent };
+		rbi.clearValueCount = 0;
+
+		ctx.vkCmdBeginRenderPass(command_buffer, &rbi, VK_SUBPASS_CONTENTS_INLINE);
+
+		// Update ongoing_render_pass state
+		RenderPassInfo rpi;
+		rpi.render_pass = render_pass;
+		rpi.subpass = 0;
+		rpi.extent = extent;
+		rpi.samples = samples;
+		rpi.depth_stencil_attachment = nullptr;
+		rpi.color_attachments = std::span<const VkAttachmentReference>{};
+		ongoing_render_pass = rpi;
+
+		// Clean up the renderpass and framebuffer (they're used inline)
+		allocator->deallocate(std::span{ &render_pass, 1 });
+		allocator->deallocate(std::span{ &framebuffer, 1 });
+
+		return *this;
+	}
+
 	CommandBuffer& CommandBuffer::clear_image(const ImageAttachment& src, Clear c) {
 		VUK_EARLY_RET();
 
@@ -1349,7 +1421,6 @@ namespace vuk {
 			// BLEND STATE
 			// attachmentCount says how many attachments
 			pi.attachmentCount = (uint8_t)ongoing_render_pass->color_attachments.size();
-			bool rasterization = ongoing_render_pass->depth_stencil_attachment || pi.attachmentCount > 0;
 
 			if (pi.attachmentCount > 0) {
 				uint64_t count;
@@ -1396,26 +1467,25 @@ namespace vuk {
 				pi.extended_size += (uint16_t)sizeof(set_constants);
 				pi.extended_size += (uint16_t)spec_const_size;
 			}
-			if (rasterization) {
-				assert(rasterization_state && "If a pass has a depth/stencil or color attachment, you must set the rasterization state.");
 
-				pi.cullMode = (VkCullModeFlags)rasterization_state->cullMode;
-				PipelineRasterizationStateCreateInfo def{ .cullMode = rasterization_state->cullMode };
-				if (dynamic_state_flags & DynamicStateFlagBits::eDepthBias) {
-					def.depthBiasConstantFactor = rasterization_state->depthBiasConstantFactor;
-					def.depthBiasClamp = rasterization_state->depthBiasClamp;
-					def.depthBiasSlopeFactor = rasterization_state->depthBiasSlopeFactor;
-				} else {
-					// TODO: static depth bias unsupported
-					assert(rasterization_state->depthBiasConstantFactor == def.depthBiasConstantFactor);
-					assert(rasterization_state->depthBiasClamp == def.depthBiasClamp);
-					assert(rasterization_state->depthBiasSlopeFactor == def.depthBiasSlopeFactor);
-				}
-				records.depth_bias_enable = rasterization_state->depthBiasEnable; // the enable itself is not dynamic state in core
-				if (*rasterization_state != def) {
-					records.non_trivial_raster_state = true;
-					pi.extended_size += sizeof(GraphicsPipelineInstanceCreateInfo::RasterizationState);
-				}
+			assert(rasterization_state && "You must set the rasterization state.");
+
+			pi.cullMode = (VkCullModeFlags)rasterization_state->cullMode;
+			PipelineRasterizationStateCreateInfo def{ .cullMode = rasterization_state->cullMode };
+			if (dynamic_state_flags & DynamicStateFlagBits::eDepthBias) {
+				def.depthBiasConstantFactor = rasterization_state->depthBiasConstantFactor;
+				def.depthBiasClamp = rasterization_state->depthBiasClamp;
+				def.depthBiasSlopeFactor = rasterization_state->depthBiasSlopeFactor;
+			} else {
+				// TODO: static depth bias unsupported
+				assert(rasterization_state->depthBiasConstantFactor == def.depthBiasConstantFactor);
+				assert(rasterization_state->depthBiasClamp == def.depthBiasClamp);
+				assert(rasterization_state->depthBiasSlopeFactor == def.depthBiasSlopeFactor);
+			}
+			records.depth_bias_enable = rasterization_state->depthBiasEnable; // the enable itself is not dynamic state in core
+			if (*rasterization_state != def) {
+				records.non_trivial_raster_state = true;
+				pi.extended_size += sizeof(GraphicsPipelineInstanceCreateInfo::RasterizationState);
 			}
 
 			if (conservative_state) {
@@ -1450,29 +1520,26 @@ namespace vuk {
 				pi.extended_size += sizeof(GraphicsPipelineInstanceCreateInfo::Multisample);
 			}
 
-			if (rasterization) {
-				if (viewports.size() > 0) {
-					records.viewports = true;
-					pi.extended_size += sizeof(uint8_t);
-					if (!(dynamic_state_flags & DynamicStateFlagBits::eViewport)) {
-						pi.extended_size += (uint16_t)viewports.size() * sizeof(VkViewport);
-					}
-				} else if (!(dynamic_state_flags & DynamicStateFlagBits::eViewport)) {
-					assert("If a pass has a depth/stencil or color attachment, you must set at least one viewport.");
+			if (viewports.size() > 0) {
+				records.viewports = true;
+				pi.extended_size += sizeof(uint8_t);
+				if (!(dynamic_state_flags & DynamicStateFlagBits::eViewport)) {
+					pi.extended_size += (uint16_t)viewports.size() * sizeof(VkViewport);
 				}
+			} else if (!(dynamic_state_flags & DynamicStateFlagBits::eViewport)) {
+				assert("You must set at least one viewport.");
 			}
 
-			if (rasterization) {
-				if (scissors.size() > 0) {
-					records.scissors = true;
-					pi.extended_size += sizeof(uint8_t);
-					if (!(dynamic_state_flags & DynamicStateFlagBits::eScissor)) {
-						pi.extended_size += (uint16_t)scissors.size() * sizeof(VkRect2D);
-					}
-				} else if (!(dynamic_state_flags & DynamicStateFlagBits::eScissor)) {
-					assert("If a pass has a depth/stencil or color attachment, you must set at least one scissor.");
+			if (scissors.size() > 0) {
+				records.scissors = true;
+				pi.extended_size += sizeof(uint8_t);
+				if (!(dynamic_state_flags & DynamicStateFlagBits::eScissor)) {
+					pi.extended_size += (uint16_t)scissors.size() * sizeof(VkRect2D);
 				}
+			} else if (!(dynamic_state_flags & DynamicStateFlagBits::eScissor)) {
+				assert("You must set at least one scissor.");
 			}
+
 			// small buffer optimization:
 			// if the extended data fits, then we put it inline in the key
 			std::byte* data_ptr;

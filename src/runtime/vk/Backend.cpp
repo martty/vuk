@@ -1545,7 +1545,7 @@ namespace vuk {
 					}
 					opaque_rets.resize(fn_type->opaque_fn.return_types.size());
 					(*fn_type->callback)(cobuf, opaque_args, opaque_meta, opaque_rets);
-					if (vk_rec->rp.handle) {
+					if (cobuf.ongoing_render_pass) {
 						vk_rec->end_render_pass();
 					}
 					if (!fn_type->debug_info.name.empty()) {
