@@ -7,8 +7,30 @@
 #include <vector>
 
 namespace vuk {
-	/// @brief A vector-like container for bindless resources
-	/// Requires update after bind support
+	/// @brief A vector-like container for bindless descriptor arrays.
+	///
+	/// @note This class is NOT thread-safe. All calls should be protected.
+	///
+	/// Requirements:
+	/// - Allocator must wrap a DeviceSuperFrameResource for persistent resource lifetime
+	/// - Vulkan device must support VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT
+	/// - Vulkan device must support VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT
+	///
+	/// Example usage:
+	/// @code
+	/// // Create array with combined image samplers
+	/// BindlessArray textures(allocator, 1, {.combined_image_sampler = 0}, 1024);
+	///
+	/// // Add resources
+	/// uint32_t idx = textures.push_back(image_view, sampler, ImageLayout::eReadOnlyOptimalKHR);
+	///
+	/// // Update resources
+	/// textures.set(idx, new_view, new_sampler, ImageLayout::eReadOnlyOptimalKHR);
+	///
+	/// // Commit changes and use in pipeline
+	/// textures.commit();
+	/// command_buffer.bind_persistent(1, textures.get_persistent_set());
+	/// @endcode
 	class BindlessArray {
 	public:
 		BindlessArray() = default;
@@ -440,7 +462,13 @@ namespace vuk {
 			descriptors.clear();
 		}
 
-		/// @brief Commit all pending descriptor updates
+		/// @brief Commit all pending descriptor updates to the GPU.
+		///
+		/// Must be called after any push_back() or set() operations before the descriptor set is used in rendering.
+		/// Internally calls vkUpdateDescriptorSets to apply all queued descriptor writes.
+		/// After commit(), all pending updates are cleared and the descriptor set is ready to use.
+		///
+		/// @note Can be called even when there are no pending updates (safe to call every frame).
 		void commit() {
 			for (size_t i = 0; i < persistent_set->wdss.size(); i++) {
 				auto& wds = persistent_set->wdss[i];

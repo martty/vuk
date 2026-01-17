@@ -10,16 +10,21 @@
 #include <stb_image.h>
 
 /* 09_persistent_descriptorset
- * In this example we will see how to create persistent descriptorsets with dynamic virtual address allocation.
- * Normal descriptorsets are completely managed by vuk, and are cached based on their contents.
- * However, this behaviour is not helpful if you plan to keep the descriptorsets around, or if they have many elements (such as "bindless").
- * For these scenarios, you can create and explicitly manage descriptorsets.
- * Here we use a BindlessArray utility class that combines a PersistentDescriptorSet with VirtualAddressSpace allocation
- * to provide a vector-like interface for managing bindless resources.
- * We generate three texture variants and dynamically add/remove them from the bindless array during rendering.
+ * In this example we will see how to use the BindlessArray utility class for managing bindless descriptors.
+ *
+ * Normal descriptorsets are completely managed by vuk and are cached based on their contents.
+ * However, this behaviour is not helpful if you plan to keep the descriptor sets around, or if they have many elements (such as "bindless").
+ *
+ *
+ * This example demonstrates:
+ * - Creating a BindlessArray with combined image samplers
+ * - Generating 3 texture variants (original, Y-flipped, color-inverted)
+ * - Randomly assigning textures to 10 cubes
+ * - Dynamically swapping textures at runtime (every 2 seconds)
+ * - Using virtual address allocation for efficient sparse binding
  *
  * These examples are powered by the example framework, which hides some of the code required, as that would be repeated for each example.
- * Furthermore it allows launching individual examples and all examples with the example same code.
+ * Furthermore it allows launching individual examples and all examples with the same code.
  * Check out the framework (example_runner_*) files if interested!
  */
 
@@ -57,10 +62,7 @@ namespace {
 			      pci.add_glsl(util::read_entire_file((root / "examples/bindless.vert").generic_string()), (root / "examples/bindless.vert").generic_string());
 			      pci.add_glsl(util::read_entire_file((root / "examples/triangle_tex_bindless.frag").generic_string()),
 			                   (root / "examples/triangle_tex_bindless.frag").generic_string());
-			      // Flag this binding as partially bound, so that we don't need to set all the array elements
-			      // pci.set_binding_flags(1, 0, vuk::DescriptorBindingFlagBits::ePartiallyBound);
-			      // Set the binding #0 in set #1 as a variable count binding, and set the maximum number of descriptors
-			      // pci.set_variable_count_binding(1, 0, 64);
+			      // Use the descriptor set layout from BindlessArray instead of declaring it in the pipeline
 			      pci.explicit_set_layouts.push_back(bindless_textures->get_descriptor_set_layout());
 			      runtime.create_named_pipeline("bindless_cube", pci);
 		      }
@@ -186,18 +188,20 @@ namespace {
 		      float delta_time = ImGui::GetIO().DeltaTime;
 		      time_accumulator += delta_time;
 
-		      // Dynamically add/remove textures every 2 seconds
+		      // Dynamically swap textures every 2 seconds to demonstrate bindless updates
 		      static float last_toggle = 0.f;
 		      if (time_accumulator - last_toggle > 2.0f) {
 			      last_toggle = time_accumulator;
 			      vuk::Sampler default_sampler = frame_allocator.get_context().acquire_sampler({}, frame_allocator.get_context().get_frame_count());
 
-			      // Remove one texture (always remove the first active one)
+			      // Remove the first cube's texture and add a new random one
+			      // This demonstrates that indices can be freed and reused efficiently
 			      bindless_textures->erase(bindless_textures->get_active_indices()[0]);
 
-			      // Add a texture back
+			      // Add a texture back with a random variant
 			      bindless_textures->push_back(*doge_image_views[rand_indices(gen)], default_sampler, vuk::ImageLayout::eReadOnlyOptimalKHR);
 		      }
+		      // Commit any pending descriptor updates before rendering
 		      bindless_textures->commit();
 
 		      // Set up the pass to draw the textured cubes
