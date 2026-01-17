@@ -831,6 +831,27 @@ namespace vuk {
 			return arena.ensure_space(size);
 		}
 
+		size_t get_value_as_size_t(Ref ref) {
+			auto base_ty = Type::stripped(ref.type());
+			if (base_ty->kind == Type::INTEGER_TY) {
+				switch (base_ty->scalar.width) {
+				case 8:
+					return static_cast<size_t>(*get_value<uint8_t>(ref));
+				case 16:
+					return static_cast<size_t>(*get_value<uint16_t>(ref));
+				case 32:
+					return static_cast<size_t>(*get_value<uint32_t>(ref));
+				case 64:
+					return static_cast<size_t>(*get_value<uint64_t>(ref));
+				default:
+					assert(0 && "Unsupported integer width");
+					return 0;
+				}
+			}
+			assert(0 && "Expected integer type");
+			return 0;
+		}
+
 		void node_to_acq(Node* node, std::span<void*> values) {
 			assert(node->execution_info);
 			node->execution_info->kind = node->kind;
@@ -968,6 +989,8 @@ namespace vuk {
 				}
 				case Node::MATH_BINARY: {
 					auto do_op = [&]<class T>(T, Node* node) -> T {
+						assert(to_IR_type<T>() == base_type(node->math_binary.a));
+						assert(to_IR_type<T>() == base_type(node->math_binary.b));
 						T& a = *get_value<T>(node->math_binary.a);
 						T& b = *get_value<T>(node->math_binary.b);
 						switch (node->math_binary.op) {
@@ -1487,8 +1510,8 @@ namespace vuk {
 					auto composite = node->slice.src;
 					void* composite_v = get_value(composite);
 					auto axis = node->slice.axis;
-					auto start = *get_value<uint64_t>(node->slice.start);
-					auto count = *get_value<uint64_t>(node->slice.count);
+					auto start = get_value_as_size_t(node->slice.start);
+					auto count = get_value_as_size_t(node->slice.count);
 					auto t = Type::stripped(composite.type());
 
 					if (!(node->debug_info && node->debug_info->result_names.size() > 0 && !node->debug_info->result_names[0].empty())) {

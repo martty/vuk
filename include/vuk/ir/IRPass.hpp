@@ -306,11 +306,38 @@ namespace vuk {
 
 		template<class T>
 		Result<T, CannotBeConstantEvaluated> eval(Ref ref) {
+			assert(to_IR_type<T>() == ref.type());
 			auto res = eval(ref);
 			if (!res) {
 				return res;
 			}
 			return { expected_value, *reinterpret_cast<T*>(*res) };
+		}
+
+		Result<size_t, CannotBeConstantEvaluated> eval_as_size_t(Ref ref) {
+			auto base_ty = Type::stripped(ref.type());
+			if (base_ty->kind == Type::INTEGER_TY) {
+				auto res = eval(ref);
+				if (!res) {
+					return { expected_control, CannotBeConstantEvaluated{ ref } };
+				}
+				void* value = *res;
+				switch (base_ty->scalar.width) {
+				case 8:
+					return { expected_value, static_cast<size_t>(*static_cast<uint8_t*>(value)) };
+				case 16:
+					return { expected_value, static_cast<size_t>(*static_cast<uint16_t*>(value)) };
+				case 32:
+					return { expected_value, static_cast<size_t>(*static_cast<uint32_t*>(value)) };
+				case 64:
+					return { expected_value, static_cast<size_t>(*static_cast<uint64_t*>(value)) };
+				default:
+					assert(0 && "Unsupported integer width");
+					return { expected_control, CannotBeConstantEvaluated{ ref } };
+				}
+			}
+			assert(0 && "Expected integer type");
+			return { expected_control, CannotBeConstantEvaluated{ ref } };
 		}
 	};
 
@@ -350,6 +377,35 @@ namespace vuk {
 			allocate_node_links(node);
 			process_node_links(node);
 			new_nodes.push_back(node);
+		}
+
+		/// @brief Creates a new SLICE node with a different source, preserving other arguments from an existing SLICE node.
+		/// @param slice_node The existing SLICE node to clone
+		/// @param new_src The new source Ref to use in the cloned SLICE node
+		/// @return A new Ref to the first output of the created SLICE node
+		Ref make_slice_with_new_src(Node* slice_node, Ref new_src) {
+			assert(slice_node->kind == Node::SLICE);
+			
+			auto& original_slice = slice_node->slice;
+			auto stripped = Type::stripped(new_src.type());
+			auto ty = new std::shared_ptr<Type>[3];
+			
+			// Copy the type information, updating based on new source
+			if (slice_node->type.size() >= 1) {
+				ty[0] = slice_node->type[0]; // result type
+			}
+			ty[1] = ty[2] = stripped; // rest and original types based on new source
+			
+			return first(current_module->emplace_op(Node{
+				.kind = Node::SLICE,
+				.type = std::span{ ty, 3 },
+				.slice = {
+					.src = new_src,
+					.start = original_slice.start,
+					.count = original_slice.count,
+					.axis = original_slice.axis
+				}
+			}));
 		}
 
 		bool do_ssa;
@@ -394,7 +450,7 @@ namespace vuk {
 					for (int i = 0; i < node->variable_node.args.size(); i++) {
 						auto arg = node->variable_node.args[i].node;
 						if (arg->flag == 0) {
-							arg->flag = 1;
+						arg->flag = 1;
 							work_queue.push_back(arg);
 						}
 					}
