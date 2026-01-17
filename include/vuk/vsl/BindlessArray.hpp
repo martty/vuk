@@ -199,15 +199,15 @@ namespace vuk {
 			VkDescriptorSet descriptor_set;
 			runtime.vkAllocateDescriptorSets(runtime.device, &set_alloc_info, &descriptor_set);
 
-			persistent_set = Unique(Allocator(runtime.get_vk_resource()),
-			                        PersistentDescriptorSet{
-			                            .backing_pool = pool,
-			                            .set_layout_create_info = dslci,
-			                            .set_layout = dslai.layout,
-			                            .backing_set = descriptor_set,
-			                            .wdss = {},
-			                            .descriptor_bindings = {},
-			                        });
+			persistent_set = Unique<PersistentDescriptorSet>(Allocator(runtime.get_vk_resource()),
+			                                                 PersistentDescriptorSet{
+			                                                     .backing_pool = pool,
+			                                                     .set_layout_create_info = dslci,
+			                                                     .set_layout = dslai.layout,
+			                                                     .backing_set = descriptor_set,
+			                                                     .wdss = {},
+			                                                     .descriptor_bindings = {},
+			                                                 });
 			for (unsigned i = 0; i < bindings.size(); i++) {
 				persistent_set->descriptor_bindings[i].resize(max_descriptors);
 			}
