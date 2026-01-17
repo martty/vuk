@@ -36,8 +36,10 @@ namespace vuk {
 		using element_type = Type;
 
 		explicit Unique() : allocator{}, payload{} {}
+		template<typename U = Type>
 		explicit Unique(Allocator allocator) : allocator(allocator), payload{} {}
-		explicit Unique(Allocator allocator, Type payload) : allocator(allocator), payload(MOV(payload)) {}
+		template<typename U = Type>
+		explicit Unique(Allocator allocator, U payload) : allocator(allocator), payload(MOV(payload)) {}
 		Unique(Unique const&) = delete;
 
 		Unique(Unique&& other) noexcept : allocator(other.allocator), payload(other.release()) {}
