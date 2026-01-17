@@ -29,15 +29,15 @@ namespace vuk {
 
 	template<typename Type>
 	class Unique {
-		Allocator* allocator;
+		Allocator allocator;
 		Type payload;
 
 	public:
 		using element_type = Type;
 
-		explicit Unique() : allocator(nullptr), payload{} {}
-		explicit Unique(Allocator& allocator) : allocator(&allocator), payload{} {}
-		explicit Unique(Allocator& allocator, Type payload) : allocator(&allocator), payload(MOV(payload)) {}
+		explicit Unique() : allocator{}, payload{} {}
+		explicit Unique(Allocator allocator) : allocator(allocator), payload{} {}
+		explicit Unique(Allocator allocator, Type payload) : allocator(allocator), payload(MOV(payload)) {}
 		Unique(Unique const&) = delete;
 
 		Unique(Unique&& other) noexcept : allocator(other.allocator), payload(other.release()) {}
@@ -84,7 +84,7 @@ namespace vuk {
 		void reset(Type value = Type()) noexcept;
 
 		Type release() noexcept {
-			allocator = nullptr;
+			allocator = {};
 			return MOV(payload);
 		}
 

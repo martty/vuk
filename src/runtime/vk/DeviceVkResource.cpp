@@ -1,7 +1,8 @@
-#include "vuk/runtime/vk/DeviceVkResource.hpp"
 #include "vuk/Buffer.hpp"
 #include "vuk/Exception.hpp"
+#include "vuk/runtime/vk/Address.hpp"
 #include "vuk/runtime/vk/DeviceNestedResource.hpp"
+#include "vuk/runtime/vk/DeviceVkResource.hpp"
 #include "vuk/runtime/vk/PipelineInstance.hpp"
 #include "vuk/runtime/vk/Query.hpp"
 #include "vuk/runtime/vk/RenderPass.hpp"
@@ -1074,6 +1075,82 @@ namespace vuk {
 		}
 	}
 
+	Result<void, AllocateException>
+	DeviceVkResource::allocate_virtual_address_spaces(std::span<VirtualAddressSpace> dst, std::span<const VirtualAddressSpaceCreateInfo> cis, SourceLocationAtFrame loc) {
+		assert(dst.size() == cis.size());
+		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
+			std::lock_guard _(impl->mutex);
+			auto& ci = cis[i];
+			
+			VmaVirtualBlockCreateInfo vbci{};
+			vbci.size = ci.size;
+			
+			VmaVirtualBlock block;
+			VkResult res = vmaCreateVirtualBlock(&vbci, &block);
+			if (res != VK_SUCCESS) {
+				deallocate_virtual_address_spaces({ dst.data(), (uint64_t)i });
+				return { expected_error, AllocateException{ res } };
+			}
+			
+			dst[i] = VirtualAddressSpace{ block, ci.size };
+		}
+		return { expected_value };
+	}
+
+	void DeviceVkResource::deallocate_virtual_address_spaces(std::span<const VirtualAddressSpace> src) {
+		for (auto& v : src) {
+			if (v) {
+				// Clear all allocations from the virtual block before destroying it
+				vmaClearVirtualBlock(static_cast<VmaVirtualBlock>(v.block));
+				vmaDestroyVirtualBlock(static_cast<VmaVirtualBlock>(v.block));
+			}
+		}
+	}
+
+	Result<void, AllocateException>
+	DeviceVkResource::allocate_virtual_allocations(std::span<VirtualAllocation> dst, std::span<const VirtualAllocationCreateInfo> cis, SourceLocationAtFrame loc) {
+		assert(dst.size() == cis.size());
+		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
+			std::lock_guard _(impl->mutex);
+			auto& ci = cis[i];
+			
+			if (!ci.address_space || !*ci.address_space) {
+				deallocate_virtual_allocations({ dst.data(), (uint64_t)i });
+				return { expected_error, AllocateException{ VK_ERROR_INITIALIZATION_FAILED } };
+			}
+			
+			VmaVirtualAllocationCreateInfo vaci{};
+			vaci.size = ci.size;
+			vaci.alignment = ci.alignment;
+			vaci.pUserData = ci.address_space; // Store address space pointer in user data for validation/debugging
+			
+			VmaVirtualAllocation allocation;
+			uint64_t offset;
+			VkResult res = vmaVirtualAllocate(static_cast<VmaVirtualBlock>(ci.address_space->block), &vaci, &allocation, &offset);
+			if (res != VK_SUCCESS) {
+				deallocate_virtual_allocations({ dst.data(), (uint64_t)i });
+				return { expected_error, AllocateException{ res } };
+			}
+			
+			dst[i] = VirtualAllocation{ allocation, offset, ci.address_space };
+		}
+		return { expected_value };
+	}
+
+	void DeviceVkResource::deallocate_virtual_allocations(std::span<const VirtualAllocation> src) {
+		for (auto& v : src) {
+			if (v && v.address_space && *v.address_space) {
+#if VUK_DEBUG_ALLOCATIONS
+				// Validate that the address space pointer matches the user data
+				VmaVirtualAllocationInfo vai;
+				vmaGetVirtualAllocationInfo(static_cast<VmaVirtualBlock>(v.address_space->block), static_cast<VmaVirtualAllocation>(v.allocation), &vai);
+				assert(vai.pUserData == v.address_space && "Virtual allocation address space mismatch!");
+#endif
+				vmaVirtualFree(static_cast<VmaVirtualBlock>(v.address_space->block), static_cast<VmaVirtualAllocation>(v.allocation));
+			}
+		}
+	}
+
 	Result<void, AllocateException> DeviceNestedResource::allocate_semaphores(std::span<VkSemaphore> dst, SourceLocationAtFrame loc) {
 		return upstream->allocate_semaphores(dst, loc);
 	}
@@ -1255,5 +1332,23 @@ namespace vuk {
 	}
 	void DeviceNestedResource::deallocate_render_passes(std::span<const VkRenderPass> src) {
 		return upstream->deallocate_render_passes(src);
+	}
+
+	Result<void, AllocateException>
+	DeviceNestedResource::allocate_virtual_address_spaces(std::span<VirtualAddressSpace> dst, std::span<const VirtualAddressSpaceCreateInfo> cis, SourceLocationAtFrame loc) {
+		return upstream->allocate_virtual_address_spaces(dst, cis, loc);
+	}
+
+	void DeviceNestedResource::deallocate_virtual_address_spaces(std::span<const VirtualAddressSpace> src) {
+		upstream->deallocate_virtual_address_spaces(src);
+	}
+
+	Result<void, AllocateException>
+	DeviceNestedResource::allocate_virtual_allocations(std::span<VirtualAllocation> dst, std::span<const VirtualAllocationCreateInfo> cis, SourceLocationAtFrame loc) {
+		return upstream->allocate_virtual_allocations(dst, cis, loc);
+	}
+
+	void DeviceNestedResource::deallocate_virtual_allocations(std::span<const VirtualAllocation> src) {
+		upstream->deallocate_virtual_allocations(src);
 	}
 } // namespace vuk

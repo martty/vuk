@@ -88,8 +88,8 @@ namespace vuk {
 		void deallocate_swapchains(std::span<const VkSwapchainKHR> src) override;
 
 		Result<void, AllocateException> allocate_graphics_pipelines(std::span<GraphicsPipelineInfo> dst,
-		                                                            std::span<const GraphicsPipelineInstanceCreateInfo> cis,
-		                                                            SourceLocationAtFrame loc) override;
+	                                                            std::span<const GraphicsPipelineInstanceCreateInfo> cis,
+	                                                            SourceLocationAtFrame loc) override;
 		void deallocate_graphics_pipelines(std::span<const GraphicsPipelineInfo> src) override;
 
 		Result<void, AllocateException>
@@ -97,13 +97,21 @@ namespace vuk {
 		void deallocate_compute_pipelines(std::span<const ComputePipelineInfo> src) override;
 
 		Result<void, AllocateException> allocate_ray_tracing_pipelines(std::span<RayTracingPipelineInfo> dst,
-		                                                               std::span<const RayTracingPipelineInstanceCreateInfo> cis,
-		                                                               SourceLocationAtFrame loc) override;
+	                                                               std::span<const RayTracingPipelineInstanceCreateInfo> cis,
+	                                                               SourceLocationAtFrame loc) override;
 		void deallocate_ray_tracing_pipelines(std::span<const RayTracingPipelineInfo> src) override;
 
 		Result<void, AllocateException>
 		allocate_render_passes(std::span<VkRenderPass> dst, std::span<const RenderPassCreateInfo> cis, SourceLocationAtFrame loc) override;
 		void deallocate_render_passes(std::span<const VkRenderPass> src) override;
+
+		Result<void, AllocateException>
+		allocate_virtual_address_spaces(std::span<VirtualAddressSpace> dst, std::span<const VirtualAddressSpaceCreateInfo> cis, SourceLocationAtFrame loc) override;
+		void deallocate_virtual_address_spaces(std::span<const VirtualAddressSpace> src) override;
+
+		Result<void, AllocateException>
+		allocate_virtual_allocations(std::span<VirtualAllocation> dst, std::span<const VirtualAllocationCreateInfo> cis, SourceLocationAtFrame loc) override;
+		void deallocate_virtual_allocations(std::span<const VirtualAllocation> src) override;
 
 		/// @brief Wait for the fences / timeline semaphores referencing this frame to complete
 		///
@@ -219,6 +227,10 @@ namespace vuk {
 		void deallocate_ray_tracing_pipelines(std::span<const RayTracingPipelineInfo> src) override;
 
 		void deallocate_render_passes(std::span<const VkRenderPass> src) override;
+
+		void deallocate_virtual_address_spaces(std::span<const VirtualAddressSpace> src) override;
+
+		void deallocate_virtual_allocations(std::span<const VirtualAllocation> src) override;
 
 		/// @brief Recycle the least-recently-used frame and return it to be used again
 		/// @return DeviceFrameResource for use

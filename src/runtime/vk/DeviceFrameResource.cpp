@@ -1,12 +1,13 @@
-#include "vuk/runtime/vk/DeviceFrameResource.hpp"
 #include "vuk/runtime/Cache.hpp"
+#include "vuk/runtime/vk/Address.hpp"
 #include "vuk/runtime/vk/BufferAllocator.hpp"
 #include "vuk/runtime/vk/Descriptor.hpp"
+#include "vuk/runtime/vk/DeviceFrameResource.hpp"
 #include "vuk/runtime/vk/PipelineInstance.hpp"
 #include "vuk/runtime/vk/Query.hpp"
 #include "vuk/runtime/vk/RenderPass.hpp"
-#include "vuk/runtime/vk/VkRuntime.hpp"
 #include "vuk/runtime/vk/VkQueueExecutor.hpp"
+#include "vuk/runtime/vk/VkRuntime.hpp"
 
 #include <atomic>
 #include <mutex>
@@ -169,6 +170,9 @@ namespace vuk {
 		std::vector<RayTracingPipelineInfo> ray_tracing_pipes;
 		std::mutex render_passes_mutex;
 		std::vector<VkRenderPass> render_passes;
+		std::mutex address_mutex;
+		std::vector<VirtualAddressSpace> virtual_address_spaces;
+		std::vector<VirtualAllocation> virtual_allocations;
 
 		BufferUsageFlags all_buffer_usage_flags;
 
@@ -498,6 +502,30 @@ namespace vuk {
 
 	void DeviceFrameResource::deallocate_render_passes(std::span<const VkRenderPass> src) {}
 
+	Result<void, AllocateException> DeviceFrameResource::allocate_virtual_address_spaces(std::span<VirtualAddressSpace> dst,
+	                                                                                     std::span<const VirtualAddressSpaceCreateInfo> cis,
+	                                                                                     SourceLocationAtFrame loc) {
+		VUK_DO_OR_RETURN(upstream->allocate_virtual_address_spaces(dst, cis, loc));
+		std::unique_lock _(impl->address_mutex);
+		auto& vec = impl->virtual_address_spaces;
+		vec.insert(vec.end(), dst.begin(), dst.end());
+		return { expected_value };
+	}
+
+	void DeviceFrameResource::deallocate_virtual_address_spaces(std::span<const VirtualAddressSpace> src) {}
+
+	Result<void, AllocateException> DeviceFrameResource::allocate_virtual_allocations(std::span<VirtualAllocation> dst,
+	                                                                                  std::span<const VirtualAllocationCreateInfo> cis,
+	                                                                                  SourceLocationAtFrame loc) {
+		VUK_DO_OR_RETURN(upstream->allocate_virtual_allocations(dst, cis, loc));
+		std::unique_lock _(impl->address_mutex);
+		auto& vec = impl->virtual_allocations;
+		vec.insert(vec.end(), dst.begin(), dst.end());
+		return { expected_value };
+	}
+
+	void DeviceFrameResource::deallocate_virtual_allocations(std::span<const VirtualAllocation> src) {}
+
 	void DeviceFrameResource::wait() {
 		if (impl->fences.size() > 0) {
 			if (impl->fences.size() > 64) {
@@ -780,6 +808,22 @@ namespace vuk {
 		vec.insert(vec.end(), src.begin(), src.end());
 	}
 
+	void DeviceSuperFrameResource::deallocate_virtual_address_spaces(std::span<const VirtualAddressSpace> src) {
+		std::shared_lock _s(impl->new_frame_mutex);
+		auto& f = get_last_frame();
+		std::unique_lock _(f.impl->address_mutex);
+		auto& vec = f.impl->virtual_address_spaces;
+		vec.insert(vec.end(), src.begin(), src.end());
+	}
+
+	void DeviceSuperFrameResource::deallocate_virtual_allocations(std::span<const VirtualAllocation> src) {
+		std::shared_lock _s(impl->new_frame_mutex);
+		auto& f = get_last_frame();
+		std::unique_lock _(f.impl->address_mutex);
+		auto& vec = f.impl->virtual_allocations;
+		vec.insert(vec.end(), src.begin(), src.end());
+	}
+
 	DeviceFrameResource& DeviceSuperFrameResource::get_last_frame() {
 		return impl->frames[impl->frame_counter.load() % frames_in_flight];
 	}
@@ -876,6 +920,10 @@ namespace vuk {
 		upstream->deallocate_ray_tracing_pipelines(f.ray_tracing_pipes);
 		upstream->deallocate_render_passes(f.render_passes);
 
+		// Deallocate virtual allocations before their address spaces
+		upstream->deallocate_virtual_allocations(f.virtual_allocations);
+		upstream->deallocate_virtual_address_spaces(f.virtual_address_spaces);
+
 		f.semaphores.clear();
 		f.fences.clear();
 		f.buffer_gpus.clear();
@@ -904,6 +952,8 @@ namespace vuk {
 		f.compute_pipes.clear();
 		f.ray_tracing_pipes.clear();
 		f.render_passes.clear();
+		f.virtual_allocations.clear();
+		f.virtual_address_spaces.clear();
 	}
 
 	void DeviceSuperFrameResource::force_collect() {

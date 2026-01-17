@@ -471,6 +471,7 @@ if(VUK_BUILD_TESTS)
 					tests/04_arrays.cpp
 					tests/05_renderpass.cpp
 					tests/06_mt.cpp
+					tests/address_alloc.cpp
 					tests/X1_SPD.cpp
 	)
 	#target_compile_features(vuk-tests PRIVATE cxx_std_17)

@@ -107,6 +107,14 @@ namespace vuk {
 		allocate_render_passes(std::span<VkRenderPass> dst, std::span<const RenderPassCreateInfo> cis, SourceLocationAtFrame loc) override;
 		void deallocate_render_passes(std::span<const VkRenderPass> src) override;
 
+		Result<void, AllocateException>
+		allocate_virtual_address_spaces(std::span<VirtualAddressSpace> dst, std::span<const VirtualAddressSpaceCreateInfo> cis, SourceLocationAtFrame loc) override;
+		void deallocate_virtual_address_spaces(std::span<const VirtualAddressSpace> src) override;
+
+		Result<void, AllocateException>
+		allocate_virtual_allocations(std::span<VirtualAllocation> dst, std::span<const VirtualAllocationCreateInfo> cis, SourceLocationAtFrame loc) override;
+		void deallocate_virtual_allocations(std::span<const VirtualAllocation> src) override;
+
 		Runtime& get_context() override {
 			return upstream->get_context();
 		}

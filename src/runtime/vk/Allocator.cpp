@@ -1,5 +1,6 @@
 #include "vuk/runtime/vk/Allocator.hpp"
 #include "vuk/Exception.hpp"
+#include "vuk/runtime/vk/Address.hpp"
 #include "vuk/runtime/vk/PipelineInstance.hpp"
 #include "vuk/runtime/vk/Query.hpp"
 #include "vuk/runtime/vk/RenderPass.hpp"
@@ -273,5 +274,32 @@ namespace vuk {
 
 	void Allocator::deallocate(std::span<const VkRenderPass> src) {
 		device_resource->deallocate_render_passes(src);
+	}
+
+	Result<void, AllocateException>
+	Allocator::allocate(std::span<VirtualAddressSpace> dst, std::span<const VirtualAddressSpaceCreateInfo> cis, SourceLocationAtFrame loc) {
+		return device_resource->allocate_virtual_address_spaces(dst, cis, loc);
+	}
+
+	Result<void, AllocateException>
+	Allocator::allocate_virtual_address_spaces(std::span<VirtualAddressSpace> dst, std::span<const VirtualAddressSpaceCreateInfo> cis, SourceLocationAtFrame loc) {
+		return device_resource->allocate_virtual_address_spaces(dst, cis, loc);
+	}
+
+	void Allocator::deallocate(std::span<const VirtualAddressSpace> src) {
+		device_resource->deallocate_virtual_address_spaces(src);
+	}
+
+	Result<void, AllocateException> Allocator::allocate(std::span<VirtualAllocation> dst, std::span<const VirtualAllocationCreateInfo> cis, SourceLocationAtFrame loc) {
+		return device_resource->allocate_virtual_allocations(dst, cis, loc);
+	}
+
+	Result<void, AllocateException>
+	Allocator::allocate_virtual_allocations(std::span<VirtualAllocation> dst, std::span<const VirtualAllocationCreateInfo> cis, SourceLocationAtFrame loc) {
+		return device_resource->allocate_virtual_allocations(dst, cis, loc);
+	}
+
+	void Allocator::deallocate(std::span<const VirtualAllocation> src) {
+		device_resource->deallocate_virtual_allocations(src);
 	}
 } // namespace vuk

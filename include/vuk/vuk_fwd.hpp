@@ -53,5 +53,10 @@ namespace vuk {
 
 	struct ImageAttachment;
 
+	struct VirtualAllocation;
+	struct VirtualAddressSpace;
+	struct VirtualAllocationCreateInfo;
+	struct VirtualAddressSpaceCreateInfo;
+
 	struct Compiler;
 } // namespace vuk

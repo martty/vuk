@@ -2,9 +2,10 @@
 
 #include "vuk/Config.hpp"
 #include "vuk/Result.hpp"
+#include "vuk/runtime/vk/Address.hpp"
+#include "vuk/runtime/vk/Image.hpp"
 #include "vuk/SourceLocation.hpp"
 #include "vuk/SyncPoint.hpp"
-#include "vuk/runtime/vk/Image.hpp"
 #include "vuk/vuk_fwd.hpp"
 
 #define VUK_DO_OR_RETURN(what)                                                                                                                                 \
@@ -120,6 +121,14 @@ namespace vuk {
 		allocate_render_passes(std::span<VkRenderPass> dst, std::span<const RenderPassCreateInfo> cis, SourceLocationAtFrame loc) = 0;
 		virtual void deallocate_render_passes(std::span<const VkRenderPass> src) = 0;
 
+		virtual Result<void, AllocateException>
+		allocate_virtual_address_spaces(std::span<VirtualAddressSpace> dst, std::span<const VirtualAddressSpaceCreateInfo> cis, SourceLocationAtFrame loc) = 0;
+		virtual void deallocate_virtual_address_spaces(std::span<const VirtualAddressSpace> src) = 0;
+
+		virtual Result<void, AllocateException>
+		allocate_virtual_allocations(std::span<VirtualAllocation> dst, std::span<const VirtualAllocationCreateInfo> cis, SourceLocationAtFrame loc) = 0;
+		virtual void deallocate_virtual_allocations(std::span<const VirtualAllocation> src) = 0;
+
 		virtual Runtime& get_context() = 0;
 
 		BufferUsageFlags get_all_buffer_usage_flags(Runtime& runtime);
@@ -134,6 +143,9 @@ namespace vuk {
 	/// The deallocation functions can't fail.
 	class Allocator {
 	public:
+		/// @brief Default constructor creates an empty Allocator
+		Allocator() = default;
+
 		/// @brief Create new Allocator that wraps a DeviceResource
 		/// @param device_resource The DeviceResource to allocate from
 		explicit Allocator(DeviceResource& device_resource) : ctx(&device_resource.get_context()), device_resource(&device_resource) {}
@@ -498,6 +510,48 @@ namespace vuk {
 		/// @param src Span of render passes to be deallocated
 		void deallocate(std::span<const VkRenderPass> src);
 
+		/// @brief Allocate virtual address spaces from this Allocator
+		/// @param dst Destination span to place allocated address spaces into
+		/// @param cis Per-element construction info
+		/// @param loc Source location information
+		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
+		Result<void, AllocateException>
+		allocate(std::span<VirtualAddressSpace> dst, std::span<const VirtualAddressSpaceCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
+
+		/// @brief Allocate virtual address spaces from this Allocator
+		/// @param dst Destination span to place allocated address spaces into
+		/// @param cis Per-element construction info
+		/// @param loc Source location information
+		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
+		Result<void, AllocateException> allocate_virtual_address_spaces(std::span<VirtualAddressSpace> dst,
+		                                                                std::span<const VirtualAddressSpaceCreateInfo> cis,
+		                                                                SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
+
+		/// @brief Deallocate virtual address spaces previously allocated from this Allocator
+		/// @param src Span of address spaces to be deallocated
+		void deallocate(std::span<const VirtualAddressSpace> src);
+
+		/// @brief Allocate virtual allocations from this Allocator
+		/// @param dst Destination span to place allocated virtual allocations into
+		/// @param cis Per-element construction info
+		/// @param loc Source location information
+		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
+		Result<void, AllocateException>
+		allocate(std::span<VirtualAllocation> dst, std::span<const VirtualAllocationCreateInfo> cis, SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
+
+		/// @brief Allocate virtual allocations from this Allocator
+		/// @param dst Destination span to place allocated virtual allocations into
+		/// @param cis Per-element construction info
+		/// @param loc Source location information
+		/// @return Result<void, AllocateException> : void or AllocateException if the allocation could not be performed.
+		Result<void, AllocateException> allocate_virtual_allocations(std::span<VirtualAllocation> dst,
+		                                                             std::span<const VirtualAllocationCreateInfo> cis,
+		                                                             SourceLocationAtFrame loc = VUK_HERE_AND_NOW());
+
+		/// @brief Deallocate virtual allocations previously allocated from this Allocator
+		/// @param src Span of virtual allocations to be deallocated
+		void deallocate(std::span<const VirtualAllocation> src);
+
 		/// @brief Get the underlying DeviceResource
 		/// @return the underlying DeviceResource
 		DeviceResource& get_device_resource() {
@@ -510,9 +564,13 @@ namespace vuk {
 			return *ctx;
 		}
 
+		constexpr explicit operator bool() {
+			return device_resource != nullptr;
+		}
+
 	private:
 		Runtime* ctx;
-		DeviceResource* device_resource;
+		DeviceResource* device_resource = nullptr;
 	};
 
 	template<class ContainerType>
@@ -557,7 +615,7 @@ namespace vuk {
 	template<typename Type>
 	Unique<Type>::~Unique() noexcept {
 		if (allocator && payload != Type{}) {
-			deallocate(*allocator, payload);
+			deallocate(allocator, payload);
 		}
 	}
 
@@ -565,7 +623,7 @@ namespace vuk {
 	void Unique<Type>::reset(Type value) noexcept {
 		if (payload != value) {
 			if (allocator && payload != Type{}) {
-				deallocate(*allocator, std::move(payload));
+				deallocate(allocator, std::move(payload));
 			}
 			payload = std::move(value);
 		}
