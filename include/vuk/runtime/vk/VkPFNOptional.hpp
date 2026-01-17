@@ -24,3 +24,8 @@ VUK_Y(vkGetPhysicalDeviceCalibrateableTimeDomainsEXT)
 
 // VK_KHR_push_descriptors
 VUK_X(vkCmdPushDescriptorSetKHR)
+
+// VK_EXT_mesh_shader
+VUK_X(vkCmdDrawMeshTasksEXT)
+VUK_X(vkCmdDrawMeshTasksIndirectEXT)
+VUK_X(vkCmdDrawMeshTasksIndirectCountEXT)

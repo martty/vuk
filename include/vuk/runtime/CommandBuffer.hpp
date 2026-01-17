@@ -609,6 +609,22 @@ namespace vuk {
 		/// @param count_buffer Buffer of command count
 		CommandBuffer& draw_indexed_indirect_count(size_t max_command_count, const Buffer& indirect_buffer, const Buffer& count_buffer);
 
+		/// @brief Issue a mesh shader draw
+		/// @param group_count_x Number of mesh shader workgroups on the x-axis
+		/// @param group_count_y Number of mesh shader workgroups on the y-axis
+		/// @param group_count_z Number of mesh shader workgroups on the z-axis
+		CommandBuffer& draw_mesh_tasks(size_t group_count_x, size_t group_count_y = 1, size_t group_count_z = 1);
+
+		/// @brief Issue an indirect mesh shader draw
+		/// @param indirect_buffer Buffer of indirect commands
+		CommandBuffer& draw_mesh_tasks_indirect(const Buffer& indirect_buffer);
+
+		/// @brief Issue an indirect mesh shader draw with count
+		/// @param max_command_count Upper limit of commands that can be drawn
+		/// @param indirect_buffer Buffer of indirect commands
+		/// @param count_buffer Buffer of command count
+		CommandBuffer& draw_mesh_tasks_indirect_count(size_t max_command_count, const Buffer& indirect_buffer, const Buffer& count_buffer);
+
 		/// @brief Issue a compute dispatch
 		/// @param group_count_x Number of groups on the x-axis
 		/// @param group_count_y Number of groups on the y-axis

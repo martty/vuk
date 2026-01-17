@@ -270,6 +270,10 @@ namespace vuk {
 					return VK_SHADER_STAGE_FRAGMENT_BIT;
 				case spv::ExecutionModel::ExecutionModelGLCompute:
 					return VK_SHADER_STAGE_COMPUTE_BIT;
+				case spv::ExecutionModel::ExecutionModelTaskEXT:
+					return VK_SHADER_STAGE_TASK_BIT_EXT;
+				case spv::ExecutionModel::ExecutionModelMeshEXT:
+					return VK_SHADER_STAGE_MESH_BIT_EXT;
 				case spv::ExecutionModel::ExecutionModelAnyHitKHR:
 					return VK_SHADER_STAGE_ANY_HIT_BIT_KHR;
 				case spv::ExecutionModel::ExecutionModelCallableKHR:
@@ -475,7 +479,7 @@ namespace vuk {
 				program.push_constant_ranges.push_back(pcr);
 			}
 
-			if (stage == VK_SHADER_STAGE_COMPUTE_BIT) {
+			if (stage == VK_SHADER_STAGE_COMPUTE_BIT || stage == VK_SHADER_STAGE_MESH_BIT_EXT || stage == VK_SHADER_STAGE_TASK_BIT_EXT) {
 				program.local_size = { refl.get_execution_mode_argument(spv::ExecutionMode::ExecutionModeLocalSize, 0),
 					                     refl.get_execution_mode_argument(spv::ExecutionMode::ExecutionModeLocalSize, 1),
 					                     refl.get_execution_mode_argument(spv::ExecutionMode::ExecutionModeLocalSize, 2) };

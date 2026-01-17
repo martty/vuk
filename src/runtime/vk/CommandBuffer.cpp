@@ -614,6 +614,39 @@ namespace vuk {
 		return *this;
 	}
 
+	CommandBuffer& CommandBuffer::draw_mesh_tasks(size_t group_count_x, size_t group_count_y, size_t group_count_z) {
+		VUK_EARLY_RET();
+		if (!_bind_graphics_pipeline_state()) {
+			return *this;
+		}
+		ctx.vkCmdDrawMeshTasksEXT(command_buffer, (uint32_t)group_count_x, (uint32_t)group_count_y, (uint32_t)group_count_z);
+		return *this;
+	}
+
+	CommandBuffer& CommandBuffer::draw_mesh_tasks_indirect(const Buffer& indirect_buffer) {
+		VUK_EARLY_RET();
+		if (!_bind_graphics_pipeline_state()) {
+			return *this;
+		}
+		ctx.vkCmdDrawMeshTasksIndirectEXT(command_buffer, indirect_buffer.buffer, indirect_buffer.offset, 1, 0);
+		return *this;
+	}
+
+	CommandBuffer& CommandBuffer::draw_mesh_tasks_indirect_count(size_t max_command_count, const Buffer& indirect_buffer, const Buffer& count_buffer) {
+		VUK_EARLY_RET();
+		if (!_bind_graphics_pipeline_state()) {
+			return *this;
+		}
+		ctx.vkCmdDrawMeshTasksIndirectCountEXT(command_buffer,
+		                                       indirect_buffer.buffer,
+		                                       indirect_buffer.offset,
+		                                       count_buffer.buffer,
+		                                       count_buffer.offset,
+		                                       (uint32_t)max_command_count,
+		                                       sizeof(VkDrawMeshTasksIndirectCommandEXT));
+		return *this;
+	}
+
 	CommandBuffer& CommandBuffer::dispatch(size_t size_x, size_t size_y, size_t size_z) {
 		VUK_EARLY_RET();
 		if (!_bind_compute_pipeline_state()) {

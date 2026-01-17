@@ -42,6 +42,8 @@ namespace vuk::extra {
 		vkbphysical_device.enable_extension_if_present(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
 		vkbphysical_device.enable_extension_if_present(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME);
 		vkbphysical_device.enable_extension_if_present(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME);
+		// enable mesh shader extensions if available
+		vkbphysical_device.enable_extension_if_present(VK_EXT_MESH_SHADER_EXTENSION_NAME);
 		// enable calibrated timestamps if avaliable (useful for profiling)
 		vkbphysical_device.enable_extension_if_present(VK_EXT_CALIBRATED_TIMESTAMPS_EXTENSION_NAME);
 		// enable push descriptor if available (useful for some optimisations)
@@ -90,12 +92,19 @@ namespace vuk::extra {
 			                                                             .accelerationStructure = true };
 		VkPhysicalDeviceRayTracingPipelineFeaturesKHR rtPipelineFeature{ .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR,
 			                                                               .rayTracingPipeline = true };
+		VkPhysicalDeviceMeshShaderFeaturesEXT meshShaderFeature{ .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT,
+			                                                       .taskShader = VK_TRUE,
+			                                                       .meshShader = VK_TRUE };
 
 		auto& device_builder = add_pNext(&vk12features).add_pNext(&vk11features).add_pNext(&vk10features);
 		// add ray tracing features if available
 		if (physical_device.is_extension_present(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME) &&
 		    physical_device.is_extension_present(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME)) {
 			device_builder.add_pNext(&rtPipelineFeature).add_pNext(&accelFeature);
+		}
+		// add mesh shader features if available
+		if (physical_device.is_extension_present(VK_EXT_MESH_SHADER_EXTENSION_NAME)) {
+			device_builder.add_pNext(&meshShaderFeature);
 		}
 
 		assert(physical_device.rq_major_version == 1 && "This code needs updating.");
