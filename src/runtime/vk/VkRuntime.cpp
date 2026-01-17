@@ -664,6 +664,10 @@ namespace vuk {
 		return impl->pool_cache.acquire(dslai, absolute_frame);
 	}
 
+	DescriptorSetLayoutAllocInfo& Runtime::acquire_descriptor_set_layout(const struct DescriptorSetLayoutCreateInfo& dslci) {
+		return impl->descriptor_set_layouts.acquire(dslci, impl->frame_counter);
+	}
+
 	bool Runtime::is_timestamp_available(Query q) {
 		std::scoped_lock _(impl->query_lock);
 		auto it = impl->timestamp_result_map.find(q);

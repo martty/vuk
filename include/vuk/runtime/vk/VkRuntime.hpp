@@ -188,6 +188,8 @@ namespace vuk {
 		Sampler acquire_sampler(const SamplerCreateInfo& cu, uint64_t absolute_frame);
 		/// @brief Acquire a cached descriptor pool
 		struct DescriptorPool& acquire_descriptor_pool(const struct DescriptorSetLayoutAllocInfo& dslai, uint64_t absolute_frame);
+		/// @brief  Acquire a cached descriptor set layout
+		DescriptorSetLayoutAllocInfo& acquire_descriptor_set_layout(const struct DescriptorSetLayoutCreateInfo& dslci);
 		/// @brief Force collection of caches
 		void collect(uint64_t frame);
 

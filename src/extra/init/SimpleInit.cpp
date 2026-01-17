@@ -68,6 +68,8 @@ namespace vuk::extra {
 		vk12features.descriptorIndexing = true;
 		vk12features.descriptorBindingPartiallyBound = true;
 		vk12features.descriptorBindingUpdateUnusedWhilePending = true;
+		vk12features.descriptorBindingSampledImageUpdateAfterBind = true;
+		vk12features.descriptorBindingStorageImageUpdateAfterBind = true;
 		vk12features.shaderSampledImageArrayNonUniformIndexing = true;
 		vk12features.runtimeDescriptorArray = true;
 		vk12features.descriptorBindingVariableDescriptorCount = true;

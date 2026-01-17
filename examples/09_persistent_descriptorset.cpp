@@ -1,4 +1,5 @@
 #include "example_runner.hpp"
+#include "vuk/vsl/BindlessArray.hpp"
 #include <algorithm>
 #include <glm/glm.hpp>
 #include <glm/gtx/quaternion.hpp>
@@ -9,13 +10,13 @@
 #include <stb_image.h>
 
 /* 09_persistent_descriptorset
- * In this example we will see how to create persistent descriptorsets.
+ * In this example we will see how to create persistent descriptorsets with dynamic virtual address allocation.
  * Normal descriptorsets are completely managed by vuk, and are cached based on their contents.
  * However, this behaviour is not helpful if you plan to keep the descriptorsets around, or if they have many elements (such as "bindless").
  * For these scenarios, you can create and explicitly manage descriptorsets.
- * Here we first generate two additional textures from the one we load: the first by Y flipping using blitting and the second by
- * running a compute shader on it. Afterwards we create the persistent set and write the three images into it.
- * Later, we draw three cubes and fetch the texture based on the base instance.
+ * Here we use a BindlessArray utility class that combines a PersistentDescriptorSet with VirtualAddressSpace allocation
+ * to provide a vector-like interface for managing bindless resources.
+ * We generate three texture variants and dynamically add/remove them from the bindless array during rendering.
  *
  * These examples are powered by the example framework, which hides some of the code required, as that would be repeated for each example.
  * Furthermore it allows launching individual examples and all examples with the example same code.
@@ -25,33 +26,42 @@
 namespace {
 	// The Y rotation angle of our cube
 	float angle = 0.f;
+	float time_accumulator = 0.f;
 	// Generate vertices and indices for the cube
 	auto box = util::generate_cube();
 	vuk::Unique<vuk::Buffer> verts, inds;
-	vuk::Unique<vuk::Image> image_of_doge;
-	vuk::Unique<vuk::ImageView> image_view_of_doge;
-	vuk::ImageAttachment texture_of_doge;
-	vuk::Unique<vuk::Image> image_of_doge_v1;
-	vuk::Unique<vuk::ImageView> image_view_of_doge_v1;
-	vuk::ImageAttachment texture_of_doge_v1;
-	vuk::Unique<vuk::Image> image_of_doge_v2;
-	vuk::Unique<vuk::ImageView> image_view_of_doge_v2;
-	vuk::ImageAttachment texture_of_doge_v2;
-	vuk::Unique<vuk::PersistentDescriptorSet> pda;
+
+	// Array of 3 doge texture variants
+	std::array<vuk::Unique<vuk::Image>, 3> doge_images;
+	std::array<vuk::Unique<vuk::ImageView>, 3> doge_image_views;
+	std::array<vuk::ImageAttachment, 3> doge_textures;
+
+	const size_t num_cubes = 10;
+	std::vector<glm::vec3> cube_positions;
+
+	std::uniform_int_distribution<size_t> rand_indices(0, 2);
+	std::optional<vuk::BindlessArray> bindless_textures;
+
+	std::random_device rd;
+	std::mt19937 gen(rd());
 
 	vuk::Example xample{
 		.name = "09_persistent_descriptorset",
 		.setup =
 		    [](vuk::ExampleRunner& runner, vuk::Allocator& allocator, vuk::Runtime& runtime) {
+		      // Create BindlessArray - it will create both the VirtualAddressSpace and PersistentDescriptorSet internally
+		      bindless_textures.emplace(allocator, 1, vuk::BindlessArray::Bindings{ .combined_image_sampler = 0 }, 64);
+
 		      {
 			      vuk::PipelineBaseCreateInfo pci;
 			      pci.add_glsl(util::read_entire_file((root / "examples/bindless.vert").generic_string()), (root / "examples/bindless.vert").generic_string());
 			      pci.add_glsl(util::read_entire_file((root / "examples/triangle_tex_bindless.frag").generic_string()),
 			                   (root / "examples/triangle_tex_bindless.frag").generic_string());
 			      // Flag this binding as partially bound, so that we don't need to set all the array elements
-			      pci.set_binding_flags(1, 0, vuk::DescriptorBindingFlagBits::ePartiallyBound);
+			      // pci.set_binding_flags(1, 0, vuk::DescriptorBindingFlagBits::ePartiallyBound);
 			      // Set the binding #0 in set #1 as a variable count binding, and set the maximum number of descriptors
-			      pci.set_variable_count_binding(1, 0, 1024);
+			      // pci.set_variable_count_binding(1, 0, 64);
+			      pci.explicit_set_layouts.push_back(bindless_textures->get_descriptor_set_layout());
 			      runtime.create_named_pipeline("bindless_cube", pci);
 		      }
 
@@ -67,13 +77,14 @@ namespace {
 		      auto doge_image = stbi_load((root / "examples/doge.png").generic_string().c_str(), &x, &y, &chans, 4);
 
 		      // Similarly to buffers, we allocate the image and enqueue the upload
-		      texture_of_doge = vuk::ImageAttachment::from_preset(
+		      doge_textures[0] = vuk::ImageAttachment::from_preset(
 		          vuk::ImageAttachment::Preset::eMap2D, vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u }, vuk::Samples::e1);
-		      texture_of_doge.usage |= vuk::ImageUsageFlagBits::eTransferSrc;
-		      texture_of_doge.level_count = 1;
-		      auto [image, view, doge_src] = vuk::create_image_and_view_with_data(allocator, vuk::DomainFlagBits::eTransferOnTransfer, texture_of_doge, doge_image);
-		      image_of_doge = std::move(image);
-		      image_view_of_doge = std::move(view);
+		      doge_textures[0].usage |= vuk::ImageUsageFlagBits::eTransferSrc;
+		      doge_textures[0].level_count = 1;
+		      auto [image, view, doge_src] =
+		          vuk::create_image_and_view_with_data(allocator, vuk::DomainFlagBits::eTransferOnTransfer, doge_textures[0], doge_image);
+		      doge_images[0] = std::move(image);
+		      doge_image_views[0] = std::move(view);
 		      stbi_image_free(doge_image);
 
 		      // We set up the cube data, same as in example 02_cube
@@ -87,23 +98,26 @@ namespace {
 		      runner.enqueue_setup(std::move(ind_fut));
 
 		      // Let's create two variants of the doge image
-		      texture_of_doge_v1 = texture_of_doge;
-		      texture_of_doge_v1.usage = vuk::ImageUsageFlagBits::eTransferDst | vuk::ImageUsageFlagBits::eSampled;
-		      image_of_doge_v1 = *vuk::allocate_image(allocator, texture_of_doge_v1);
-		      texture_of_doge_v1.image = *image_of_doge_v1;
-		      image_view_of_doge_v1 = *vuk::allocate_image_view(allocator, texture_of_doge_v1);
-		      texture_of_doge_v1.image_view = *image_view_of_doge_v1;
-		      texture_of_doge_v2 = texture_of_doge;
-		      texture_of_doge_v2.format = vuk::Format::eR8G8B8A8Unorm;
-		      texture_of_doge_v2.usage = vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eSampled;
-		      image_of_doge_v2 = *vuk::allocate_image(allocator, texture_of_doge_v2);
-		      texture_of_doge_v2.image = *image_of_doge_v2;
-		      image_view_of_doge_v2 = *vuk::allocate_image_view(allocator, texture_of_doge_v2);
-		      texture_of_doge_v2.image_view = *image_view_of_doge_v2;
+		      // Variant 1: Y-flipped version
+		      doge_textures[1] = doge_textures[0];
+		      doge_textures[1].usage = vuk::ImageUsageFlagBits::eTransferDst | vuk::ImageUsageFlagBits::eSampled;
+		      doge_images[1] = *vuk::allocate_image(allocator, doge_textures[1]);
+		      doge_textures[1].image = *doge_images[1];
+		      doge_image_views[1] = *vuk::allocate_image_view(allocator, doge_textures[1]);
+		      doge_textures[1].image_view = *doge_image_views[1];
+
+		      // Variant 2: Inverted colors version
+		      doge_textures[2] = doge_textures[0];
+		      doge_textures[2].format = vuk::Format::eR8G8B8A8Unorm;
+		      doge_textures[2].usage = vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eSampled;
+		      doge_images[2] = *vuk::allocate_image(allocator, doge_textures[2]);
+		      doge_textures[2].image = *doge_images[2];
+		      doge_image_views[2] = *vuk::allocate_image_view(allocator, doge_textures[2]);
+		      doge_textures[2].image_view = *doge_image_views[2];
 
 		      // Make a RenderGraph to process the loaded image
-		      auto doge_v1 = vuk::declare_ia("09_doge_v1", texture_of_doge_v1);
-		      auto doge_v2 = vuk::declare_ia("09_doge_v2", texture_of_doge_v2);
+		      auto doge_v1 = vuk::declare_ia("09_doge_v1", doge_textures[1]);
+		      auto doge_v2 = vuk::declare_ia("09_doge_v2", doge_textures[2]);
 
 		      auto preprocess = vuk::make_pass(
 		          "preprocess",
@@ -129,28 +143,32 @@ namespace {
 			          return std::make_tuple(src, v1, v2);
 		          });
 		      // Bind the resources for the variant generation
-		      // We specify the initial and final access
-		      // The texture we have created is already in ShaderReadOptimal, but we need it in General during the pass, and we need it back to ShaderReadOptimal
-		      // afterwards
 		      auto [src, v1, v2] = preprocess(std::move(doge_src), std::move(doge_v1), std::move(doge_v2));
 		      src.release(vuk::Access::eFragmentSampled, vuk::DomainFlagBits::eGraphicsQueue);
 		      v1.release(vuk::Access::eFragmentSampled, vuk::DomainFlagBits::eGraphicsQueue);
 		      v2.release(vuk::Access::eFragmentSampled, vuk::DomainFlagBits::eGraphicsQueue);
-		      // enqueue running the preprocessing rendergraph and force 09_doge to be sampleable later
+		      // enqueue running the preprocessing rendergraph
 		      runner.enqueue_setup(std::move(src));
 		      runner.enqueue_setup(std::move(v1));
 		      runner.enqueue_setup(std::move(v2));
-		      // Create persistent descriptorset for a pipeline and set index
-		      pda = runtime.create_persistent_descriptorset(allocator, *runtime.get_named_pipeline("bindless_cube"), 1, 64);
-		      vuk::Sampler default_sampler = runtime.acquire_sampler({}, runtime.get_frame_count());
-		      // Enqueue updates to the descriptors in the array
-		      // This records the writes internally, but does not execute them
-		      // Updating can be done in parallel from different threads, only the commit call has to be synchronized
-		      pda->update_combined_image_sampler(0, 0, *image_view_of_doge, default_sampler, vuk::ImageLayout::eReadOnlyOptimalKHR);
-		      pda->update_combined_image_sampler(0, 1, *image_view_of_doge_v1, default_sampler, vuk::ImageLayout::eReadOnlyOptimalKHR);
-		      pda->update_combined_image_sampler(0, 2, *image_view_of_doge_v2, default_sampler, vuk::ImageLayout::eReadOnlyOptimalKHR);
-		      // Execute the writes
-		      pda->commit(runtime);
+
+		      // Initially add all three textures
+		      vuk::Sampler default_sampler = allocator.get_context().acquire_sampler({}, allocator.get_context().get_frame_count());
+
+		      // Generate random textures for the cubes
+		      for (size_t i = 0; i < num_cubes; i++) {
+			      bindless_textures->push_back(*doge_image_views[rand_indices(gen)], default_sampler, vuk::ImageLayout::eReadOnlyOptimalKHR);
+		      }
+
+		      // Generate random positions for cubes
+
+		      std::uniform_real_distribution<float> pos_dist(-5.0f, 5.0f);
+		      std::uniform_real_distribution<float> y_dist(-2.0f, 2.0f);
+
+		      cube_positions.reserve(num_cubes);
+		      for (size_t i = 0; i < num_cubes; i++) {
+			      cube_positions.push_back(glm::vec3(pos_dist(gen), y_dist(gen), pos_dist(gen)));
+		      }
 		    },
 		.render =
 		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator, vuk::Value<vuk::ImageAttachment> target) {
@@ -158,14 +176,31 @@ namespace {
 			      glm::mat4 view;
 			      glm::mat4 proj;
 		      } vp;
-		      vp.view = glm::lookAt(glm::vec3(0, 1.5, 3.5), glm::vec3(0), glm::vec3(0, 1, 0));
+		      vp.view = glm::lookAt(glm::vec3(0, 1.5, 5.5), glm::vec3(0), glm::vec3(0, 1, 0));
 		      vp.proj = glm::perspective(glm::degrees(70.f), 1.f, 1.f, 10.f);
 		      vp.proj[1][1] *= -1;
 
 		      auto [buboVP, uboVP_fut] = create_buffer(frame_allocator, vuk::MemoryUsage::eCPUtoGPU, vuk::DomainFlagBits::eTransferOnGraphics, std::span(&vp, 1));
 		      auto uboVP = *buboVP;
 
-		      // Set up the pass to draw the textured cube, with a color and a depth attachment
+		      float delta_time = ImGui::GetIO().DeltaTime;
+		      time_accumulator += delta_time;
+
+		      // Dynamically add/remove textures every 2 seconds
+		      static float last_toggle = 0.f;
+		      if (time_accumulator - last_toggle > 2.0f) {
+			      last_toggle = time_accumulator;
+			      vuk::Sampler default_sampler = frame_allocator.get_context().acquire_sampler({}, frame_allocator.get_context().get_frame_count());
+
+			      // Remove one texture (always remove the first active one)
+			      bindless_textures->erase(bindless_textures->get_active_indices()[0]);
+
+			      // Add a texture back
+			      bindless_textures->push_back(*doge_image_views[rand_indices(gen)], default_sampler, vuk::ImageLayout::eReadOnlyOptimalKHR);
+		      }
+		      bindless_textures->commit();
+
+		      // Set up the pass to draw the textured cubes
 		      auto forward_pass =
 		          vuk::make_pass("forward", [uboVP](vuk::CommandBuffer& command_buffer, VUK_IA(vuk::eColorWrite) color, VUK_IA(vuk::eDepthStencilRW) depth) {
 			          command_buffer.set_viewport(0, vuk::Rect2D::framebuffer())
@@ -185,19 +220,26 @@ namespace {
 			                                               vuk::Ignore{ offsetof(util::Vertex, uv_coordinates) - sizeof(util::Vertex::position) },
 			                                               vuk::Format::eR32G32Sfloat })
 			              .bind_index_buffer(*inds, vuk::IndexType::eUint32)
-			              .bind_persistent(1, pda.get())
+			              .bind_persistent(1, bindless_textures->get_persistent_set())
 			              .bind_graphics_pipeline("bindless_cube")
 			              .bind_buffer(0, 0, uboVP);
 			          glm::mat4* model = command_buffer.scratch_buffer<glm::mat4>(0, 1);
 			          *model = static_cast<glm::mat4>(glm::angleAxis(glm::radians(angle), glm::vec3(0.f, 1.f, 0.f)));
-			          // Draw 3 cubes, assign them different base instance to identify them in the shader
-			          command_buffer.draw_indexed(box.second.size(), 1, 0, 0, 0)
-			              .draw_indexed(box.second.size(), 1, 0, 0, 1)
-			              .draw_indexed(box.second.size(), 1, 0, 0, 2);
+
+			          // Draw cubes at random positions with textures from the bindless array
+			          auto indices = bindless_textures->get_active_indices();
+			          for (size_t i = 0; i < indices.size(); i++) {
+				          // Push the position for this cube
+				          command_buffer.push_constants(vuk::ShaderStageFlagBits::eVertex, 0, cube_positions[i]);
+				          // Draw the cube with the corresponding texture index
+				          // We use the instance index as another "push constant" to index the textures
+				          command_buffer.draw_indexed(box.second.size(), 1, 0, 0, indices[i]);
+			          }
+
 			          return color;
 		          });
 
-		      angle += 10.f * ImGui::GetIO().DeltaTime;
+		      angle += 10.f * delta_time;
 
 		      auto depth_img = vuk::declare_ia("09_depth");
 		      depth_img->format = vuk::Format::eD32Sfloat;
@@ -212,13 +254,13 @@ namespace {
 		      // We release the resources manually
 		      verts.reset();
 		      inds.reset();
-		      image_of_doge.reset();
-		      image_view_of_doge.reset();
-		      image_of_doge_v1.reset();
-		      image_view_of_doge_v1.reset();
-		      image_of_doge_v2.reset();
-		      image_view_of_doge_v2.reset();
-		      pda.reset();
+		      for (auto& img : doge_images) {
+			      img.reset();
+		      }
+		      for (auto& view : doge_image_views) {
+			      view.reset();
+		      }
+		      bindless_textures = {};
 		    }
 	};
 

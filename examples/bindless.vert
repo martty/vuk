@@ -13,6 +13,10 @@ layout(binding = 1) uniform Model {
 	mat4 model;
 };
 
+layout(push_constant) uniform PushConstants {
+	vec3 position;
+};
+
 out gl_PerVertex 
 {
     vec4 gl_Position;
@@ -24,5 +28,5 @@ layout (location = 1) out vec2 oUV;
 void main() {
 	base_instance = gl_BaseInstance;
 	oUV = iuv;
-    gl_Position = projection * view * model * vec4(ipos + gl_BaseInstance * vec3(2, 0, 0) - vec3(2, 0, 0), 1.0);
+    gl_Position = projection * view * model * vec4(ipos + position, 1.0);
 }
