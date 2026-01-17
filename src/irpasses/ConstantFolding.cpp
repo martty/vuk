@@ -37,18 +37,19 @@ namespace vuk {
 					if (!node->type[0]->is_synchronized()) {
 						// direct slicing of a composite
 						if (node->slice.src.node->kind == Node::CONSTRUCT && node->slice.axis == Node::NamedAxis::FIELD) {
-							auto field_idx = constant<uint64_t>(node->slice.start);
-							r.replace({ node, 0 }, node->slice.src.node->construct.args[field_idx + 1]);
+							auto field_idx = eval_as_size_t(node->slice.start);
+							if (!field_idx.holds_value()) {
+								return;
+							}
+							r.replace({ node, 0 }, node->slice.src.node->construct.args[*field_idx + 1]);
 						}
 						// slicing a slice
 						else if (node->slice.src.node->kind == Node::SLICE && node->slice.src.index <= 1 && node->slice.axis == Node::NamedAxis::FIELD) {
-							auto field_idx = constant<uint64_t>(node->slice.start);
-							auto new_slice = current_module->make_extract(node->slice.src.node->slice.src, field_idx);
+							auto new_slice = make_slice_with_new_src(node, node->slice.src.node->slice.src);
 							add_node(new_slice.node);
 							r.replace({ node, 0 }, new_slice);
 						} else if (node->slice.src.node->kind == Node::CALL) {
-							auto field_idx = constant<uint64_t>(node->slice.start);
-							auto new_slice = current_module->make_extract(node->slice.src.link().prev->def, field_idx);
+							auto new_slice = make_slice_with_new_src(node, node->slice.src.link().prev->def);
 							add_node(new_slice.node);
 							r.replace({ node, 0 }, new_slice);
 						}

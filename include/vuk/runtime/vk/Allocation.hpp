@@ -35,8 +35,8 @@ namespace vuk {
 		Extent3D extent = {};
 		Format format = Format::eUndefined;
 		Samples sample_count = Samples::eInfer;
-		uint32_t level_count = VK_REMAINING_MIP_LEVELS;
-		uint32_t layer_count = VK_REMAINING_ARRAY_LAYERS;
+		uint16_t level_count = 0xffff;
+		uint16_t layer_count = 0xffff;
 
 		operator VkImageCreateInfo() const noexcept {
 			VkImageCreateInfo vkici{};
