@@ -573,6 +573,78 @@ namespace vuk {
 		DeviceResource* device_resource = nullptr;
 	};
 
+	template<typename Type>
+	class Unique {
+		Allocator allocator;
+		Type payload;
+
+	public:
+		using element_type = Type;
+
+		explicit Unique() : allocator{}, payload{} {}
+		explicit Unique(Allocator allocator) : allocator(allocator), payload{} {}
+		explicit Unique(Allocator allocator, Type payload) : allocator(allocator), payload(std::move(payload)) {}
+		Unique(Unique const&) = delete;
+
+		Unique(Unique&& other) noexcept : allocator(other.allocator), payload(other.release()) {}
+
+		~Unique() noexcept;
+
+		Unique& operator=(Unique const&) = delete;
+
+		Unique& operator=(Unique&& other) noexcept {
+			auto tmp = other.allocator;
+			reset(other.release());
+			allocator = tmp;
+			return *this;
+		}
+
+		explicit operator bool() const noexcept {
+			return static_cast<bool>(payload);
+		}
+
+		Type const* operator->() const noexcept {
+			return &payload;
+		}
+
+		Type* operator->() noexcept {
+			return &payload;
+		}
+
+		Type const& operator*() const noexcept {
+			return payload;
+		}
+
+		Type& operator*() noexcept {
+			return payload;
+		}
+
+		const Type& get() const noexcept {
+			return payload;
+		}
+
+		Type& get() noexcept {
+			return payload;
+		}
+
+		void reset(Type value = Type()) noexcept;
+
+		Type release() noexcept {
+			allocator = {};
+			return std::move(payload);
+		}
+
+		void swap(Unique<Type>& rhs) noexcept {
+			std::swap(payload, rhs.payload);
+			std::swap(allocator, rhs.allocator);
+		}
+	};
+
+	template<typename Type>
+	inline void swap(Unique<Type>& lhs, Unique<Type>& rhs) noexcept {
+		lhs.swap(rhs);
+	}
+
 	template<class ContainerType>
 	concept Container = requires(ContainerType a) {
 		std::begin(a);
