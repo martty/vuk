@@ -16,7 +16,7 @@
  * However, this behaviour is not helpful if you plan to keep the descriptor sets around, or if they have many elements (such as "bindless").
  *
  *
- * This example demonstrates:
+ * This example demonstrates how to manage textures at runtime. It includes:
  * - Creating a BindlessArray with combined image samplers
  * - Generating texture variants with different image processing operations (none, Y-flip, color-invert, color-tint)
  * - Dynamically adding cubes with dynamically generated textures at runtime
