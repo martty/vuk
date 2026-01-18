@@ -36,27 +36,78 @@ namespace {
 	auto box = util::generate_cube();
 	vuk::Unique<vuk::Buffer> verts, inds;
 
-	// Array of 3 doge texture variants
-	std::array<vuk::Unique<vuk::Image>, 3> doge_images;
-	std::array<vuk::Unique<vuk::ImageView>, 3> doge_image_views;
-	std::array<vuk::ImageAttachment, 3> doge_textures;
+	std::vector<vuk::Unique<vuk::Image>> doge_images;
+	std::vector<vuk::Unique<vuk::ImageView>> doge_image_views;
+	vuk::Value<vuk::ImageAttachment> initial_doge_texture;
+	std::vector<vuk::Value<vuk::ImageAttachment>> pending_textures;
 
-	const size_t num_cubes = 10;
+	const size_t max_cubes = 60;
 	std::vector<glm::vec3> cube_positions;
 	std::vector<uint32_t> texture_indices;
 
-	std::uniform_int_distribution<size_t> rand_indices(0, 2);
 	std::optional<vuk::BindlessArray> bindless_textures;
+	std::uniform_real_distribution<float> pos_dist(-5.0f, 5.0f);
+	std::uniform_real_distribution<float> y_dist(-2.0f, 2.0f);
+	std::uniform_real_distribution<float> color_dist(0.0f, 1.0f);
 
 	std::random_device rd;
 	std::mt19937 gen(rd());
+
+	// Create a lifted compute pass for tinting
+	auto tint_pass = vuk::lift_compute(vuk::PipelineBaseCreateInfo::from_inline_glsl(R"(#version 450
+#pragma shader_stage(compute)
+
+layout(binding = 0) uniform sampler2D inputImage;
+layout(binding = 1, rgba8) uniform writeonly image2D outputImage;
+
+layout(push_constant) uniform PushConstants {
+	float r;
+	float g;
+	float b;
+} pc;
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+void main() {
+	ivec2 coord = ivec2(gl_GlobalInvocationID.xy);
+	ivec2 imgSize = imageSize(outputImage);
+	
+	if (coord.x >= imgSize.x || coord.y >= imgSize.y) {
+		return;
+	}
+	
+	vec2 uv = (vec2(coord) + 0.5) / vec2(imgSize);
+	vec4 color = texture(inputImage, uv);
+	color.rgb *= vec3(pc.r, pc.g, pc.b);
+	imageStore(outputImage, coord, color);
+}
+)"));
+	// First pass: flip the image on the Y axis using a blit
+	auto flip_pass = vuk::make_pass("flip", [](vuk::CommandBuffer& command_buffer, VUK_IA(vuk::eTransferRead) src, VUK_IA(vuk::eTransferWrite) dst) {
+		vuk::ImageBlit blit;
+		blit.srcSubresource.aspectMask = vuk::ImageAspectFlagBits::eColor;
+		blit.srcSubresource.baseArrayLayer = 0;
+		blit.srcSubresource.layerCount = 1;
+		blit.srcSubresource.mipLevel = 0;
+		blit.srcOffsets[0] = vuk::Offset3D{ 0, 0, 0 };
+		blit.srcOffsets[1] = vuk::Offset3D{ (int)src->extent.width, (int)src->extent.height, 1 };
+		blit.dstSubresource = blit.srcSubresource;
+		blit.dstOffsets[0] = vuk::Offset3D{ (int)src->extent.width, (int)src->extent.height, 0 };
+		blit.dstOffsets[1] = vuk::Offset3D{ 0, 0, 1 };
+		command_buffer.blit_image(src, dst, blit, vuk::Filter::eLinear);
+	});
+
+	// Second pass: invert the colors using compute
+	auto invert_pass = vuk::make_pass("invert", [](vuk::CommandBuffer& command_buffer, VUK_IA(vuk::eComputeSampled) src, VUK_IA(vuk::eComputeWrite) dst) {
+		command_buffer.bind_image(0, 0, src).bind_sampler(0, 0, {}).bind_image(0, 1, dst).bind_compute_pipeline("invert").dispatch_invocations_per_pixel(dst);
+	});
 
 	vuk::Example xample{
 		.name = "09_persistent_descriptorset",
 		.setup =
 		    [](vuk::ExampleRunner& runner, vuk::Allocator& allocator, vuk::Runtime& runtime) {
 		      // Create BindlessArray - it will create both the VirtualAddressSpace and PersistentDescriptorSet internally
-		      bindless_textures.emplace(allocator, 1, vuk::BindlessArray::Bindings{ .combined_image_sampler = 0 }, 64);
+		      bindless_textures.emplace(allocator, 1, vuk::BindlessArray::Bindings{ .combined_image_sampler = 0 }, 1024);
 
 		      {
 			      vuk::PipelineBaseCreateInfo pci;
@@ -80,14 +131,13 @@ namespace {
 		      auto doge_image = stbi_load((root / "examples/doge.png").generic_string().c_str(), &x, &y, &chans, 4);
 
 		      // Similarly to buffers, we allocate the image and enqueue the upload
-		      doge_textures[0] = vuk::ImageAttachment::from_preset(
+		      auto doge_ia = vuk::ImageAttachment::from_preset(
 		          vuk::ImageAttachment::Preset::eMap2D, vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u }, vuk::Samples::e1);
-		      doge_textures[0].usage |= vuk::ImageUsageFlagBits::eTransferSrc;
-		      doge_textures[0].level_count = 1;
-		      auto [image, view, doge_src] =
-		          vuk::create_image_and_view_with_data(allocator, vuk::DomainFlagBits::eTransferOnTransfer, doge_textures[0], doge_image);
-		      doge_images[0] = std::move(image);
-		      doge_image_views[0] = std::move(view);
+		      doge_ia.usage |= vuk::ImageUsageFlagBits::eTransferSrc;
+		      doge_ia.level_count = 1;
+		      auto [image, view, doge_src] = vuk::create_image_and_view_with_data(allocator, vuk::DomainFlagBits::eTransferOnTransfer, doge_ia, doge_image);
+		      doge_images.push_back(std::move(image));
+		      doge_image_views.push_back(std::move(view));
 		      stbi_image_free(doge_image);
 
 		      // We set up the cube data, same as in example 02_cube
@@ -100,81 +150,7 @@ namespace {
 		      runner.enqueue_setup(std::move(vert_fut));
 		      runner.enqueue_setup(std::move(ind_fut));
 
-		      // Let's create two variants of the doge image
-		      // Variant 1: Y-flipped version
-		      doge_textures[1] = doge_textures[0];
-		      doge_textures[1].usage = vuk::ImageUsageFlagBits::eTransferDst | vuk::ImageUsageFlagBits::eSampled;
-		      doge_images[1] = *vuk::allocate_image(allocator, doge_textures[1]);
-		      doge_textures[1].image = *doge_images[1];
-		      doge_image_views[1] = *vuk::allocate_image_view(allocator, doge_textures[1]);
-		      doge_textures[1].image_view = *doge_image_views[1];
-
-		      // Variant 2: Inverted colors version
-		      doge_textures[2] = doge_textures[0];
-		      doge_textures[2].format = vuk::Format::eR8G8B8A8Unorm;
-		      doge_textures[2].usage = vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eSampled;
-		      doge_images[2] = *vuk::allocate_image(allocator, doge_textures[2]);
-		      doge_textures[2].image = *doge_images[2];
-		      doge_image_views[2] = *vuk::allocate_image_view(allocator, doge_textures[2]);
-		      doge_textures[2].image_view = *doge_image_views[2];
-
-		      // Make a RenderGraph to process the loaded image
-		      auto doge_v1 = vuk::declare_ia("09_doge_v1", doge_textures[1]);
-		      auto doge_v2 = vuk::declare_ia("09_doge_v2", doge_textures[2]);
-
-		      auto preprocess = vuk::make_pass(
-		          "preprocess",
-		          [x, y](vuk::CommandBuffer& command_buffer,
-		                 VUK_IA(vuk::eTransferRead | vuk::eComputeSampled) src,
-		                 VUK_IA(vuk::eTransferWrite) v1,
-		                 VUK_IA(vuk::eComputeWrite) v2) {
-			          // For the first image, flip the image on the Y axis using a blit
-			          vuk::ImageBlit blit;
-			          blit.srcSubresource.aspectMask = vuk::ImageAspectFlagBits::eColor;
-			          blit.srcSubresource.baseArrayLayer = 0;
-			          blit.srcSubresource.layerCount = 1;
-			          blit.srcSubresource.mipLevel = 0;
-			          blit.srcOffsets[0] = vuk::Offset3D{ 0, 0, 0 };
-			          blit.srcOffsets[1] = vuk::Offset3D{ x, y, 1 };
-			          blit.dstSubresource = blit.srcSubresource;
-			          blit.dstOffsets[0] = vuk::Offset3D{ x, y, 0 };
-			          blit.dstOffsets[1] = vuk::Offset3D{ 0, 0, 1 };
-			          command_buffer.blit_image(src, v1, blit, vuk::Filter::eLinear);
-			          // For the second image, invert the colours in compute
-			          command_buffer.bind_image(0, 0, src).bind_sampler(0, 0, {}).bind_image(0, 1, v2).bind_compute_pipeline("invert").dispatch_invocations(x, y);
-
-			          return std::make_tuple(src, v1, v2);
-		          });
-		      // Bind the resources for the variant generation
-		      auto [src, v1, v2] = preprocess(std::move(doge_src), std::move(doge_v1), std::move(doge_v2));
-		      src.release(vuk::Access::eFragmentSampled, vuk::DomainFlagBits::eGraphicsQueue);
-		      v1.release(vuk::Access::eFragmentSampled, vuk::DomainFlagBits::eGraphicsQueue);
-		      v2.release(vuk::Access::eFragmentSampled, vuk::DomainFlagBits::eGraphicsQueue);
-		      // enqueue running the preprocessing rendergraph
-		      runner.enqueue_setup(std::move(src));
-		      runner.enqueue_setup(std::move(v1));
-		      runner.enqueue_setup(std::move(v2));
-
-		      // Initially add all three textures
-		      vuk::Sampler default_sampler = allocator.get_context().acquire_sampler({}, allocator.get_context().get_frame_count());
-
-		      // Generate random textures for the cubes and store their indices
-		      texture_indices.reserve(num_cubes);
-		      for (size_t i = 0; i < num_cubes; i++) {
-			      // push_back returns the index where the resource was added
-			      uint32_t idx = bindless_textures->push_back(*doge_image_views[rand_indices(gen)], default_sampler, vuk::ImageLayout::eReadOnlyOptimalKHR);
-			      texture_indices.push_back(idx);
-		      }
-
-		      // Generate random positions for cubes
-
-		      std::uniform_real_distribution<float> pos_dist(-5.0f, 5.0f);
-		      std::uniform_real_distribution<float> y_dist(-2.0f, 2.0f);
-
-		      cube_positions.reserve(num_cubes);
-		      for (size_t i = 0; i < num_cubes; i++) {
-			      cube_positions.push_back(glm::vec3(pos_dist(gen), y_dist(gen), pos_dist(gen)));
-		      }
+		      initial_doge_texture = std::move(doge_src);
 		    },
 		.render =
 		    [](vuk::ExampleRunner& runner, vuk::Allocator& frame_allocator, vuk::Value<vuk::ImageAttachment> target) {
@@ -182,7 +158,7 @@ namespace {
 			      glm::mat4 view;
 			      glm::mat4 proj;
 		      } vp;
-		      vp.view = glm::lookAt(glm::vec3(0, 1.5, 5.5), glm::vec3(0), glm::vec3(0, 1, 0));
+		      vp.view = glm::lookAt(glm::vec3(0, 2.5, 7.5), glm::vec3(0), glm::vec3(0, 1, 0));
 		      vp.proj = glm::perspective(glm::degrees(70.f), 1.f, 1.f, 10.f);
 		      vp.proj[1][1] *= -1;
 
@@ -194,20 +170,76 @@ namespace {
 
 		      // Dynamically swap textures every 2 seconds to demonstrate bindless updates
 		      static float last_toggle = 0.f;
-		      if (time_accumulator - last_toggle > 2.0f) {
+		      auto num_cubes = cube_positions.size();
+		      if (time_accumulator - last_toggle > 1.0f || last_toggle == 0.f && num_cubes < max_cubes) {
 			      last_toggle = time_accumulator;
-			      vuk::Sampler default_sampler = frame_allocator.get_context().acquire_sampler({}, frame_allocator.get_context().get_frame_count());
+			      // Obtain the superframe allocator to allocate images
+			      auto sf_allocator = *runner.app->superframe_allocator;
 
-			      // Remove the first cube's texture and add a new random one
-			      bindless_textures->erase(texture_indices[0]);
-			      texture_indices.erase(texture_indices.begin());
+			      vuk::ImageAttachment ia = vuk::ImageAttachment::from_preset(
+			          vuk::ImageAttachment::Preset::eMap2D,
+			          vuk::Format::eR8G8B8A8Unorm,
+			          vuk::Extent3D{ (unsigned)initial_doge_texture->extent.width, (unsigned)initial_doge_texture->extent.height, 1u },
+			          vuk::Samples::e1);
+			      ia.usage = vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eTransferDst;
+			      ia.level_count = 1;
+			      // Store allocations
+			      ia.image = *doge_images.emplace_back(*vuk::allocate_image(sf_allocator, ia));
+			      ia.image_view = *doge_image_views.emplace_back(*vuk::allocate_image_view(sf_allocator, ia));
 
-			      // Add a new texture with a random variant - push_back returns the new index
-			      uint32_t new_idx = bindless_textures->push_back(*doge_image_views[rand_indices(gen)], default_sampler, vuk::ImageLayout::eReadOnlyOptimalKHR);
+			      auto image_to_process = vuk::discard_ia("09_doge_i", ia);
+			      // Randomly choose a processing operation to do on the image
+			      std::uniform_int_distribution<size_t> process_to_do(0, 3); // 0: none, 1: flip, 2: invert, 3: tint
+			      auto choice = process_to_do(gen);
+			      switch (choice) {
+			      case 0:
+				      copy(initial_doge_texture, image_to_process);
+				      break;
+			      case 1:
+				      flip_pass(initial_doge_texture, image_to_process);
+				      break;
+			      case 2:
+				      invert_pass(initial_doge_texture, image_to_process);
+				      break;
+			      case 3: {
+				      vuk::Value<float> tint_r = vuk::make_constant("r", color_dist(gen));
+				      vuk::Value<float> tint_g = vuk::make_constant("g", color_dist(gen));
+				      vuk::Value<float> tint_b = vuk::make_constant("b", color_dist(gen));
+				      tint_pass(initial_doge_texture->extent.width / 8,
+				                initial_doge_texture->extent.height / 8,
+				                1,
+				                vuk::combine_image_sampler("ci", initial_doge_texture, vuk::acquire_sampler("default_sampler", {})),
+				                image_to_process,
+				                tint_r,
+				                tint_g,
+				                tint_b);
+			      } break;
+			      }
 
-			      // Update our texture indices
-			      texture_indices.push_back(new_idx);
+			      image_to_process.release(vuk::Access::eFragmentSampled, vuk::DomainFlagBits::eGraphicsQueue);
+			      image_to_process.submit(frame_allocator, runner.compiler);
+			      pending_textures.push_back(image_to_process);
 		      }
+
+		      // Check if any pending textures have completed processing
+		      for (auto it = pending_textures.begin(); it != pending_textures.end();) {
+			      auto& tex = *it;
+			      auto status = tex.poll();
+			      if (status && status.value() == vuk::Signal::Status::eHostAvailable) {
+				      vuk::Sampler default_sampler = frame_allocator.get_context().acquire_sampler({}, frame_allocator.get_context().get_frame_count());
+
+				      // create a new cube with a random position and texture
+				      cube_positions.push_back(glm::vec3(pos_dist(gen), y_dist(gen), pos_dist(gen)));
+				      // Add the new texture to the bindless array
+				      uint32_t new_idx = bindless_textures->push_back(tex->image_view, default_sampler, vuk::ImageLayout::eReadOnlyOptimalKHR);
+				      texture_indices.push_back(new_idx);
+				      // Remove from pending list
+				      it = pending_textures.erase(it);
+			      } else {
+				      ++it;
+			      }
+		      }
+
 		      // Commit any pending descriptor updates before rendering
 		      bindless_textures->commit();
 
@@ -239,7 +271,7 @@ namespace {
 
 			          // Draw cubes at random positions with textures from the bindless array
 			          // Use the tracked indices to index into the descriptor array
-			          for (size_t i = 0; i < texture_indices.size(); i++) {
+			          for (size_t i = 0; i < cube_positions.size(); i++) {
 				          // Push the position for this cube
 				          command_buffer.push_constants(vuk::ShaderStageFlagBits::eVertex, 0, cube_positions[i]);
 				          // Draw the cube with the corresponding texture index

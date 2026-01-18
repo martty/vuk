@@ -52,7 +52,7 @@ namespace vuk {
 		uint32_t num_frames = 0;
 
 		std::vector<Example*> examples;
-
+		Compiler compiler;
 #ifdef TRACY_ENABLE
 		std::unique_ptr<extra::TracyContext> tracy_context;
 #endif // TRACY_ENABLE

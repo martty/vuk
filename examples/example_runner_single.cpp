@@ -1,7 +1,6 @@
 #include "example_runner.hpp"
 
 void vuk::ExampleRunner::render() {
-	Compiler compiler;
 	// the examples can all enqueue upload tasks via enqueue_setup. for simplicity, we submit and wait for all the upload tasks before moving on to the render
 	// loop in a real application, one would have something more complex to handle uploading data it is also possible to wait for the uploads on the GPU by using
 	// these uploading futures as input
