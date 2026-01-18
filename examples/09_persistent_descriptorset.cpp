@@ -18,10 +18,10 @@
  *
  * This example demonstrates:
  * - Creating a BindlessArray with combined image samplers
- * - Generating 3 texture variants (original, Y-flipped, color-inverted)
- * - Randomly assigning textures to 10 cubes
- * - Dynamically swapping textures at runtime (every 2 seconds)
- * - Using virtual address allocation for efficient sparse binding
+ * - Generating texture variants with different image processing operations (none, Y-flip, color-invert, color-tint)
+ * - Dynamically adding cubes with dynamically generated textures at runtime
+ * - Removing random cubes when the maximum is reached
+ * - Using asynchronous texture processing with pending texture tracking
  *
  * These examples are powered by the example framework, which hides some of the code required, as that would be repeated for each example.
  * Furthermore it allows launching individual examples and all examples with the same code.
@@ -158,8 +158,8 @@ void main() {
 			      glm::mat4 view;
 			      glm::mat4 proj;
 		      } vp;
-		      vp.view = glm::lookAt(glm::vec3(0, 2.5, 7.5), glm::vec3(0), glm::vec3(0, 1, 0));
-		      vp.proj = glm::perspective(glm::degrees(70.f), 1.f, 1.f, 10.f);
+		      vp.view = glm::lookAt(glm::vec3(0, 3.5, 10.5), glm::vec3(0), glm::vec3(0, 1, 0));
+		      vp.proj = glm::perspective(glm::degrees(70.f), 1.f, 1.f, 50.f);
 		      vp.proj[1][1] *= -1;
 
 		      auto [buboVP, uboVP_fut] = create_buffer(frame_allocator, vuk::MemoryUsage::eCPUtoGPU, vuk::DomainFlagBits::eTransferOnGraphics, std::span(&vp, 1));
@@ -168,57 +168,69 @@ void main() {
 		      float delta_time = ImGui::GetIO().DeltaTime;
 		      time_accumulator += delta_time;
 
-		      // Dynamically swap textures every 2 seconds to demonstrate bindless updates
 		      static float last_toggle = 0.f;
 		      auto num_cubes = cube_positions.size();
-		      if (time_accumulator - last_toggle > 1.0f || last_toggle == 0.f && num_cubes < max_cubes) {
+		      if (time_accumulator - last_toggle > 0.75f || last_toggle == 0.f) {
 			      last_toggle = time_accumulator;
-			      // Obtain the superframe allocator to allocate images
-			      auto sf_allocator = *runner.app->superframe_allocator;
+			      if (num_cubes < max_cubes) {
+				      // Obtain the superframe allocator to allocate images
+				      auto sf_allocator = *runner.app->superframe_allocator;
 
-			      vuk::ImageAttachment ia = vuk::ImageAttachment::from_preset(
-			          vuk::ImageAttachment::Preset::eMap2D,
-			          vuk::Format::eR8G8B8A8Unorm,
-			          vuk::Extent3D{ (unsigned)initial_doge_texture->extent.width, (unsigned)initial_doge_texture->extent.height, 1u },
-			          vuk::Samples::e1);
-			      ia.usage = vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eTransferDst;
-			      ia.level_count = 1;
-			      // Store allocations
-			      ia.image = *doge_images.emplace_back(*vuk::allocate_image(sf_allocator, ia));
-			      ia.image_view = *doge_image_views.emplace_back(*vuk::allocate_image_view(sf_allocator, ia));
+				      vuk::ImageAttachment ia = vuk::ImageAttachment::from_preset(
+				          vuk::ImageAttachment::Preset::eMap2D,
+				          vuk::Format::eR8G8B8A8Unorm,
+				          vuk::Extent3D{ (unsigned)initial_doge_texture->extent.width, (unsigned)initial_doge_texture->extent.height, 1u },
+				          vuk::Samples::e1);
+				      ia.usage = vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eTransferDst;
+				      ia.level_count = 1;
+				      // Store allocations
+				      ia.image = *doge_images.emplace_back(*vuk::allocate_image(sf_allocator, ia));
+				      ia.image_view = *doge_image_views.emplace_back(*vuk::allocate_image_view(sf_allocator, ia));
 
-			      auto image_to_process = vuk::discard_ia("09_doge_i", ia);
-			      // Randomly choose a processing operation to do on the image
-			      std::uniform_int_distribution<size_t> process_to_do(0, 3); // 0: none, 1: flip, 2: invert, 3: tint
-			      auto choice = process_to_do(gen);
-			      switch (choice) {
-			      case 0:
-				      copy(initial_doge_texture, image_to_process);
-				      break;
-			      case 1:
-				      flip_pass(initial_doge_texture, image_to_process);
-				      break;
-			      case 2:
-				      invert_pass(initial_doge_texture, image_to_process);
-				      break;
-			      case 3: {
-				      vuk::Value<float> tint_r = vuk::make_constant("r", color_dist(gen));
-				      vuk::Value<float> tint_g = vuk::make_constant("g", color_dist(gen));
-				      vuk::Value<float> tint_b = vuk::make_constant("b", color_dist(gen));
-				      tint_pass(initial_doge_texture->extent.width / 8,
-				                initial_doge_texture->extent.height / 8,
-				                1,
-				                vuk::combine_image_sampler("ci", initial_doge_texture, vuk::acquire_sampler("default_sampler", {})),
-				                image_to_process,
-				                tint_r,
-				                tint_g,
-				                tint_b);
-			      } break;
+				      auto image_to_process = vuk::discard_ia("09_doge_i", ia);
+				      // Randomly choose a processing operation to do on the image
+				      std::uniform_int_distribution<size_t> process_to_do(0, 3); // 0: none, 1: flip, 2: invert, 3: tint
+				      auto choice = process_to_do(gen);
+				      switch (choice) {
+				      case 0:
+					      copy(initial_doge_texture, image_to_process);
+					      break;
+				      case 1:
+					      flip_pass(initial_doge_texture, image_to_process);
+					      break;
+				      case 2:
+					      invert_pass(initial_doge_texture, image_to_process);
+					      break;
+				      case 3: {
+					      vuk::Value<float> tint_r = vuk::make_constant("r", color_dist(gen));
+					      vuk::Value<float> tint_g = vuk::make_constant("g", color_dist(gen));
+					      vuk::Value<float> tint_b = vuk::make_constant("b", color_dist(gen));
+					      tint_pass(initial_doge_texture->extent.width / 8,
+					                initial_doge_texture->extent.height / 8,
+					                1,
+					                vuk::combine_image_sampler("ci", initial_doge_texture, vuk::acquire_sampler("default_sampler", {})),
+					                image_to_process,
+					                tint_r,
+					                tint_g,
+					                tint_b);
+				      } break;
+				      }
+				      // Put the image for future sampling
+				      image_to_process.release(vuk::Access::eFragmentSampled, vuk::DomainFlagBits::eGraphicsQueue);
+				      // Submit the processing work
+				      image_to_process.submit(frame_allocator, runner.compiler);
+				      // Add to pending textures
+				      pending_textures.push_back(image_to_process);
+			      } else {
+				      // Remove a random cube and its texture
+				      std::uniform_int_distribution<size_t> cube_to_remove(1, num_cubes - 1);
+				      size_t idx = cube_to_remove(gen);
+				      cube_positions.erase(cube_positions.begin() + idx);
+				      bindless_textures->erase(texture_indices[idx]);
+				      doge_images.erase(doge_images.begin() + idx);
+				      doge_image_views.erase(doge_image_views.begin() + idx);
+				      texture_indices.erase(texture_indices.begin() + idx);
 			      }
-
-			      image_to_process.release(vuk::Access::eFragmentSampled, vuk::DomainFlagBits::eGraphicsQueue);
-			      image_to_process.submit(frame_allocator, runner.compiler);
-			      pending_textures.push_back(image_to_process);
 		      }
 
 		      // Check if any pending textures have completed processing
@@ -269,8 +281,7 @@ void main() {
 			          glm::mat4* model = command_buffer.scratch_buffer<glm::mat4>(0, 1);
 			          *model = static_cast<glm::mat4>(glm::angleAxis(glm::radians(angle), glm::vec3(0.f, 1.f, 0.f)));
 
-			          // Draw cubes at random positions with textures from the bindless array
-			          // Use the tracked indices to index into the descriptor array
+			          // Draw cubes
 			          for (size_t i = 0; i < cube_positions.size(); i++) {
 				          // Push the position for this cube
 				          command_buffer.push_constants(vuk::ShaderStageFlagBits::eVertex, 0, cube_positions[i]);
