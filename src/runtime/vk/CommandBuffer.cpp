@@ -599,25 +599,28 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::draw_mesh_tasks_indirect(const Buffer& indirect_buffer) {
+	CommandBuffer& CommandBuffer::draw_mesh_tasks_indirect(Buffer<> indirect_buffer) {
 		VUK_EARLY_RET();
 		if (!_bind_graphics_pipeline_state()) {
 			return *this;
 		}
-		ctx.vkCmdDrawMeshTasksIndirectEXT(command_buffer, indirect_buffer.buffer, indirect_buffer.offset, 1, 0);
+		auto& ae_indir = allocator->get_context().resolve_ptr(indirect_buffer.ptr);
+		ctx.vkCmdDrawMeshTasksIndirectEXT(command_buffer, ae_indir.buffer.buffer, ae_indir.buffer.offset, 1, 0);
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::draw_mesh_tasks_indirect_count(size_t max_command_count, const Buffer& indirect_buffer, const Buffer& count_buffer) {
+	CommandBuffer& CommandBuffer::draw_mesh_tasks_indirect_count(size_t max_command_count, Buffer<> indirect_buffer, Buffer<> count_buffer) {
 		VUK_EARLY_RET();
 		if (!_bind_graphics_pipeline_state()) {
 			return *this;
 		}
+		auto& ae_indir = allocator->get_context().resolve_ptr(indirect_buffer.ptr);
+		auto& ae_count = allocator->get_context().resolve_ptr(count_buffer.ptr);
 		ctx.vkCmdDrawMeshTasksIndirectCountEXT(command_buffer,
-		                                       indirect_buffer.buffer,
-		                                       indirect_buffer.offset,
-		                                       count_buffer.buffer,
-		                                       count_buffer.offset,
+		                                       ae_indir.buffer.buffer,
+		                                       ae_indir.buffer.offset,
+		                                       ae_count.buffer.buffer,
+		                                       ae_count.buffer.offset,
 		                                       (uint32_t)max_command_count,
 		                                       sizeof(VkDrawMeshTasksIndirectCommandEXT));
 		return *this;
@@ -902,8 +905,8 @@ namespace vuk {
 
 	CommandBuffer& CommandBuffer::copy_buffer(Buffer<> src, Buffer<> dst) {
 		VUK_EARLY_RET();
-		assert(src.size == dst.size);
-		if (src.size == 0) {
+		assert(src.sz_bytes == dst.sz_bytes);
+		if (src.sz_bytes == 0) {
 			return *this;
 		}
 		auto bo_src = allocator->get_context().ptr_to_buffer_offset(src.ptr);
@@ -927,7 +930,7 @@ namespace vuk {
 	}
 
 	CommandBuffer& CommandBuffer::fill_buffer(Buffer<> dst, uint32_t data) {
-		if (dst.size == 0) {
+		if (dst.sz_bytes == 0) {
 			return *this;
 		}
 		auto& underlying = allocator->get_context().resolve_ptr(dst.ptr).buffer;
@@ -936,7 +939,7 @@ namespace vuk {
 	}
 
 	CommandBuffer& CommandBuffer::update_buffer(Buffer<> dst, const void* data) {
-		if (dst.size == 0) {
+		if (dst.sz_bytes == 0) {
 			return *this;
 		}
 		auto bo = allocator->get_context().ptr_to_buffer_offset(dst.ptr);

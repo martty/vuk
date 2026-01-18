@@ -25,7 +25,7 @@ namespace vuk {
 		}
 
 		auto src = *allocate_buffer(allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, 1 });
-		::memcpy(&src[0], src_data, size);
+		::memcpy(&(*src)[0], src_data, size);
 
 		auto src_buf = acquire("_src", src.get(), Access::eNone, VUK_CALL);
 		auto dst_buf = discard("_dst", dst, VUK_CALL);
@@ -81,7 +81,7 @@ namespace vuk {
 		size_t alignment = format_to_texel_block_size(ve.format);
 		size_t size = compute_image_size(ve.format, ve.extent);
 		auto src = *allocate_buffer(allocator, BufferCreateInfo{ MemoryUsage::eCPUonly, size, alignment });
-		::memcpy(&src[0], src_data, size);
+		::memcpy(&(*src)[0], src_data, size);
 		BufferImageCopy bc;
 		bc.imageOffset = { 0, 0, 0 };
 		bc.bufferRowLength = 0;

@@ -250,7 +250,7 @@ namespace vuk {
 		return TupleMap<drop_t<1, typename traits::types>>::template make_lam<typename traits::result_type, F>(
 		    name, std::forward<F>(body), scheduling_info, VUK_CALL);
 	}
-	
+
 	/// @brief Turn a compute pipeline create info into a callable compute pass
 	inline auto lift_compute(PipelineBaseCreateInfo pbci, VUK_CALLSTACK) {
 		return [pbci]<class... T>(size_t size_x, size_t size_y, size_t size_z, Value<T>... args) mutable { // no callstack for these :/
@@ -309,7 +309,8 @@ namespace vuk {
 		if (compute_pipeline->reflection_info.push_constant_ranges.size() > 0) {
 			auto& pcr = compute_pipeline->reflection_info.push_constant_ranges[0];
 			auto base_ty = current_module->types.make_pointer_ty(current_module->types.make_scalar_ty(Type::FLOAT_TY, 32)); // TODO: IR types from shader types
-			for (auto j = 0; j < pcr.num_members; j++) {
+			for (auto j = 0; j < pcr.members.size(); j++) {
+				assert(false); // TODO: merge code with BE
 				// TODO: check which args are pointers and dereference on host the once that are not
 				arg_types.push_back(current_module->types.make_imbued_ty(base_ty, Access::eComputeRW));
 				ret_types.emplace_back(current_module->types.make_aliased_ty(base_ty, i + 4));

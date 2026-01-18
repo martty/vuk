@@ -1115,7 +1115,7 @@ namespace vuk {
 					std::destroy_at<Swapchain*>((Swapchain**)v);
 				} else if (t->kind == Type::COMPOSITE_TY) {
 					t->composite.destroy(v);
-				} else if (t->kind == Type::INTEGER_TY || t->kind == FLOAT_TY) {
+				} else if (t->kind == Type::INTEGER_TY || t->kind == Type::FLOAT_TY) {
 					// nothing to do
 				} else if (t->kind == Type::MEMORY_TY) {
 					// nothing to do

@@ -743,7 +743,7 @@ namespace vuk {
 				}
 			} else if (base_ty->is_bufferlike_view()) {
 				auto& att = *reinterpret_cast<Buffer<>*>(value);
-				if (att.size == 0) {
+				if (att.sz_bytes == 0) {
 					return;
 				}
 				auto bo = alloc.get_context().ptr_to_buffer_offset(att.ptr);
@@ -1332,7 +1332,7 @@ namespace vuk {
 						cobuf.bind_compute_pipeline(pbi);
 
 						auto& flat_bindings = pbi->reflection_info.flat_bindings;
-						for (size_t i = first_parm; i < node->call.args.size(); i++) {
+						for (size_t i = first_parm; i < (first_parm + flat_bindings.size()); i++) {
 							auto& parm = node->call.args[i];
 							if (parm.type()->kind != Type::POINTER_TY) {
 								auto binding_idx = i - first_parm;
@@ -1365,21 +1365,12 @@ namespace vuk {
 								opaque_rets[binding_idx] = val;
 							}
 						}
+						// remaining arguments as push constants
 						size_t pc_offset = 0;
-						if (pbi->reflection_info.push_constant_ranges.size() > 0) {
-							auto& pcr = pbi->reflection_info.push_constant_ranges[0];
-							auto base_ty = current_module->types.make_pointer_ty(current_module->types.u32());
-							for (auto parm_idx = 0; parm_idx < pcr.num_members; parm_idx++) {
-								auto& parm = node->call.args[parm_idx + first_parm];
-								auto val = get_value(parm);
-								auto ptr = *reinterpret_cast<ptr_base*>(val);
-								// TODO: check which args are pointers and dereference on host the once that are not
-								cobuf.push_constants(ShaderStageFlagBits::eCompute, pc_offset, ptr);
-								auto binding_idx = parm_idx;
-								opaque_rets[binding_idx] = val;
-								parm_idx++;
-								pc_offset += sizeof(uint64_t);
-							}
+						for (size_t i = (first_parm + flat_bindings.size()); i < node->call.args.size(); i++) {
+							auto& parm = node->call.args[i];
+							cobuf.push_constants(ShaderStageFlagBits::eCompute, pc_offset, get_value(parm), parm.type()->size);
+							pc_offset += parm.type()->size;
 						}
 
 						cobuf.dispatch(constant<uint32_t>(node->call.args[1]), constant<uint32_t>(node->call.args[2]), constant<uint32_t>(node->call.args[3]));
