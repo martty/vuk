@@ -552,7 +552,7 @@ public:
 	}
 
 	[[nodiscard]] inline Value<Buffer> discard_buf(Name name, Buffer buf, VUK_CALLSTACK) {
-		assert(buf.buffer != VK_NULL_HANDLE);
+		assert(buf.buffer != VK_NULL_HANDLE || buf.size == 0);
 		Ref ref = current_module->make_declare_buffer(buf);
 		current_module->name_output(ref, name.c_str());
 		current_module->set_source_location(ref.node, VUK_CALL);
