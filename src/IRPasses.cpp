@@ -2,8 +2,8 @@
 #include "vuk/Exception.hpp"
 #include "vuk/IRProcess.hpp"
 #include "vuk/RenderGraph.hpp"
-#include "vuk/SyncLowering.hpp"
 #include "vuk/runtime/CommandBuffer.hpp"
+#include "vuk/SyncLowering.hpp"
 
 #include <fmt/printf.h>
 #include <memory_resource>
@@ -581,7 +581,9 @@ namespace vuk {
 					add_breaking_result(node, out);
 					if (do_ssa && node->type[out]->hash_value == current_module->types.builtin_buffer) {
 						auto& buf = *reinterpret_cast<Buffer*>(node->acquire.values[out]);
-						assert(buf.buffer != VK_NULL_HANDLE);
+						if (buf.size == 0) {
+							break;
+						}
 						bool found = false;
 						for (auto& [existing_buf, link] : bufs) {
 							if (buf.buffer == existing_buf.buffer && Range{ buf.offset, buf.size }.intersect({ existing_buf.offset, existing_buf.size })) {
