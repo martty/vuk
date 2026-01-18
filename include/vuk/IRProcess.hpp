@@ -421,6 +421,19 @@ namespace vuk {
 			}
 			break;
 		}
+		case Type::FLOAT_TY: {
+			switch (t->integer.width) {
+			case 32:
+				return f(*reinterpret_cast<float*>(args)...);
+				break;
+			case 64:
+				return f(*reinterpret_cast<double*>(args)...);
+				break;
+			default:
+				assert(0);
+			}
+			break;
+		}
 		default:
 			break;
 		}
@@ -473,8 +486,10 @@ namespace vuk {
 			eval_with_type(
 			    t,
 			    [&](auto a, auto b) {
-				    auto c = a % b;
-				    memcpy(result, &c, sizeof(c));
+				    if constexpr (!std::is_floating_point_v<decltype(a)>) {
+					    auto c = a % b;
+					    memcpy(result, &c, sizeof(c));
+				    }
 			    },
 			    a,
 			    b);

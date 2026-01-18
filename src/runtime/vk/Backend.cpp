@@ -79,6 +79,15 @@ namespace vuk {
 					fmt::format_to(std::back_inserter(msg), "{}", constant<uint64_t>(parm));
 					break;
 				}
+			} else if (ty->kind == Type::FLOAT_TY) {
+				switch (ty->integer.width) {
+				case 32:
+					fmt::format_to(std::back_inserter(msg), "{}", constant<float>(parm));
+					break;
+				case 64:
+					fmt::format_to(std::back_inserter(msg), "{}", constant<double>(parm));
+					break;
+				}
 			} else if (ty->kind == Type::MEMORY_TY) {
 				fmt::format_to(std::back_inserter(msg), "<mem>");
 			}
@@ -1297,7 +1306,9 @@ namespace vuk {
 					case Node::BinOp::DIV:
 						return a / b;
 					case Node::BinOp::MOD:
-						return a % b;
+						if constexpr (!std::is_floating_point_v<T>) {
+							return a % b;
+						}
 					}
 					assert(0);
 					return a;
@@ -1310,6 +1321,19 @@ namespace vuk {
 						break;
 					case 64:
 						sched.done(node, host_stream, do_op(uint64_t{}, node));
+						break;
+					default:
+						assert(0);
+					}
+					break;
+				}
+				case Type::FLOAT_TY: {
+					switch (node->type[0]->integer.width) {
+					case 32:
+						sched.done(node, host_stream, do_op(float{}, node));
+						break;
+					case 64:
+						sched.done(node, host_stream, do_op(double{}, node));
 						break;
 					default:
 						assert(0);

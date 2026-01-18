@@ -32,7 +32,19 @@ namespace vuk {
 	using UserCallbackType = fu2::unique_function<void(CommandBuffer&, std::span<void*>, std::span<void*>, std::span<void*>)>;
 
 	struct Type {
-		enum TypeKind { VOID_TY = 0, MEMORY_TY = 1, INTEGER_TY, COMPOSITE_TY, ARRAY_TY, UNION_TY, IMBUED_TY, ALIASED_TY, OPAQUE_FN_TY, SHADER_FN_TY } kind;
+		enum TypeKind {
+			VOID_TY = 0,
+			MEMORY_TY = 1,
+			INTEGER_TY,
+			FLOAT_TY,
+			COMPOSITE_TY,
+			ARRAY_TY,
+			UNION_TY,
+			IMBUED_TY,
+			ALIASED_TY,
+			OPAQUE_FN_TY,
+			SHADER_FN_TY
+		} kind;
 		size_t size = ~0ULL;
 
 		TypeDebugInfo debug_info;
@@ -121,6 +133,7 @@ namespace vuk {
 				hash_combine_direct(v, (uint32_t)t->size);
 				return v;
 			case INTEGER_TY:
+			case FLOAT_TY:
 				hash_combine_direct(v, t->integer.width);
 				return v;
 			case ARRAY_TY:
@@ -248,6 +261,8 @@ namespace vuk {
 				return "mem";
 			case INTEGER_TY:
 				return t->integer.width == 32 ? "i32" : "i64";
+			case FLOAT_TY:
+				return t->integer.width == 32 ? "f32" : "f64";
 			case ARRAY_TY:
 				return to_string(t->array.T->get()) + "[" + std::to_string(t->array.count) + "]";
 			case COMPOSITE_TY:
@@ -560,7 +575,7 @@ namespace vuk {
 
 	template<class T>
 	T& constant(Ref ref) {
-		assert(ref.type()->kind == Type::INTEGER_TY || ref.type()->kind == Type::MEMORY_TY);
+		assert(ref.type()->kind == Type::INTEGER_TY || ref.type()->kind == Type::FLOAT_TY || ref.type()->kind == Type::MEMORY_TY);
 		return *reinterpret_cast<T*>(ref.node->constant.value);
 	}
 
@@ -994,7 +1009,7 @@ namespace vuk {
 					std::destroy_at<SamplerCreateInfo>((SamplerCreateInfo*)v);
 				} else if (t->hash_value == builtin_swapchain) {
 					std::destroy_at<Swapchain*>((Swapchain**)v);
-				} else if (t->kind == Type::INTEGER_TY) {
+				} else if (t->kind == Type::INTEGER_TY || t->kind == Type::FLOAT_TY) {
 					// nothing to do
 				} else if (t->kind == Type::MEMORY_TY) {
 					// nothing to do

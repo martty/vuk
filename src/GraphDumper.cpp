@@ -3,8 +3,8 @@
 
 #if VUK_OS_WINDOWS
 #include <Windows.h>
-#include <shellapi.h>
 #include <fstream>
+#include <shellapi.h>
 #endif
 
 #include "vuk/IR.hpp"
@@ -50,11 +50,12 @@ namespace vuk {
 				return;
 			}
 			if (node->kind == Node::CONSTANT) {
-				if (node->type[0]->kind == Type::INTEGER_TY || node->type[0]->kind == Type::MEMORY_TY || node->type[0]->kind == Type::OPAQUE_FN_TY) {
+				if (node->type[0]->kind == Type::INTEGER_TY || node->type[0]->kind == Type::FLOAT_TY || node->type[0]->kind == Type::MEMORY_TY ||
+				    node->type[0]->kind == Type::OPAQUE_FN_TY) {
 					return;
 				}
 			}
-			if (node->kind == Node::PLACEHOLDER ||  (bridge_slices && node->kind == Node::SLICE)) {
+			if (node->kind == Node::PLACEHOLDER || (bridge_slices && node->kind == Node::SLICE)) {
 				return;
 			}
 
@@ -130,7 +131,8 @@ namespace vuk {
 			for (size_t i = 0; i < arg_count; i++) {
 				auto arg = node->generic_node.arg_count != (uint8_t)~0u ? node->fixed_node.args[i] : node->variable_node.args[i];
 				if (arg.node->kind == Node::CONSTANT) {
-					if (arg.type()->kind == Type::INTEGER_TY || arg.type()->kind == Type::MEMORY_TY || arg.type()->kind == Type::OPAQUE_FN_TY) {
+					if (arg.type()->kind == Type::INTEGER_TY || arg.type()->kind == Type::FLOAT_TY || arg.type()->kind == Type::MEMORY_TY ||
+					    arg.type()->kind == Type::OPAQUE_FN_TY) {
 						continue;
 					}
 				}
@@ -142,7 +144,7 @@ namespace vuk {
 					ss << current_cluster << uintptr_t(bridged_arg.node) << " :r" << bridged_arg.index << " -> " << current_cluster << uintptr_t(node) << " :a" << i
 					   << " :n [color=green, label=\"";
 					/* if (r.base_level > 0 || r.level_count != VK_REMAINING_MIP_LEVELS) {
-						ss << fmt::format("[m{}:{}]", r.base_level, r.base_level + r.level_count - 1);
+					  ss << fmt::format("[m{}:{}]", r.base_level, r.base_level + r.level_count - 1);
 					}*/
 					ss << "\"]\n";
 				} else {

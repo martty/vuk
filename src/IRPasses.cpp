@@ -1499,7 +1499,7 @@ namespace vuk {
 		impl->naming_index_counter = 0;
 		impl->scheduled.clear();
 		impl->item_list.clear();
-		std::vector<ScheduledItem> initial_set(impl->scheduled_execables.begin(), impl->scheduled_execables.end()); 
+		std::vector<ScheduledItem> initial_set(impl->scheduled_execables.begin(), impl->scheduled_execables.end());
 
 		// these are the items that were determined to run
 		for (auto& i : initial_set) {
@@ -1770,7 +1770,7 @@ namespace vuk {
 		new_nodes.clear();
 
 		VUK_DO_OR_RETURN(impl->collect_chains());
-		
+
 		impl->scheduled_execables.clear();
 
 		for (auto& node : impl->ref_nodes) {
