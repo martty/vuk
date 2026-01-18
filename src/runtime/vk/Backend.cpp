@@ -1606,7 +1606,7 @@ namespace vuk {
 					cobuf.bind_compute_pipeline(pbi);
 
 					auto& flat_bindings = pbi->reflection_info.flat_bindings;
-					for (size_t i = first_parm; i < node->call.args.size(); i++) {
+					for (size_t i = first_parm; i < (first_parm + flat_bindings.size()); i++) {
 						auto& parm = node->call.args[i];
 
 						auto binding_idx = i - first_parm;
@@ -1635,6 +1635,13 @@ namespace vuk {
 						}
 
 						opaque_rets[binding_idx] = val;
+					}
+					// remaining arguments as push constants
+					size_t pc_offset = 0;
+					for (size_t i = (first_parm + flat_bindings.size()); i < node->call.args.size(); i++) {
+						auto& parm = node->call.args[i];
+						cobuf.push_constants(ShaderStageFlagBits::eCompute, pc_offset, sched.get_value(parm), parm.type()->size);
+						pc_offset += parm.type()->size;
 					}
 					cobuf.dispatch(constant<uint32_t>(node->call.args[1]), constant<uint32_t>(node->call.args[2]), constant<uint32_t>(node->call.args[3]));
 

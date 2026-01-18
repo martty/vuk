@@ -1322,6 +1322,35 @@ namespace vuk {
 		return { expected_value };
 	}
 
+	std::shared_ptr<Type> member_to_scalar_ir_type(const Program::Member& member) {
+		Type::TypeKind scalar_type;
+
+		// Map the base type
+		switch (member.type) {
+		case Program::Type::efloat:
+			scalar_type = Type::FLOAT_TY;
+			break;
+		case Program::Type::edouble:
+			scalar_type = Type::FLOAT_TY;
+			break;
+		case Program::Type::eint:
+			scalar_type = Type::INTEGER_TY;
+			break;
+		case Program::Type::euint:
+			scalar_type = Type::INTEGER_TY;
+			break;
+		case Program::Type::ebool:
+			scalar_type = Type::INTEGER_TY;
+			break;
+		default:
+			assert(0 && "Unsupported type");
+			return nullptr;
+		}
+
+		uint32_t bit_width = member.size * 8;
+		return current_module->types.emplace_type(std::shared_ptr<Type>(new Type{ .kind = scalar_type, .size = member.size, .integer = { .width = bit_width } }));
+	}
+
 	Result<void> RGCImpl::implicit_linking(Allocator& alloc, IRModule* module, std::pmr::polymorphic_allocator<std::byte> allocator) {
 		std::pmr::vector<Node*> nodes(allocator);
 
@@ -1373,6 +1402,15 @@ namespace vuk {
 					ret_types.emplace_back(current_module->types.make_aliased_ty(base_ty, i + 4));
 					i++;
 				}
+				if (pipeline->reflection_info.push_constant_ranges.size() > 0) {
+					auto& pcr = pipeline->reflection_info.push_constant_ranges[0];
+					for (auto j = 0; j < pcr.members.size(); j++) {
+						auto base_ty = member_to_scalar_ir_type(pcr.members[j]);
+						arg_types.push_back(current_module->types.make_imbued_ty(base_ty, Access::eComputeRW));
+						i++;
+					}
+				}
+
 				auto shader_fn_ty = current_module->types.make_shader_fn_ty(arg_types, ret_types, vuk::DomainFlagBits::eAny, pipeline, pipeline->pipeline_name.c_str());
 				node.call.args[0] = current_module->make_declare_fn(shader_fn_ty);
 				delete[] node.type.data();

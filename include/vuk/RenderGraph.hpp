@@ -432,13 +432,13 @@ public:
 
 	/// @brief Turn a compute pipeline create info into a callable compute pass
 	inline auto lift_compute(PipelineBaseCreateInfo pbci, VUK_CALLSTACK) {
-		return [pbci, inner_scope = VUK_CALL]<class... T>(size_t size_x, size_t size_y, size_t size_z, Value<T>... args) mutable { // no callstack for these :/
+		return [pbci]<class... T>(size_t size_x, size_t size_y, size_t size_z, Value<T>... args) mutable { // no callstack for these :/
 			Node* node = current_module->make_call(current_module->make_constant(pbci),
 			                                       current_module->make_constant(size_x),
 			                                       current_module->make_constant(size_y),
 			                                       current_module->make_constant(size_z),
 			                                       args.get_head()...);
-			current_module->set_source_location(node, inner_scope);
+			// current_module->set_source_location(node, inner_scope);
 			auto extnode = std::make_shared<ExtNode>(node);
 			(args.node->deps.push_back(extnode), ...);
 		};

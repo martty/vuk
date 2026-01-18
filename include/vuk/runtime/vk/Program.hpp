@@ -112,13 +112,17 @@ namespace vuk {
 			VkShaderStageFlags stage;
 		};
 
+		struct PushConstant : VkPushConstantRange {
+			std::vector<Member> members;
+		};
+
 		static std::vector<Program> introspect(const uint32_t* ir, size_t word_count);
 		std::string entry_point;
 
 		std::array<unsigned, 3> local_size;
 
 		std::vector<Attribute> attributes;
-		std::vector<VkPushConstantRange> push_constant_ranges;
+		std::vector<PushConstant> push_constant_ranges;
 		std::vector<SpecConstant> spec_constants;
 		struct Descriptors {
 			std::vector<Binding> bindings; // sorted by binding #

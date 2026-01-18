@@ -472,10 +472,13 @@ namespace vuk {
 			// push constants
 			for (auto& si : resources.push_constant_buffers) {
 				auto type = refl.get_type(si.base_type_id);
-				VkPushConstantRange pcr;
+				Program::PushConstant pcr;
 				pcr.offset = 0;
 				pcr.size = (uint32_t)refl.get_declared_struct_size(type);
 				pcr.stageFlags = stage;
+				if (type.basetype == spirv_cross::SPIRType::Struct) {
+					reflect_members(refl, refl.get_type(si.type_id), pcr.members);
+				}
 				program.push_constant_ranges.push_back(pcr);
 			}
 
