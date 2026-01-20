@@ -243,7 +243,7 @@ void main() {
 		                                            VUK_ARG(vuk::BindlessArray*, vuk::eFragmentWrite) ba) {
 			                                         // NOTE: This function runs when the callback happens!
 
-			                                         // Check if any pending textures have completed processing
+			                                         // Put the pending textures into the bindless array
 			                                         for (auto it = pending_textures.begin(); it != pending_textures.end();) {
 				                                         auto& tex = *it;
 				                                         auto status = tex.poll();
