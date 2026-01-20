@@ -1146,7 +1146,7 @@ namespace vuk {
 		}
 
 		template<class T>
-		Ref make_constant(T* value) {
+		Ref make_constant_ptr(T* value) {
 			std::shared_ptr<Type>* ty;
 			if constexpr (std::is_same_v<T, uint64_t>) {
 				ty = new std::shared_ptr<Type>[1]{ types.u64() };
@@ -1175,49 +1175,49 @@ namespace vuk {
 			auto mem_ty = new std::shared_ptr<Type>[1]{ types.memory(sizeof(ImageAttachment)) };
 			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = ptr, .owned = true } }));
 			if (value.extent.width > 0) {
-				args_ptr[1] = make_constant(&ptr->extent.width);
+				args_ptr[1] = make_constant_ptr(&ptr->extent.width);
 			} else {
 				args_ptr[1] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1]{ types.u32() }, 1 } }));
 			}
 			if (value.extent.height > 0) {
-				args_ptr[2] = make_constant(&ptr->extent.height);
+				args_ptr[2] = make_constant_ptr(&ptr->extent.height);
 			} else {
 				args_ptr[2] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1]{ types.u32() }, 1 } }));
 			}
 			if (value.extent.depth > 0) {
-				args_ptr[3] = make_constant(&ptr->extent.depth);
+				args_ptr[3] = make_constant_ptr(&ptr->extent.depth);
 			} else {
 				args_ptr[3] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1]{ types.u32() }, 1 } }));
 			}
 			if (value.format != Format::eUndefined) {
-				args_ptr[4] = make_constant(&ptr->format);
+				args_ptr[4] = make_constant_ptr(&ptr->format);
 			} else {
 				args_ptr[4] =
 				    first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1]{ types.memory(sizeof(Format)) }, 1 } }));
 			}
 			if (value.sample_count != Samples::eInfer) {
-				args_ptr[5] = make_constant(&ptr->sample_count);
+				args_ptr[5] = make_constant_ptr(&ptr->sample_count);
 			} else {
 				args_ptr[5] =
 				    first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1]{ types.memory(sizeof(Samples)) }, 1 } }));
 			}
 			if (value.base_layer != VK_REMAINING_ARRAY_LAYERS) {
-				args_ptr[6] = make_constant(&ptr->base_layer);
+				args_ptr[6] = make_constant_ptr(&ptr->base_layer);
 			} else {
 				args_ptr[6] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1]{ types.u32() }, 1 } }));
 			}
 			if (value.layer_count != VK_REMAINING_ARRAY_LAYERS) {
-				args_ptr[7] = make_constant(&ptr->layer_count);
+				args_ptr[7] = make_constant_ptr(&ptr->layer_count);
 			} else {
 				args_ptr[7] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1]{ types.u32() }, 1 } }));
 			}
 			if (value.base_level != VK_REMAINING_MIP_LEVELS) {
-				args_ptr[8] = make_constant(&ptr->base_level);
+				args_ptr[8] = make_constant_ptr(&ptr->base_level);
 			} else {
 				args_ptr[8] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1]{ types.u32() }, 1 } }));
 			}
 			if (value.level_count != VK_REMAINING_MIP_LEVELS) {
-				args_ptr[9] = make_constant(&ptr->level_count);
+				args_ptr[9] = make_constant_ptr(&ptr->level_count);
 			} else {
 				args_ptr[9] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1]{ types.u32() }, 1 } }));
 			}
@@ -1233,7 +1233,7 @@ namespace vuk {
 			auto mem_ty = new std::shared_ptr<Type>[1]{ types.memory(sizeof(Buffer)) };
 			args_ptr[0] = first(emplace_op(Node{ .kind = Node::CONSTANT, .type = std::span{ mem_ty, 1 }, .constant = { .value = buf_ptr, .owned = true } }));
 			if (value.size != ~(0ULL)) {
-				args_ptr[1] = make_constant(&buf_ptr->size);
+				args_ptr[1] = make_constant_ptr(&buf_ptr->size);
 			} else {
 				args_ptr[1] = first(emplace_op(Node{ .kind = Node::PLACEHOLDER, .type = std::span{ new std::shared_ptr<Type>[1]{ types.u64() }, 1 } }));
 			}

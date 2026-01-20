@@ -499,7 +499,7 @@ namespace vuk {
 		/// @brief Bind a persistent descriptor set to the command buffer
 		/// @param set The set bind index to be used
 		/// @param desc_set The persistent descriptor set to be bound
-		CommandBuffer& bind_persistent(unsigned set, PersistentDescriptorSet& desc_set);
+		CommandBuffer& bind_persistent(unsigned set, const PersistentDescriptorSet& desc_set);
 
 		/// @brief Bind a buffer to the command buffer
 		/// @param set The set bind index to be used

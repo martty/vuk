@@ -371,7 +371,7 @@ namespace vuk {
 		return *this;
 	}
 
-	CommandBuffer& CommandBuffer::bind_persistent(unsigned set, PersistentDescriptorSet& pda) {
+	CommandBuffer& CommandBuffer::bind_persistent(unsigned set, const PersistentDescriptorSet& pda) {
 		VUK_EARLY_RET();
 		assert(set < VUK_MAX_SETS);
 		persistent_sets_to_bind.set(set, true);
