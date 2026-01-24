@@ -52,6 +52,9 @@ namespace vuk {
 			Type* ty = parm.node->type[0].get();
 			if (ty->kind == Type::INTEGER_TY) {
 				switch (ty->scalar.width) {
+				case 16:
+					fmt::format_to(std::back_inserter(msg), "{}", constant<uint16_t>(parm));
+					break;
 				case 32:
 					fmt::format_to(std::back_inserter(msg), "{}", constant<uint32_t>(parm));
 					break;

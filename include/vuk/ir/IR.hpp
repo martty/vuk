@@ -661,6 +661,10 @@ namespace vuk {
 		return node->links[index];
 	}
 
+	inline const ChainLink& Ref::link() const noexcept {
+		return node->links[index];
+	}
+
 	template<class T>
 	T& constant(Ref ref) {
 		assert(ref.node->kind == Node::CONSTANT);
@@ -975,6 +979,10 @@ namespace vuk {
 				return emplace_type(std::shared_ptr<Type>(t));
 			}
 
+			std::shared_ptr<Type> u16() {
+				return make_scalar_ty(Type::INTEGER_TY, 16);
+			}
+
 			std::shared_ptr<Type> u32() {
 				return make_scalar_ty(Type::INTEGER_TY, 32);
 			}
@@ -1258,6 +1266,8 @@ namespace vuk {
 				ty = new std::shared_ptr<Type>[1]{ types.u64() };
 			} else if constexpr (std::is_same_v<T, uint32_t>) {
 				ty = new std::shared_ptr<Type>[1]{ types.u32() };
+			} else if constexpr (std::is_same_v<T, uint16_t>) {
+				ty = new std::shared_ptr<Type>[1]{ types.u16() };
 			} else {
 				ty = new std::shared_ptr<Type>[1]{ types.memory(sizeof(T)) };
 			}
@@ -1265,20 +1275,6 @@ namespace vuk {
 			                              .type = std::span{ ty, 1 },
 			                              .compute_class = DomainFlagBits::eConstant,
 			                              .constant = { .value = new (new char[sizeof(T)]) T(value), .owned = true } }));
-		}
-
-		template<class T>
-		Ref make_constant_ptr(T* value) {
-			std::shared_ptr<Type>* ty;
-			if constexpr (std::is_same_v<T, uint64_t>) {
-				ty = new std::shared_ptr<Type>[1]{ types.u64() };
-			} else if constexpr (std::is_same_v<T, uint32_t>) {
-				ty = new std::shared_ptr<Type>[1]{ types.u32() };
-			} else {
-				ty = new std::shared_ptr<Type>[1]{ types.memory(sizeof(T)) };
-			}
-			return first(emplace_op(Node{
-			    .kind = Node::CONSTANT, .type = std::span{ ty, 1 }, .compute_class = DomainFlagBits::eConstant, .constant = { .value = value, .owned = false } }));
 		}
 
 		void set_value(Ref ref, Ref value) {

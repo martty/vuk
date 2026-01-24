@@ -1376,6 +1376,7 @@ namespace vuk {
 
 		std::shared_ptr<Type> type() const noexcept;
 		ChainLink& link() noexcept;
+		const ChainLink& link() const noexcept;
 
 		explicit constexpr operator bool() const noexcept {
 			return node != nullptr;
