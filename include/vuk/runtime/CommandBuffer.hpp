@@ -340,17 +340,27 @@ namespace vuk {
 			return ctx;
 		}
 
+		/// @brief Gets the underlying Vulkan command buffer handle.
+		/// Unsafe: use only when not setting state, eg. tracing. Otherwise use the bind_X_state functions.
 		VkCommandBuffer get_underlying() const {
 			return command_buffer;
 		}
+
 		/// @brief Retrieve information about the current renderpass
 		const RenderPassInfo& get_ongoing_render_pass() const;
 
+		/// @brief Get the stream where this CommandBuffer is scheduled to execute on.
 		Stream& get_scheduled_stream() {
 			return *stream;
 		}
 
+		/// @brief Gets the domain where this CommandBuffer will execute on.
 		DomainFlagBits get_scheduled_domain() const;
+
+		/// @brief Gets the allocator associated with this object.
+		Allocator get_allocator() {
+			return *allocator;
+		}
 
 		// command buffer state setting
 		// when a state is set it is persistent for a pass (similar to Vulkan dynamic state) - see documentation
