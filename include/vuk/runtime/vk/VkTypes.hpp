@@ -76,8 +76,8 @@ namespace vuk {
 		eAccelerationStructureBuildNV = 0x02000000,
 		eRayTracingShaderNV = 0x00200000,
 		eCopy = 0x100000000ULL,
-		eBlit = 0x200000000ULL,
-		eResolve = 0x400000000ULL,
+		eResolve = 0x200000000ULL,
+		eBlit = 0x400000000ULL,
 		eClear = 0x800000000ULL
 	};
 
