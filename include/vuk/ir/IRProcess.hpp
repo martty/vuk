@@ -73,6 +73,8 @@ namespace vuk {
 		std::unordered_set<Node*> expanded;
 		std::vector<ScheduledItem*> item_list;
 
+		std::unordered_map<Ref, ImageUsageFlags> image_usage_flags;
+
 		size_t naming_index_counter = 0;
 		void schedule_new(Node* node) {
 			if (scheduled.contains(node)) {

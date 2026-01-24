@@ -52,6 +52,14 @@ namespace vuk {
 						node->debug_info = nullptr;
 					}
 
+					// Update image_usage_flags to point to the new allocation node
+					auto old_ref = Ref{ node, 0 };
+					if (auto it = impl.image_usage_flags.find(old_ref); it != impl.image_usage_flags.end()) {
+						auto usage_flags = it->second;
+						impl.image_usage_flags.erase(it);
+						impl.image_usage_flags[new_alloc] = usage_flags;
+					}
+
 					r.replace({ node, 0 }, new_alloc);
 				}
 			}

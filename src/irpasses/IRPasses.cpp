@@ -796,6 +796,7 @@ namespace vuk {
 		VUK_DO_OR_RETURN(impl->build_links(alloc.get_context(), allocator));
 		impl->ir_passes = { { make_ir_pass<expand_default_view>(),
 			                    make_ir_pass<constant_folding>(),
+			                    make_ir_pass<propagate_usage_flags>(),
 			                    make_ir_pass<reify_inference>(),
 			                    make_ir_pass<constant_folding>(),
 			                    make_ir_pass<validate_duplicated_resource_ref>() } };

@@ -35,6 +35,11 @@ namespace vuk {
 
 		Result<void> operator()() override;
 	};
+	struct propagate_usage_flags : IRPass {
+		using IRPass::IRPass;
+
+		Result<void> operator()() override;
+	};
 	struct constant_folding : IRPass {
 		using IRPass::IRPass;
 

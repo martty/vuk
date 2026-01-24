@@ -334,6 +334,7 @@ target_sources(vuk PRIVATE
 	src/irpasses/LinkBuilding.cpp
 	src/irpasses/ReifyInference.cpp
 	src/irpasses/ExpandDefaultView.cpp
+	src/irpasses/PropagateUsageFlags.cpp
 	src/irpasses/ConstantFolding.cpp
 	src/irpasses/DuplicatedResourceRef.cpp
 	src/irpasses/ForcedConvergence.cpp
