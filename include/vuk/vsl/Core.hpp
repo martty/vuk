@@ -29,11 +29,11 @@ namespace vuk {
 
 		auto src_buf = acquire("_src", src.get(), Access::eNone, VUK_CALL);
 		auto dst_buf = discard("_dst", dst, VUK_CALL);
-		auto pass = make_pass("upload buffer",
-		                      [](CommandBuffer& command_buffer, VUK_ARG(Buffer<>, Access::eTransferRead) src, VUK_ARG(Buffer<T>, Access::eTransferWrite) dst) {
-			                      command_buffer.copy_buffer(src, dst->to_byte_view());
-			                      return dst;
-		                      });
+		auto pass =
+		    make_pass("upload buffer", [](CommandBuffer& command_buffer, VUK_ARG(Buffer<>, Access::eCopyRead) src, VUK_ARG(Buffer<T>, Access::eCopyWrite) dst) {
+			    command_buffer.copy_buffer(src, dst->to_byte_view());
+			    return dst;
+		    });
 		return pass(std::move(src_buf), std::move(dst_buf), VUK_CALL);
 	}
 
@@ -63,11 +63,11 @@ namespace vuk {
 	inline Value<Buffer<T>> download_buffer(Value<Buffer<T>> buffer_src, VUK_CALLSTACK) {
 		auto dst = allocate<T>("dst", BufferCreateInfo{ .memory_usage = MemoryUsage::eGPUtoCPU }, VUK_CALL);
 		dst.same_size(buffer_src);
-		auto download = make_pass("download buffer",
-		                          [](CommandBuffer& command_buffer, VUK_ARG(Buffer<T>, Access::eTransferRead) src, VUK_ARG(Buffer<T>, Access::eTransferWrite) dst) {
-			                          command_buffer.copy_buffer(src->to_byte_view(), dst->to_byte_view());
-			                          return dst;
-		                          });
+		auto download =
+		    make_pass("download buffer", [](CommandBuffer& command_buffer, VUK_ARG(Buffer<T>, Access::eCopyRead) src, VUK_ARG(Buffer<T>, Access::eCopyWrite) dst) {
+			    command_buffer.copy_buffer(src->to_byte_view(), dst->to_byte_view());
+			    return dst;
+		    });
 		return download(std::move(buffer_src), std::move(dst), VUK_CALL);
 	}
 
@@ -96,7 +96,7 @@ namespace vuk {
 
 		auto srcbuf = acquire("src", *src, Access::eNone, VUK_CALL);
 		auto dst = discard("dst", image, VUK_CALL);
-		auto image_upload = make_pass("image upload", [bc](CommandBuffer& command_buffer, VUK_BA(Access::eTransferRead) src, VUK_IA(Access::eTransferWrite) dst) {
+		auto image_upload = make_pass("image upload", [bc](CommandBuffer& command_buffer, VUK_BA(Access::eCopyRead) src, VUK_IA(Access::eCopyWrite) dst) {
 			command_buffer.copy_buffer_to_image(src, dst, bc);
 			return dst;
 		});
@@ -222,7 +222,7 @@ namespace vuk {
 		for (size_t i = 0; i < (sizeof(uint32_t) / sizeof(T)); i++) {
 			memcpy(p + i * sizeof(T), &value, sizeof(T));
 		}
-		auto buf2buf = vuk::make_pass("fill buffer", [value_as_uint](vuk::CommandBuffer& command_buffer, VUK_ARG(Buffer<T>, vuk::eTransferWrite) dst) {
+		auto buf2buf = vuk::make_pass("fill buffer", [value_as_uint](vuk::CommandBuffer& command_buffer, VUK_ARG(Buffer<T>, vuk::eCopyWrite) dst) {
 			command_buffer.fill_buffer(dst->to_byte_view(), value_as_uint);
 		});
 		buf2buf(dst, VUK_CALL);
