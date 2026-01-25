@@ -385,27 +385,21 @@ namespace vuk {
 		/// @return A new Ref to the first output of the created SLICE node
 		Ref make_slice_with_new_src(Node* slice_node, Ref new_src) {
 			assert(slice_node->kind == Node::SLICE);
-			
+
 			auto& original_slice = slice_node->slice;
 			auto stripped = Type::stripped(new_src.type());
 			auto ty = new std::shared_ptr<Type>[3];
-			
+
 			// Copy the type information, updating based on new source
 			if (slice_node->type.size() >= 1) {
 				ty[0] = slice_node->type[0]; // result type
 			}
 			ty[1] = ty[2] = stripped; // rest and original types based on new source
-			
-			return first(current_module->emplace_op(Node{
-				.kind = Node::SLICE,
-				.type = std::span{ ty, 3 },
-				.slice = {
-					.src = new_src,
-					.start = original_slice.start,
-					.count = original_slice.count,
-					.axis = original_slice.axis
-				}
-			}));
+
+			return first(current_module->emplace_op(
+			    Node{ .kind = Node::SLICE,
+			          .type = std::span{ ty, 3 },
+			          .slice = { .src = new_src, .start = original_slice.start, .count = original_slice.count, .axis = original_slice.axis } }));
 		}
 
 		bool do_ssa;
@@ -461,7 +455,7 @@ namespace vuk {
 					for (int i = 0; i < node->variable_node.args.size(); i++) {
 						auto arg = node->variable_node.args[i].node;
 						if (arg->flag == 0) {
-						arg->flag = 1;
+							arg->flag = 1;
 							work_queue.push_back(arg);
 						}
 					}
@@ -647,6 +641,30 @@ namespace vuk {
 
 			return { expected_value };
 		}
+
+		/// @brief Capture a snapshot of the current IR graph state for visualization
+		/// @param label Optional label for this snapshot. If empty, auto-generates "Snapshot N"
+		///
+		/// Snapshots are collected only if RGCImpl::enable_html_graph_snapshots is true.
+		/// Each snapshot is named hierarchically as "{PassName}/{label}" and can be viewed
+		/// in the generated HTML file showing graph evolution through the pass.
+		///
+		/// Example usage:
+		/// @code
+		/// capture_snapshot("Initial State");
+		/// // ... perform transformations ...
+		/// capture_snapshot("After optimization");
+		/// @endcode
+		void capture_snapshot(std::string label = "");
+
+		/// @brief Get the name of this pass (extracted from RTTI)
+		/// @return Pass name as a string (e.g., "constant_folding")
+		std::string get_pass_name() const;
+
+	private:
+		size_t snapshot_counter = 0;
+		bool snapshots_initialized = false;
+		std::string pass_name;
 	};
 
 	struct AllocaCtx : IREvalContext {

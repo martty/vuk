@@ -1,5 +1,6 @@
 #include "vuk/Exception.hpp"
 #include "vuk/ir/GraphDumper.hpp"
+#include "vuk/ir/GraphSnapshots.hpp"
 #include "vuk/ir/IRPasses.hpp"
 #include "vuk/ir/IRProcess.hpp"
 #include "vuk/RenderGraph.hpp"
@@ -10,6 +11,7 @@
 #include <memory_resource>
 #include <random>
 #include <set>
+#include <typeinfo>
 #include <unordered_set>
 
 namespace {
@@ -44,6 +46,20 @@ namespace vuk {
 
 		Result<void> result = { expected_value };
 		std::string last_pass = "outside";
+
+		// Capture initial snapshot before any passes
+		if (enable_html_graph_snapshots) {
+			// Create a temporary pass object just for capturing the initial state
+			struct InitialStatePass : public IRPass {
+				InitialStatePass(RGCImpl& impl, Runtime& runtime, std::pmr::polymorphic_allocator<std::byte> allocator) : IRPass(impl, runtime, allocator) {}
+				Result<void> operator()() override {
+					return { expected_value };
+				}
+			};
+			auto initial_pass = std::make_unique<InitialStatePass>(*this, runtime, allocator);
+			initial_pass->capture_snapshot("Before Passes");
+		}
+
 		for (auto& pass_factory : ir_passes) {
 			auto pass = pass_factory(*this, runtime, allocator);
 			if (options & PassRunOptions::eDumpLinear) {
@@ -77,6 +93,11 @@ namespace vuk {
 			bool rebuild_links = pass->node_set_modified() || new_nodes.size() > 0 || pass->node_connections_modified();
 			if (rebuild_links) {
 				VUK_DO_OR_RETURN(build_links(runtime, allocator));
+			}
+
+			// Capture snapshot after each pass
+			if (enable_html_graph_snapshots) {
+				pass->capture_snapshot("After");
 			}
 		}
 
@@ -730,6 +751,8 @@ namespace vuk {
 	Result<void> Compiler::compile(Allocator& alloc, std::span<std::shared_ptr<ExtNode>> nodes, const RenderGraphCompileOptions& compile_options) {
 		reset();
 		impl->callbacks = compile_options.callbacks;
+		impl->dump_html_graph_snapshots_to_disk = compile_options.dump_html_graph_snapshots_to_disk;
+		impl->enable_html_graph_snapshots = compile_options.enable_html_graph_snapshots;
 		GraphDumper::begin_graph(compile_options.dump_graph, compile_options.graph_label);
 
 		impl->refs.assign(nodes.begin(), nodes.end());
@@ -851,6 +874,13 @@ namespace vuk {
 		GraphDumper::end_cluster();
 		GraphDumper::end_graph();
 
+		// Generate HTML graph snapshots if enabled
+		if (compile_options.enable_html_graph_snapshots && impl->graph_snapshot_collector.has_snapshots()) {
+			if (compile_options.dump_html_graph_snapshots_to_disk) {
+				impl->graph_snapshot_collector.write_to_disk("foo.html");
+			}
+		}
+
 		VUK_DO_OR_RETURN(impl->linearize(alloc.get_context(), allocator));
 
 		// we have added some nodes to the current module - but these are considered to be linked
@@ -919,5 +949,198 @@ namespace vuk {
 		}
 
 		return usage;
+	}
+
+	std::string IRPass::get_pass_name() const {
+		if (!pass_name.empty()) {
+			return pass_name;
+		}
+
+		// Extract pass name from typeid
+		std::string type_name = typeid(*this).name();
+
+		// Try to extract meaningful name (compiler-specific)
+		// MSVC format: "class vuk::constant_folding"
+		// GCC/Clang format: different but we'll handle it generically
+
+		size_t last_colon = type_name.find_last_of(':');
+		if (last_colon != std::string::npos) {
+			return type_name.substr(last_colon + 1);
+		}
+
+		// Try to remove "class " or "struct " prefix
+		if (type_name.find("class ") == 0) {
+			type_name = type_name.substr(6);
+		} else if (type_name.find("struct ") == 0) {
+			type_name = type_name.substr(7);
+		}
+
+		return type_name;
+	}
+
+	void IRPass::capture_snapshot(std::string label) {
+		if (!impl.enable_html_graph_snapshots) {
+			return;
+		}
+
+		if (!snapshots_initialized) {
+			pass_name = get_pass_name();
+			snapshots_initialized = true;
+		}
+
+		if (label.empty()) {
+			label = fmt::format("Snapshot {}", snapshot_counter);
+		}
+
+		GraphSnapshot snapshot;
+		snapshot.pass_name = pass_name;
+		snapshot.label = label;
+		snapshot.hierarchical_name = fmt::format("{}/{}", pass_name, label);
+
+		// Serialize nodes
+		for (auto* node : impl.nodes) {
+			if (node->kind == Node::GARBAGE) {
+				continue;
+			}
+
+			GraphSnapshot::NodeData node_data;
+			node_data.id = reinterpret_cast<uintptr_t>(node);
+			node_data.kind = std::string(Node::kind_to_sv(node->kind));
+
+			// Get debug name if available
+			if (node->debug_info && !node->debug_info->result_names.empty()) {
+				node_data.debug_name = node->debug_info->result_names[0];
+			}
+
+			// Get constant value if this is a CONSTANT node
+			if (node->kind == Node::CONSTANT && node->type.size() > 0) {
+				// Use existing parm_to_string utility to format constant value
+				parm_to_string(Ref{ node, 0 }, node_data.constant_value);
+			}
+
+			// Get SLICE axis and field name if this is a SLICE node
+			if (node->kind == Node::SLICE) {
+				node_data.slice_axis = node->slice.axis;
+				// If axis is FIELD, get the field name from the source type
+				if (node->slice.axis == Node::FIELD && node->slice.src.type()->kind == Type::COMPOSITE_TY) {
+					auto src_type = node->slice.src.type();
+					// The start constant should contain the field index
+					if (node->slice.start.node->kind == Node::CONSTANT) {
+						auto field_idx = constant<uint32_t>(node->slice.start);
+						if (field_idx < src_type->member_names.size()) {
+							node_data.slice_field_name = src_type->member_names[field_idx];
+						}
+					}
+				}
+			}
+
+			// Get access information for CALL node arguments
+			if (node->kind == Node::CALL) {
+				auto fn_type = node->call.args[0].type();
+				if (fn_type->kind == Type::OPAQUE_FN_TY || fn_type->kind == Type::SHADER_FN_TY) {
+					size_t first_parm = fn_type->kind == Type::OPAQUE_FN_TY ? 1 : 4;
+					auto& args = fn_type->kind == Type::OPAQUE_FN_TY ? fn_type->opaque_fn.args : fn_type->shader_fn.args;
+
+					// Reserve space for all arguments (including non-imbued ones)
+					node_data.arg_accesses.resize(node->call.args.size());
+
+					for (size_t i = first_parm; i < node->call.args.size() && (i - first_parm) < args.size(); i++) {
+						auto& arg_ty = args[i - first_parm];
+						if (arg_ty->kind == Type::IMBUED_TY) {
+							// Store access as string
+							node_data.arg_accesses[i] = std::string(Type::to_sv(arg_ty->imbued.access));
+						}
+					}
+				}
+			}
+
+			// Get compute class if set
+			if (node->compute_class.m_mask != 0) {
+				switch ((DomainFlagBits)node->compute_class.m_mask) {
+				case DomainFlagBits::ePlaceholder:
+					node_data.compute_class = "Placeholder";
+					break;
+				case DomainFlagBits::eConstant:
+					node_data.compute_class = "Constant";
+					break;
+				case DomainFlagBits::eHost:
+					node_data.compute_class = "Host";
+					break;
+				case DomainFlagBits::eDevice:
+					node_data.compute_class = "Device";
+					break;
+				case DomainFlagBits::eAny:
+					node_data.compute_class = "Any";
+					break;
+				default:
+					node_data.compute_class = fmt::format("0x{:x}", node->compute_class.m_mask);
+				}
+			}
+
+			// Get types
+			for (auto& type : node->type) {
+				node_data.types.push_back(Type::to_string(type.get()));
+				// Also get type debug name if available
+				if (!type->debug_info.name.empty()) {
+					node_data.type_debug_names.push_back(type->debug_info.name);
+				} else {
+					node_data.type_debug_names.push_back(""); // Empty string for no debug name
+				}
+			}
+
+			// Get arguments
+			auto count = node->generic_node.arg_count;
+			if (count != (uint8_t)~0u) {
+				for (int i = 0; i < count; i++) {
+					node_data.args.push_back(reinterpret_cast<uintptr_t>(node->fixed_node.args[i].node));
+				}
+			} else {
+				for (int i = 0; i < node->variable_node.args.size(); i++) {
+					node_data.args.push_back(reinterpret_cast<uintptr_t>(node->variable_node.args[i].node));
+				}
+			}
+
+			snapshot.nodes.push_back(std::move(node_data));
+		}
+
+		// Serialize edges
+		for (auto* node : impl.nodes) {
+			if (node->kind == Node::GARBAGE) {
+				continue;
+			}
+
+			uintptr_t to_id = reinterpret_cast<uintptr_t>(node);
+
+			auto count = node->generic_node.arg_count;
+			if (count != (uint8_t)~0u) {
+				for (int i = 0; i < count; i++) {
+					auto& arg = node->fixed_node.args[i];
+					if (arg.node->kind != Node::GARBAGE && arg.node->kind != Node::CONSTANT && arg.node->kind != Node::PLACEHOLDER) {
+						GraphSnapshot::EdgeData edge;
+						edge.from = reinterpret_cast<uintptr_t>(arg.node);
+						edge.from_index = arg.index;
+						edge.to = to_id;
+						edge.to_index = i;
+						snapshot.edges.push_back(edge);
+					}
+				}
+			} else {
+				for (int i = 0; i < node->variable_node.args.size(); i++) {
+					auto& arg = node->variable_node.args[i];
+					if (arg.node->kind != Node::GARBAGE && arg.node->kind != Node::CONSTANT && arg.node->kind != Node::PLACEHOLDER) {
+						GraphSnapshot::EdgeData edge;
+						edge.from = reinterpret_cast<uintptr_t>(arg.node);
+						edge.from_index = arg.index;
+						edge.to = to_id;
+						edge.to_index = i;
+						snapshot.edges.push_back(edge);
+					}
+				}
+			}
+		}
+
+		impl.graph_snapshot_collector.add_snapshot(std::move(snapshot));
+
+		snapshot_counter++;
 	}
 } // namespace vuk

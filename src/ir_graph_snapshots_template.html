@@ -1,0 +1,1321 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>IR Graph Snapshots</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1e1e1e;
+            color: #d4d4d4;
+        }
+        
+        #container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        
+        #controls {
+            background: #252526;
+            padding: 15px;
+            border-bottom: 1px solid #3e3e42;
+            flex-shrink: 0;
+        }
+        
+        #controls h1 {
+            margin: 0 0 15px 0;
+            font-size: 20px;
+            color: #cccccc;
+        }
+        
+        .control-group {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        label {
+            font-size: 14px;
+            color: #cccccc;
+        }
+        
+        select, input[type="range"] {
+            background: #3c3c3c;
+            color: #cccccc;
+            border: 1px solid #3e3e42;
+            padding: 5px 10px;
+            border-radius: 3px;
+        }
+        
+        select:hover, input[type="range"]:hover {
+            background: #4c4c4c;
+        }
+        
+        button {
+            background: #0e639c;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        button:hover {
+            background: #1177bb;
+        }
+        
+        button:disabled {
+            background: #3e3e42;
+            cursor: not-allowed;
+        }
+        
+        #timeline {
+            flex: 1;
+            width: 100%;
+        }
+        
+        #snapshot-info {
+            padding: 5px 0;
+            font-size: 13px;
+            color: #858585;
+        }
+        
+        #graph-container {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        #graph {
+            width: 100%;
+            height: 100%;
+        }
+        
+        .node {
+            cursor: pointer;
+        }
+        
+        .node-body {
+            stroke: #569cd6;
+            stroke-width: 2px;
+            rx: 4px;
+        }
+        
+        .node-selected .node-body {
+            stroke: #ffcc00;
+            stroke-width: 4px;
+            filter: drop-shadow(0 0 8px #ffcc00);
+        }
+        
+        .node text {
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            fill: #d4d4d4;
+            pointer-events: none;
+        }
+        
+        .node-label {
+            font-weight: bold;
+            font-size: 13px;
+        }
+        
+        .result-slot {
+            cursor: crosshair;
+        }
+        
+        .arg-slot {
+            cursor: crosshair;
+        }
+        
+        .arg-slot-inline {
+            cursor: default;
+        }
+        
+        .slot-label {
+            pointer-events: none;
+        }
+        
+        .inline-value {
+            pointer-events: none;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .node-added .node-body {
+            fill: #0e639c;
+            stroke: #4fc3f7;
+        }
+        
+        .node-removed .node-body {
+            fill: #5a1e1e;
+            stroke: #f44336;
+            stroke-dasharray: 5,5;
+            opacity: 0.5;
+        }
+        
+        .node-modified .node-body {
+            fill: #5a4a1e;
+            stroke: #ffa726;
+        }
+        
+        .node-unchanged .node-body {
+            fill: #2d2d30;
+            stroke: #3e3e42;
+        }
+        
+        .link {
+            stroke: #858585;
+            stroke-width: 1.5px;
+            fill: none;
+        }
+        
+        .link-bridged {
+            stroke: #76ff03;
+            stroke-width: 2px;
+            stroke-dasharray: 4,2;
+        }
+        
+        .link-highlighted {
+            stroke: #ffcc00 !important;
+            stroke-width: 3px !important;
+            filter: drop-shadow(0 0 4px #ffcc00);
+        }
+        
+        .link-label {
+            font-family: 'Courier New', monospace;
+            font-size: 10px;
+            fill: #76ff03;
+            pointer-events: none;
+        }
+        
+        .link-label-highlighted {
+            fill: #ffcc00 !important;
+            font-weight: bold;
+        }
+        
+        .link-added {
+            stroke: #4fc3f7;
+        }
+        
+        .link-removed {
+            stroke: #f44336;
+            stroke-dasharray: 5,5;
+            opacity: 0.5;
+        }
+        
+        .node:hover rect {
+            stroke-width: 3px;
+        }
+        
+        #inspector {
+            position: absolute;
+            right: 10px;
+            top: 10px;
+            background: #252526;
+            border: 1px solid #3e3e42;
+            border-radius: 4px;
+            padding: 10px;
+            max-width: 300px;
+            max-height: 400px;
+            overflow-y: auto;
+            display: none;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        
+        #inspector h3 {
+            margin-top: 0;
+            font-size: 14px;
+            color: #569cd6;
+        }
+        
+        #inspector pre {
+            background: #1e1e1e;
+            padding: 8px;
+            border-radius: 3px;
+            font-size: 11px;
+            margin: 5px 0;
+            overflow-x: auto;
+        }
+        
+        .stats {
+            display: flex;
+            gap: 20px;
+            margin-top: 5px;
+            font-size: 12px;
+        }
+        
+        .stat {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .stat-box {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+        }
+        
+        .stat-added { background: #4fc3f7; }
+        .stat-removed { background: #f44336; }
+        .stat-modified { background: #ffa726; }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="controls">
+            <h1>IR Graph Snapshots</h1>
+            
+            <div class="control-group">
+                <label>Snapshot:</label>
+                <select id="snapshot-select"></select>
+                <button id="prev-btn">◀ Previous</button>
+                <button id="next-btn">Next ▶</button>
+                <button id="play-btn">▶ Play</button>
+            </div>
+            
+            <div class="control-group">
+                <label>Compare with:</label>
+                <select id="compare-select">
+                    <option value="-1">Previous</option>
+                </select>
+            </div>
+            
+            <div class="control-group">
+                <label>
+                    <input type="checkbox" id="bridge-slices" checked>
+                    Bridge SLICE nodes
+                </label>
+            </div>
+            
+            <div id="snapshot-info"></div>
+            
+            <div class="stats" id="stats"></div>
+        </div>
+        
+        <div id="graph-container">
+            <svg id="graph">
+                <defs>
+                    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+                        <polygon points="0 0, 10 3, 0 6" fill="#858585"/>
+                    </marker>
+                </defs>
+                <g id="graph-g"></g>
+            </svg>
+            <div id="inspector"></div>
+        </div>
+    </div>
+    
+    <script>
+        const snapshotsData = {{SNAPSHOTS_JSON_DATA}};
+        
+        let currentSnapshotIndex = 0;
+        let compareWithIndex = -1;
+        let isPlaying = false;
+        let playInterval = null;
+        let bridgeSlices = true; // Default: on
+        let selectedNode = null; // Track selected node
+        
+        const svg = d3.select("#graph");
+        const g = d3.select("#graph-g");
+        const snapshotSelect = d3.select("#snapshot-select");
+        const compareSelect = d3.select("#compare-select");
+        const bridgeSlicesCheckbox = d3.select("#bridge-slices");
+        const snapshotInfo = d3.select("#snapshot-info");
+        const inspector = d3.select("#inspector");
+        const statsDiv = d3.select("#stats");
+        
+        // Node rendering configuration
+        const SLOT_SIZE = 20;        // Square size for slots
+        const SLOT_SPACING = 2;      // Gap between slots
+        const NODE_LABEL_WIDTH = 120; // Width of the center label column
+        const NODE_HEIGHT = SLOT_SIZE + 4; // Height is based on slot size
+        const INLINE_VALUE_WIDTH = 50; // Width for inline value boxes
+        
+        // Determine if a node should be rendered inline (value shown in slot)
+        function shouldRenderInline(node) {
+            const kind = node.kind.toUpperCase();
+            return kind === 'CONSTANT' || kind === 'PLACEHOLDER';
+        }
+        
+        // Get display value for inline nodes
+        function getInlineValue(node) {
+            const kind = node.kind.toUpperCase();
+            if (kind === 'CONSTANT') {
+                // Show actual constant value if available, fallback to debug name or type
+                if (node.constantValue && node.constantValue.length > 0) {
+                    return node.constantValue;
+                }
+                
+                // If no constant value, check debug name
+                if (node.debugName) {
+                    return node.debugName;
+                }
+                
+                // Fall back to type - but if it's "ofn", use the type's debug name
+                if (node.types.length > 0) {
+                    const typeStr = node.types[0];
+                    // Special case: if type is "ofn", try to use type's debug name
+                    if (typeStr === 'ofn' && node.typeDebugNames && node.typeDebugNames[0] && node.typeDebugNames[0].length > 0) {
+                        return node.typeDebugNames[0];
+                    }
+                    return typeStr;
+                }
+                
+                return 'const';
+            }
+            if (kind === 'PLACEHOLDER') {
+                return '?';
+            }
+            return '';
+        }
+        
+        // Get better label for type - use debug name if available
+        function getTypeLabel(typeStr, node, index) {
+            // First check if we have a type debug name - use it regardless of type kind
+            if (node.typeDebugNames && node.typeDebugNames[index] && node.typeDebugNames[index].length > 0) {
+                return node.typeDebugNames[index];
+            }
+            
+            // Fall back to full type string
+            return typeStr;
+        }
+        
+        // Calculate dynamic width for inline value based on text length
+        function getInlineValueWidth(value) {
+            // Estimate: 7px per character + 10px padding
+            const charWidth = 7;
+            const padding = 10;
+            const minWidth = 30;
+            const maxWidth = 100;
+            const estimatedWidth = Math.min(maxWidth, Math.max(minWidth, value.length * charWidth + padding));
+            return estimatedWidth;
+        }
+        
+        // Check if a SLICE node can be bridged (has constant start and count)
+        function canBridgeSlice(node, nodeById) {
+            if (!node || node.kind.toUpperCase() !== 'SLICE') {
+                return false;
+            }
+            
+            // SLICE nodes should have 3 args: src, start, count
+            if (node.args.length < 3) {
+                return false;
+            }
+            
+            const startNode = nodeById.get(node.args[1]);
+            const countNode = nodeById.get(node.args[2]);
+            
+            return startNode && countNode && 
+                   shouldRenderInline(startNode) && 
+                   shouldRenderInline(countNode) &&
+                   startNode.kind.toUpperCase() === 'CONSTANT' &&
+                   countNode.kind.toUpperCase() === 'CONSTANT';
+        }
+        
+        // Get slice range label from SLICE node
+        function getSliceRangeLabel(node, nodeById) {
+            // FIELD axis value is 254
+            const FIELD_AXIS = 254;
+            
+            // Check if this is a FIELD slice
+            if (node.sliceAxis === FIELD_AXIS && node.sliceFieldName && node.sliceFieldName.length > 0) {
+                return `.${node.sliceFieldName}`;
+            }
+            
+            // Otherwise, show the range [start:end]
+            const startNode = nodeById.get(node.args[1]);
+            const countNode = nodeById.get(node.args[2]);
+            
+            const startValue = getInlineValue(startNode);
+            const countValue = getInlineValue(countNode);
+            
+            // Parse as integers
+            const start = parseInt(startValue) || 0;
+            const count = parseInt(countValue) || 0;
+            const end = start + count - 1;
+            
+            return `[${start}:${end}]`;
+        }
+        
+        // Populate dropdowns
+        snapshotsData.forEach((snapshot, i) => {
+            snapshotSelect.append("option")
+                .attr("value", i)
+                .text(`${i}: ${snapshot.hierarchicalName}`);
+            
+            if (i > 0) {
+                compareSelect.append("option")
+                    .attr("value", i)
+                    .text(`${i}: ${snapshot.hierarchicalName}`);
+            }
+        });
+        
+        // Setup zoom behavior
+        const zoom = d3.zoom()
+            .scaleExtent([0.1, 4])
+            .on("zoom", (event) => {
+                g.attr("transform", event.transform);
+            });
+        
+        svg.call(zoom);
+        
+        // Compute diffs between snapshots
+        function computeDiff(prevSnapshot, currSnapshot) {
+            const prevNodes = new Map(prevSnapshot.nodes.map(n => [n.id, n]));
+            const currNodes = new Map(currSnapshot.nodes.map(n => [n.id, n]));
+            
+            const added = [];
+            const removed = [];
+            const modified = [];
+            const unchanged = [];
+            
+            currNodes.forEach((node, id) => {
+                if (!prevNodes.has(id)) {
+                    added.push(node);
+                } else {
+                    // Check if modified (simplified - could compare more properties)
+                    const prevNode = prevNodes.get(id);
+                    if (JSON.stringify(prevNode.args) !== JSON.stringify(node.args)) {
+                        modified.push(node);
+                    } else {
+                        unchanged.push(node);
+                    }
+                }
+            });
+            
+            prevNodes.forEach((node, id) => {
+                if (!currNodes.has(id)) {
+                    removed.push(node);
+                }
+            });
+            
+            return { added, removed, modified, unchanged };
+        }
+        
+        // Render graph
+        function renderGraph(snapshotIndex) {
+            const snapshot = snapshotsData[snapshotIndex];
+            const compareIndex = compareWithIndex === -1 ? Math.max(0, snapshotIndex - 1) : compareWithIndex;
+            const prevSnapshot = compareIndex >= 0 && compareIndex < snapshotsData.length ? 
+                snapshotsData[compareIndex] : snapshot;
+            
+            const diff = snapshotIndex > 0 ? computeDiff(prevSnapshot, snapshot) : {
+                added: snapshot.nodes,
+                removed: [],
+                modified: [],
+                unchanged: []
+            };
+            
+            // Update stats
+            statsDiv.html(`
+                <div class="stat"><div class="stat-box stat-added"></div>${diff.added.length} added</div>
+                <div class="stat"><div class="stat-box stat-removed"></div>${diff.removed.length} removed</div>
+                <div class="stat"><div class="stat-box stat-modified"></div>${diff.modified.length} modified</div>
+                <div class="stat">${diff.unchanged.length} unchanged</div>
+            `);
+            
+            // Clear previous graph
+            g.selectAll("*").remove();
+            
+            // Create node lookup for inline value resolution
+            const nodeById = new Map(snapshot.nodes.map(n => [n.id, n]));
+            
+            // Debug: Log inline nodes
+            const inlineNodes = snapshot.nodes.filter(n => shouldRenderInline(n));
+            console.log('Snapshot', snapshotIndex, ':', snapshot.nodes.length, 'total nodes,', inlineNodes.length, 'inline nodes');
+            if (inlineNodes.length > 0) {
+                console.log('Inline nodes:', inlineNodes.map(n => ({ id: n.id, kind: n.kind, class: n.computeClass, debug: n.debugName })));
+            }
+            
+            // Build set of nodes that are connected (have incoming or outgoing edges)
+            const connectedNodeIds = new Set();
+            snapshot.edges.forEach(e => {
+                const sourceNode = nodeById.get(e.from);
+                const targetNode = nodeById.get(e.to);
+                
+                // Skip edges to/from inline nodes
+                if (sourceNode && !shouldRenderInline(sourceNode)) {
+                    connectedNodeIds.add(e.from);
+                }
+                if (targetNode && !shouldRenderInline(targetNode)) {
+                    connectedNodeIds.add(e.to);
+                }
+            });
+            
+            // Filter out inline nodes and unconnected nodes from visualization
+            // Also filter out SLICE nodes that can be bridged (if bridging is enabled)
+            const allNodes = [
+                ...diff.added.map(n => ({ ...n, status: 'added' })),
+                ...diff.removed.map(n => ({ ...n, status: 'removed' })),
+                ...diff.modified.map(n => ({ ...n, status: 'modified' })),
+                ...diff.unchanged.map(n => ({ ...n, status: 'unchanged' }))
+            ].filter(n => {
+                // Filter out inline nodes
+                if (shouldRenderInline(n)) {
+                    return false;
+                }
+                
+                // Filter out bridged SLICE nodes
+                if (bridgeSlices && canBridgeSlice(n, nodeById)) {
+                    return false;
+                }
+                
+                // Filter out unconnected nodes
+                return connectedNodeIds.has(n.id);
+            });
+            
+            // Calculate node dimensions based on slots (horizontal layout)
+            allNodes.forEach(node => {
+                const numResults = node.types.length;
+                const numArgs = node.args.length;
+                
+                // Calculate actual width needed for results (with variable widths)
+                let resultsWidth = 0;
+                for (let i = 0; i < numResults; i++) {
+                    const typeLabel = getTypeLabel(node.types[i], node, i);
+                    const minSlotWidth = SLOT_SIZE;
+                    const slotWidth = Math.max(minSlotWidth, typeLabel.length * 6 + 8);
+                    resultsWidth += slotWidth + SLOT_SPACING;
+                }
+                
+                // Calculate actual width needed for arguments
+                // Check which args are inline to get accurate width
+                let argsWidth = 0;
+                for (let i = 0; i < numArgs; i++) {
+                    const argNode = nodeById.get(node.args[i]);
+                    const isInline = argNode && shouldRenderInline(argNode);
+                    if (isInline) {
+                        const inlineValue = getInlineValue(argNode);
+                        const valueWidth = getInlineValueWidth(inlineValue);
+                        argsWidth += valueWidth + SLOT_SPACING;
+                    } else {
+                        argsWidth += SLOT_SIZE + SLOT_SPACING;
+                    }
+                }
+                
+                // Width = results + label + args (with spacing)
+                node.width = resultsWidth + NODE_LABEL_WIDTH + argsWidth + 20; // 20 padding
+                node.height = NODE_HEIGHT;
+            });
+            
+            // Create edges (skip edges to/from inline nodes, bridge SLICE nodes if enabled)
+            const links = [];
+            const bridgedEdges = []; // Track which edges are bridged for labeling
+            
+            snapshot.edges.forEach(e => {
+                const sourceNode = nodeById.get(e.from);
+                const targetNode = nodeById.get(e.to);
+                
+                // Skip if either node is inline
+                if (!sourceNode || !targetNode || 
+                    shouldRenderInline(sourceNode) || shouldRenderInline(targetNode)) {
+                    return;
+                }
+                
+                let actualSource = sourceNode;
+                let actualSourcePort = e.fromIndex;
+                let isBridged = false;
+                let sliceLabels = []; // Collect all slice labels in the chain
+                
+                // Bridge through chains of SLICE nodes
+                if (bridgeSlices) {
+                    let currentNode = sourceNode;
+                    let currentPort = e.fromIndex;
+                    
+                    // Walk backwards through SLICE chain
+                    while (canBridgeSlice(currentNode, nodeById)) {
+                        // Record this SLICE's label
+                        sliceLabels.unshift(getSliceRangeLabel(currentNode, nodeById));
+                        
+                        // Move to the SLICE's source
+                        const sliceSourceNode = nodeById.get(currentNode.args[0]);
+                        if (!sliceSourceNode || shouldRenderInline(sliceSourceNode)) {
+                            break;
+                        }
+                        
+                        actualSource = sliceSourceNode;
+                        actualSourcePort = 0; // SLICE result index maps to source's result
+                        currentNode = sliceSourceNode;
+                        currentPort = 0;
+                        isBridged = true;
+                    }
+                }
+                
+                // Combine slice labels if we bridged through multiple SLICEs
+                const sliceLabel = sliceLabels.length > 0 ? sliceLabels.join('') : '';
+                
+                // Find actual nodes in allNodes (might be null if bridged)
+                const sourceInGraph = allNodes.find(n => n.id === actualSource.id);
+                const targetInGraph = allNodes.find(n => n.id === targetNode.id);
+                
+                if (sourceInGraph && targetInGraph) {
+                    const link = {
+                        source: sourceInGraph,
+                        target: targetInGraph,
+                        sourcePort: actualSourcePort,
+                        targetPort: e.toIndex,
+                        isBridged: isBridged,
+                        sliceLabel: sliceLabel,
+                        ...e
+                    };
+                    links.push(link);
+                    
+                    if (isBridged) {
+                        bridgedEdges.push(link);
+                    }
+                }
+            });
+            
+            // Static hierarchical layout using topological sort
+            function computeHierarchicalLayout(nodes, links) {
+                // Build adjacency list
+                const outEdges = new Map();
+                const inDegree = new Map();
+                
+                nodes.forEach(n => {
+                    outEdges.set(n.id, []);
+                    inDegree.set(n.id, 0);
+                });
+                
+                links.forEach(link => {
+                    const srcId = link.source.id || link.source;
+                    const tgtId = link.target.id || link.target;
+                    outEdges.get(srcId).push(tgtId);
+                    inDegree.set(tgtId, inDegree.get(tgtId) + 1);
+                });
+                
+                // Topological sort to assign layers
+                const layers = [];
+                const nodeLayer = new Map();
+                const queue = [];
+                
+                // Start with nodes that have no incoming edges
+                nodes.forEach(n => {
+                    if (inDegree.get(n.id) === 0) {
+                        queue.push(n.id);
+                        nodeLayer.set(n.id, 0);
+                    }
+                });
+                
+                // Process queue
+                while (queue.length > 0) {
+                    const nodeId = queue.shift();
+                    const layer = nodeLayer.get(nodeId);
+                    
+                    if (!layers[layer]) {
+                        layers[layer] = [];
+                    }
+                    layers[layer].push(nodeId);
+                    
+                    // Process outgoing edges
+                    outEdges.get(nodeId).forEach(targetId => {
+                        const newDegree = inDegree.get(targetId) - 1;
+                        inDegree.set(targetId, newDegree);
+                        
+                        // Update target's layer to be at least one more than source
+                        const currentLayer = nodeLayer.get(targetId) || 0;
+                        const proposedLayer = layer + 1;
+                        if (proposedLayer > currentLayer) {
+                            nodeLayer.set(targetId, proposedLayer);
+                        }
+                        
+                        if (newDegree === 0) {
+                            queue.push(targetId);
+                        }
+                    });
+                }
+                
+                // Handle any remaining nodes (cycles or disconnected)
+                nodes.forEach(n => {
+                    if (!nodeLayer.has(n.id)) {
+                        const lastLayer = layers.length;
+                        if (!layers[lastLayer]) {
+                            layers[lastLayer] = [];
+                        }
+                        layers[lastLayer].push(n.id);
+                        nodeLayer.set(n.id, lastLayer);
+                    }
+                });
+                
+                // Position nodes
+                const LAYER_SPACING = 250;
+                const NODE_SPACING = 80;
+                
+                layers.forEach((layerNodes, layerIndex) => {
+                    const y = layerIndex * LAYER_SPACING + 100;
+                    
+                    // Sort nodes in layer by their connections to minimize crossings
+                    layerNodes.sort((a, b) => {
+                        const aNode = nodes.find(n => n.id === a);
+                        const bNode = nodes.find(n => n.id === b);
+                        return (aNode.args.length + aNode.types.length) - (bNode.args.length + bNode.types.length);
+                    });
+                    
+                    // Calculate total width needed for this layer
+                    const layerWidth = layerNodes.reduce((sum, nodeId) => {
+                        const node = nodes.find(n => n.id === nodeId);
+                        return sum + node.width + NODE_SPACING;
+                    }, 0);
+                    
+                    // Center the layer horizontally
+                    let x = (window.innerWidth - layerWidth) / 2;
+                    
+                    layerNodes.forEach(nodeId => {
+                        const node = nodes.find(n => n.id === nodeId);
+                        node.x = x + node.width / 2;
+                        node.y = y;
+                        node.fx = node.x; // Fix position
+                        node.fy = node.y;
+                        x += node.width + NODE_SPACING;
+                    });
+                });
+            }
+            
+            
+            // Apply hierarchical layout
+            computeHierarchicalLayout(allNodes, links);
+            
+            // Draw links
+            const linkGroup = g.append("g").attr("class", "links");
+            const link = linkGroup.selectAll("path")
+                .data(links)
+                .join("path")
+                .attr("class", d => d.isBridged ? "link link-bridged" : "link")
+                .attr("stroke-width", 2)
+                .attr("fill", "none");
+            
+            // Draw labels for bridged edges
+            const linkLabelGroup = g.append("g").attr("class", "link-labels");
+            const linkLabels = linkLabelGroup.selectAll("text")
+                .data(links.filter(l => l.isBridged && l.sliceLabel))
+                .join("text")
+                .attr("class", "link-label")
+                .text(d => d.sliceLabel);
+            
+            // Draw nodes
+            const nodeGroup = g.append("g").attr("class", "nodes");
+            
+            // Create a group for highlighted links (above nodes)
+            const highlightedLinkGroup = g.append("g").attr("class", "highlighted-links");
+            const highlightedLinkLabelGroup = g.append("g").attr("class", "highlighted-link-labels");
+            const node = nodeGroup.selectAll("g")
+                .data(allNodes)
+                .join("g")
+                .attr("class", d => {
+                    let classes = `node node-${d.status}`;
+                    if (selectedNode && selectedNode.id === d.id) {
+                        classes += ' node-selected';
+                    }
+                    return classes;
+                })
+                .on("click", (event, d) => {
+                    event.stopPropagation();
+                    
+                    // Helper function to move links to highlighted group
+                    const highlightLinks = (nodeId) => {
+                        // Move link paths
+                        linkGroup.selectAll("path").filter(link => {
+                            return link.source.id === nodeId || link.target.id === nodeId;
+                        }).each(function(linkData) {
+                            const pathNode = this;
+                            const pathClone = pathNode.cloneNode(true);
+                            highlightedLinkGroup.node().appendChild(pathClone);
+                            d3.select(pathNode).style("display", "none");
+                            d3.select(pathClone)
+                                .datum(linkData)
+                                .classed("link-highlighted", true);
+                        });
+                        
+                        // Move link labels
+                        linkLabelGroup.selectAll("text").filter(link => {
+                            return link.source.id === nodeId || link.target.id === nodeId;
+                        }).each(function(linkData) {
+                            const textNode = this;
+                            const textClone = textNode.cloneNode(true);
+                            highlightedLinkLabelGroup.node().appendChild(textClone);
+                            d3.select(textNode).style("display", "none");
+                            d3.select(textClone)
+                                .datum(linkData)
+                                .classed("link-label-highlighted", true);
+                        });
+                    };
+                    
+                    // Helper function to restore links to normal group
+                    const restoreLinks = () => {
+                        // Remove all highlighted links
+                        highlightedLinkGroup.selectAll("*").remove();
+                        highlightedLinkLabelGroup.selectAll("*").remove();
+                        // Show all hidden links
+                        linkGroup.selectAll("path").style("display", null);
+                        linkLabelGroup.selectAll("text").style("display", null);
+                    };
+                    
+                    // Toggle selection
+                    if (selectedNode && selectedNode.id === d.id) {
+                        // Deselecting - restore links
+                        restoreLinks();
+                        selectedNode = null;
+                    } else {
+                        // Clear previous selection
+                        restoreLinks();
+                        
+                        // Select new node
+                        selectedNode = d;
+                        
+                        // Highlight connected links
+                        highlightLinks(d.id);
+                    }
+                    
+                    // Update node classes
+                    nodeGroup.selectAll("g").attr("class", node => {
+                        let classes = `node node-${node.status}`;
+                        if (selectedNode && selectedNode.id === node.id) {
+                            classes += ' node-selected';
+                        }
+                        return classes;
+                    });
+                    
+                    // Update inspector
+                    if (selectedNode) {
+                        inspector.style("display", "block");
+                        inspector.html(`
+                            <h3>Node ${d.id}</h3>
+                            <pre>Kind: ${d.kind}
+Debug: ${d.debugName}
+Compute: ${d.computeClass}
+Status: ${d.status}</pre>
+                            <h4>Types:</h4>
+                            <pre>${d.types.join('\n')}</pre>
+                            <h4>Args:</h4>
+                            <pre>${d.args.join(', ')}</pre>
+                        `);
+                    } else {
+                        inspector.style("display", "none");
+                    }
+                });
+            
+            // Main node rectangle (table background)
+            node.append("rect")
+                .attr("class", "node-body")
+                .attr("width", d => d.width)
+                .attr("height", d => d.height)
+                .attr("x", d => -d.width / 2)
+                .attr("y", d => -d.height / 2)
+                .attr("rx", 4);
+            
+            // Result slots (left columns)
+            node.each(function(d) {
+                const nodeG = d3.select(this);
+                const numResults = d.types.length;
+                let currentX = -d.width / 2 + 2; // Left edge with padding
+                
+                d.types.forEach((type, i) => {
+                    const slotY = -d.height / 2 + 2; // Top with padding
+                    
+                    // Get the label and calculate width needed
+                    const typeLabel = getTypeLabel(type, d, i);
+                    const minSlotWidth = SLOT_SIZE;
+                    const estimatedWidth = Math.max(minSlotWidth, typeLabel.length * 6 + 8); // 6px per char + padding
+                    
+                    // Slot background
+                    nodeG.append("rect")
+                        .attr("class", "result-slot")
+                        .attr("x", currentX)
+                        .attr("y", slotY)
+                        .attr("width", estimatedWidth)
+                        .attr("height", SLOT_SIZE)
+                        .attr("fill", "#569cd6")
+                        .attr("stroke", "#000")
+                        .attr("rx", 2);
+                    
+                    // Slot label - show full type name
+                    nodeG.append("text")
+                        .attr("x", currentX + estimatedWidth / 2)
+                        .attr("y", slotY + SLOT_SIZE / 2)
+                        .attr("dy", "0.35em")
+                        .attr("text-anchor", "middle")
+                        .style("font-size", "8px")
+                        .style("fill", "#fff")
+                        .style("font-weight", "bold")
+                        .text(typeLabel);
+                    
+                    // Store slot position for edge routing (right edge of slot)
+                    if (!d.resultSlots) d.resultSlots = [];
+                    d.resultSlots[i] = { 
+                        x: currentX, 
+                        y: slotY + SLOT_SIZE / 2,
+                        width: estimatedWidth
+                    };
+                    
+                    currentX += estimatedWidth + SLOT_SPACING;
+                });
+                
+                // Store where results section ends
+                d.resultsEndX = currentX;
+            });
+            
+            // Node label (center column)
+            node.each(function(d) {
+                const nodeG = d3.select(this);
+                const labelX = d.resultsEndX + 5; // After results with padding
+                const labelY = 0; // Centered vertically
+                
+                // Label background (optional - for visual separation)
+                nodeG.append("rect")
+                    .attr("x", labelX)
+                    .attr("y", -d.height / 2 + 2)
+                    .attr("width", NODE_LABEL_WIDTH)
+                    .attr("height", SLOT_SIZE)
+                    .attr("fill", "none")
+                    .attr("stroke", "#555")
+                    .attr("stroke-width", 0.5)
+                    .attr("rx", 2);
+                
+                // Kind name
+                nodeG.append("text")
+                    .attr("class", "node-label")
+                    .attr("x", labelX + NODE_LABEL_WIDTH / 2)
+                    .attr("y", labelY - 3)
+                    .attr("text-anchor", "middle")
+                    .style("font-size", "11px")
+                    .style("font-weight", "bold")
+                    .text(d.kind);
+                
+                // Debug name (smaller, below kind)
+                if (d.debugName) {
+                    nodeG.append("text")
+                        .attr("class", "node-debug")
+                        .attr("x", labelX + NODE_LABEL_WIDTH / 2)
+                        .attr("y", labelY + 6)
+                        .attr("text-anchor", "middle")
+                        .style("font-size", "8px")
+                        .style("fill", "#999")
+                        .text(d.debugName.length > 15 ? d.debugName.substring(0, 15) + '...' : d.debugName);
+                }
+                
+                d.labelEndX = labelX + NODE_LABEL_WIDTH;
+            });
+            
+            // Argument slots (right columns)
+            node.each(function(d) {
+                const nodeG = d3.select(this);
+                const numArgs = d.args.length;
+                let currentX = d.labelEndX + 5; // After label with padding
+                
+                d.args.forEach((argNodeId, i) => {
+                    const slotY = -d.height / 2 + 2;
+                    const argNode = nodeById.get(argNodeId);
+                    
+                    // Check if argument should be rendered inline
+                    const isInline = argNode && shouldRenderInline(argNode);
+                    
+                    if (isInline) {
+                        // Render inline value box
+                        const inlineValue = getInlineValue(argNode);
+                        const valueWidth = getInlineValueWidth(inlineValue);
+                        
+                        // Different styling for placeholders vs constants
+                        const isPlaceholder = argNode.kind.toUpperCase() === 'PLACEHOLDER';
+                        const bgColor = isPlaceholder ? "#5a4a1e" : "#3c3c3c";
+                        const borderColor = isPlaceholder ? "#ffa726" : "#666";
+                        
+                        nodeG.append("rect")
+                            .attr("class", "arg-slot-inline")
+                            .attr("x", currentX)
+                            .attr("y", slotY)
+                            .attr("width", valueWidth)
+                            .attr("height", SLOT_SIZE)
+                            .attr("fill", bgColor)
+                            .attr("stroke", borderColor)
+                            .attr("rx", 2);
+                        
+                        nodeG.append("text")
+                            .attr("class", "inline-value")
+                            .attr("x", currentX + valueWidth / 2)
+                            .attr("y", slotY + SLOT_SIZE / 2)
+                            .attr("dy", "0.35em")
+                            .attr("text-anchor", "middle")
+                            .style("font-size", "11px")
+                            .style("fill", isPlaceholder ? "#ffa726" : "#ddd")
+                            .style("font-weight", isPlaceholder ? "bold" : "normal")
+                            .text(inlineValue);
+                        
+                        // Store position for potential edge routing
+                        if (!d.argSlots) d.argSlots = [];
+                        d.argSlots[i] = { 
+                            x: currentX + valueWidth, 
+                            y: slotY + SLOT_SIZE / 2,
+                            isInline: true
+                        };
+                        
+                        currentX += valueWidth + SLOT_SPACING;
+                    } else {
+                        // Regular argument slot
+                        nodeG.append("rect")
+                            .attr("class", "arg-slot")
+                            .attr("x", currentX)
+                            .attr("y", slotY)
+                            .attr("width", SLOT_SIZE)
+                            .attr("height", SLOT_SIZE)
+                            .attr("fill", "#4ec9b0")
+                            .attr("stroke", "#000")
+                            .attr("rx", 2);
+                        
+                        // Slot label - show access if available (for CALL nodes with IMBUED_TY)
+                        let slotLabel = i.toString();
+                        if (d.argAccesses && d.argAccesses[i] && d.argAccesses[i].length > 0) {
+                            // Format as "type:access" - get first letter of access
+                            const access = d.argAccesses[i];
+                            // Abbreviate common access patterns
+                            let accessAbbrev = access;
+                            if (access.includes('Read')) accessAbbrev = 'R';
+                            else if (access.includes('Write')) accessAbbrev = 'W';
+                            else if (access.includes('RW')) accessAbbrev = 'RW';
+                            else accessAbbrev = access.substring(0, 2);
+                            slotLabel = accessAbbrev;
+                        }
+                        
+                        nodeG.append("text")
+                            .attr("x", currentX + SLOT_SIZE / 2)
+                            .attr("y", slotY + SLOT_SIZE / 2)
+                            .attr("dy", "0.35em")
+                            .attr("text-anchor", "middle")
+                            .style("font-size", "10px")
+                            .style("fill", "#fff")
+                            .style("font-weight", "bold")
+                            .text(slotLabel);
+                        
+                        // Store slot position for edge routing (center of right edge)
+                        if (!d.argSlots) d.argSlots = [];
+                        d.argSlots[i] = { 
+                            x: currentX + SLOT_SIZE, 
+                            y: slotY + SLOT_SIZE / 2,
+                            isInline: false
+                        };
+                        
+                        currentX += SLOT_SIZE + SLOT_SPACING;
+                    }
+                });
+            });
+            
+            
+            // Static rendering - no simulation needed
+            // Draw link paths to connect between slots
+            const updateLinks = () => {
+                // Update both normal and highlighted links
+                linkGroup.selectAll("path").attr("d", d => {
+                    if (!d.source.resultSlots || !d.target.argSlots) return "";
+                    
+                    const sourceSlot = d.source.resultSlots[d.sourcePort];
+                    const targetSlot = d.target.argSlots[d.targetPort];
+                    
+                    if (!sourceSlot || !targetSlot) return "";
+                    
+                    // Result slots: slot.x is the LEFT edge, so add half width to get center
+                    const sourceSlotWidth = sourceSlot.width || SLOT_SIZE;
+                    const x1 = d.source.x + sourceSlot.x + sourceSlotWidth / 2;
+                    const y1 = d.source.y + sourceSlot.y;  // slot.y is already the vertical center
+                    
+                    // Argument slots: slot.x is the RIGHT edge (for non-inline), so subtract half width to get center
+                    // For inline slots, slot.x is also at the right edge
+                    const targetSlotWidth = targetSlot.width || SLOT_SIZE;
+                    const x2 = d.target.x + targetSlot.x - targetSlotWidth / 2;
+                    const y2 = d.target.y + targetSlot.y;  // slot.y is already the vertical center
+                    
+                    return `M${x1},${y1} L${x2},${y2}`;
+                });
+                
+                highlightedLinkGroup.selectAll("path").attr("d", d => {
+                    if (!d.source.resultSlots || !d.target.argSlots) return "";
+                    
+                    const sourceSlot = d.source.resultSlots[d.sourcePort];
+                    const targetSlot = d.target.argSlots[d.targetPort];
+                    
+                    if (!sourceSlot || !targetSlot) return "";
+                    
+                    // Result slots: slot.x is the LEFT edge, so add half width to get center
+                    const sourceSlotWidth = sourceSlot.width || SLOT_SIZE;
+                    const x1 = d.source.x + sourceSlot.x + sourceSlotWidth / 2;
+                    const y1 = d.source.y + sourceSlot.y;  // slot.y is already the vertical center
+                    
+                    // Argument slots: slot.x is the RIGHT edge (for non-inline), so subtract half width to get center
+                    // For inline slots, slot.x is also at the right edge
+                    const targetSlotWidth = targetSlot.width || SLOT_SIZE;
+                    const x2 = d.target.x + targetSlot.x - targetSlotWidth / 2;
+                    const y2 = d.target.y + targetSlot.y;  // slot.y is already the vertical center
+                    
+                    return `M${x1},${y1} L${x2},${y2}`;
+                });
+            };
+            
+            updateLinks();
+            
+            // Position link labels at midpoint of edge, parallel to the line
+            const updateLinkLabels = () => {
+                // Update both normal and highlighted labels
+                const updateLabels = (selection) => {
+                    selection.each(function(d) {
+                        if (!d.source.resultSlots || !d.target.argSlots) return;
+                        const sourceSlot = d.source.resultSlots[d.sourcePort];
+                        const targetSlot = d.target.argSlots[d.targetPort];
+                        if (!sourceSlot || !targetSlot) return;
+                        
+                        // Result slots: slot.x is the LEFT edge, so add half width to get center
+                        const sourceSlotWidth = sourceSlot.width || SLOT_SIZE;
+                        const x1 = d.source.x + sourceSlot.x + sourceSlotWidth / 2;
+                        const y1 = d.source.y + sourceSlot.y;  // slot.y is already the vertical center
+                        
+                        // Argument slots: slot.x is the RIGHT edge, so subtract half width to get center
+                        const targetSlotWidth = targetSlot.width || SLOT_SIZE;
+                        const x2 = d.target.x + targetSlot.x - targetSlotWidth / 2;
+                        const y2 = d.target.y + targetSlot.y;  // slot.y is already the vertical center
+                        
+                        const mx = (x1 + x2) / 2;
+                        const my = (y1 + y2) / 2;
+                        
+                        const dx = x2 - x1;
+                        const dy = y2 - y1;
+                        let angle = Math.atan2(dy, dx) * 180 / Math.PI;
+                        
+                        if (angle > 90 || angle < -90) {
+                            angle += 180;
+                        }
+                        
+                        d3.select(this)
+                            .attr("x", mx)
+                            .attr("y", my - 5)
+                            .attr("text-anchor", "middle")
+                            .attr("transform", `rotate(${angle}, ${mx}, ${my})`);
+                    });
+                };
+                
+                updateLabels(linkLabelGroup.selectAll("text"));
+                updateLabels(highlightedLinkLabelGroup.selectAll("text"));
+            };
+            
+            updateLinkLabels();
+            
+            // Position nodes at their static coordinates
+            node.attr("transform", d => `translate(${d.x},${d.y})`);
+            
+            // Update info
+            snapshotInfo.text(
+                `${snapshot.hierarchicalName} | ` +
+                `Nodes: ${snapshot.nodes.length} (${allNodes.length} visible) | ` +
+                `Edges: ${snapshot.edges.length}`
+            );
+        }
+        
+        // Drag behavior
+        function drag(simulation) {
+            function dragstarted(event) {
+                if (!event.active) simulation.alphaTarget(0.3).restart();
+                event.subject.fx = event.subject.x;
+                event.subject.fy = event.subject.y;
+            }
+            
+            function dragged(event) {
+                event.subject.fx = event.x;
+                event.subject.fy = event.y;
+            }
+            
+            function dragended(event) {
+                if (!event.active) simulation.alphaTarget(0);
+                event.subject.fx = null;
+                event.subject.fy = null;
+            }
+            
+            return d3.drag()
+                .on("start", dragstarted)
+                .on("drag", dragged)
+                .on("end", dragended);
+        }
+        
+        // Navigation
+        function updateSnapshot() {
+            snapshotSelect.property("value", currentSnapshotIndex);
+            renderGraph(currentSnapshotIndex);
+            
+            d3.select("#prev-btn").property("disabled", currentSnapshotIndex === 0);
+            d3.select("#next-btn").property("disabled", currentSnapshotIndex === snapshotsData.length - 1);
+        }
+        
+        snapshotSelect.on("change", function() {
+            currentSnapshotIndex = +this.value;
+            updateSnapshot();
+        });
+        
+        compareSelect.on("change", function() {
+            compareWithIndex = +this.value;
+            updateSnapshot();
+        });
+        
+        bridgeSlicesCheckbox.on("change", function() {
+            bridgeSlices = this.checked;
+            updateSnapshot();
+        });
+        
+        d3.select("#prev-btn").on("click", () => {
+            if (currentSnapshotIndex > 0) {
+                currentSnapshotIndex--;
+                updateSnapshot();
+            }
+        });
+        
+        d3.select("#next-btn").on("click", () => {
+            if (currentSnapshotIndex < snapshotsData.length - 1) {
+                currentSnapshotIndex++;
+                updateSnapshot();
+            }
+        });
+        
+        d3.select("#play-btn").on("click", function() {
+            if (isPlaying) {
+                isPlaying = false;
+                clearInterval(playInterval);
+                d3.select(this).text("▶ Play");
+            } else {
+                isPlaying = true;
+                d3.select(this).text("⏸ Pause");
+                playInterval = setInterval(() => {
+                    if (currentSnapshotIndex < snapshotsData.length - 1) {
+                        currentSnapshotIndex++;
+                        updateSnapshot();
+                    } else {
+                        d3.select("#play-btn").node().click();
+                    }
+                }, 1000);
+            }
+        });
+        
+        // Close inspector when clicking outside
+        svg.on("click", (event) => {
+            if (event.target === svg.node()) {
+                // Restore all links to normal group
+                if (highlightedLinkGroup) {
+                    highlightedLinkGroup.selectAll("*").remove();
+                    highlightedLinkLabelGroup.selectAll("*").remove();
+                    linkGroup.selectAll("path").style("display", null);
+                    linkLabelGroup.selectAll("text").style("display", null);
+                }
+                
+                inspector.style("display", "none");
+                selectedNode = null;
+                // Update all nodes to clear selection
+                if (g.select(".nodes").node()) {
+                    g.select(".nodes").selectAll("g").attr("class", d => `node node-${d.status}`);
+                }
+            }
+        });
+        
+        // Initial render
+        updateSnapshot();
+    </script>
+</body>
+</html>

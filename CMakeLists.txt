@@ -305,6 +305,27 @@ if (VUK_USE_SLANG)
 	target_sources(vuk PRIVATE src/shader_compilers/slang.cpp)
 endif()
 
+# Embed HTML template for graph snapshots
+add_custom_command(
+	OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/generated/EmbeddedHtmlTemplate.hpp
+	COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
+	COMMAND ${CMAKE_COMMAND}
+		-DINPUT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/src/ir_graph_snapshots_template.html
+		-DOUTPUT_FILE=${CMAKE_CURRENT_BINARY_DIR}/generated/EmbeddedHtmlTemplate.hpp
+		-P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedFile.cmake
+	DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/ir_graph_snapshots_template.html
+		${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedFile.cmake
+	COMMENT "Embedding HTML template for IR graph snapshots"
+	VERBATIM
+)
+
+add_custom_target(embed_html_template
+	DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/generated/EmbeddedHtmlTemplate.hpp
+)
+
+add_dependencies(vuk embed_html_template)
+target_include_directories(vuk PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
+
 target_compile_definitions(vuk
   PUBLIC
   VUK_USE_SHADERC=$<BOOL:${VUK_USE_SHADERC}>
@@ -341,6 +362,7 @@ target_sources(vuk PRIVATE
 	src/irpasses/Linearization.cpp
 	src/irpasses/IRPasses.cpp
 	src/GraphDumper.cpp
+	src/GraphSnapshots.cpp
 
 	src/runtime/Cache.cpp
 	src/runtime/RadixTree.cpp

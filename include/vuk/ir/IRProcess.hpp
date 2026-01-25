@@ -1,5 +1,6 @@
 #pragma once
 
+#include "vuk/ir/GraphSnapshots.hpp"
 #include "vuk/ir/IR.hpp"
 #include "vuk/RelSpan.hpp"
 #include "vuk/ResourceUse.hpp"
@@ -34,6 +35,12 @@ namespace vuk {
 		std::unique_ptr<arena> arena_;
 		std::unique_ptr<std::pmr::unsynchronized_pool_resource> pool;
 		std::pmr::monotonic_buffer_resource mbr;
+
+		/// @brief Enable collection of IR graph snapshots during pass execution
+		bool enable_html_graph_snapshots = false;
+
+		/// @brief Write generated HTML to disk and open in browser (Windows only)
+		bool dump_html_graph_snapshots_to_disk = false;
 
 		std::vector<ScheduledItem*> partitioned_execables;
 
@@ -137,6 +144,8 @@ namespace vuk {
 		ProfilingCallbacks callbacks;
 
 		std::vector<ir_pass_factory> ir_passes;
+
+		GraphSnapshotCollector graph_snapshot_collector;
 
 		enum PassRunOptions : uint8_t {
 			eNone = 0,

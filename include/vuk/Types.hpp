@@ -1330,6 +1330,12 @@ namespace vuk {
 		ProfilingCallbacks callbacks;
 		bool dump_graph = false;
 		bool dump_linear = false;
+
+		/// @brief Enable collection of IR graph snapshots during execution
+		bool enable_html_graph_snapshots = true;
+
+		/// @brief Write generated HTML to disk and open in browser (Windows only) at end of compilation
+		bool dump_html_graph_snapshots_to_disk = false;
 	};
 
 	enum class DescriptorSetStrategyFlagBits {

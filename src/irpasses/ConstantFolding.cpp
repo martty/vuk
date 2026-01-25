@@ -1,5 +1,6 @@
 #include "vuk/ir/GraphDumper.hpp"
 #include "vuk/ir/IRPasses.hpp"
+#include <fmt/format.h>
 
 namespace vuk {
 	// Make sure this table is updated if Node::Kind changes!
@@ -79,9 +80,12 @@ namespace vuk {
 					break;
 				}
 			});
+
+			capture_snapshot(fmt::format("After iteration {}", i));
 		}
 
 		// compute class assignments & perform constant folding
+
 		visit_all_postorder([this](Node* node) {
 			DomainFlags op_class = op_compute_class[node->kind];
 
@@ -128,12 +132,9 @@ namespace vuk {
 			}
 		});
 
+		capture_snapshot("After compute class assignment");
+
 		if (impl.set_nodes.size() > 0) {
-			/* GraphDumper::end_graph();
-			GraphDumper::begin_graph(true, "Before Constant Folding");
-			GraphDumper::dump_graph(impl.nodes, false, false);
-			GraphDumper::end_graph();
-			printf("");*/
 			// apply SETs
 			rewrite([](Node* node, Replacer& r) {
 				if (node->kind == Node::SET) {
