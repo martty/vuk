@@ -343,6 +343,13 @@ namespace vuk {
 		vmaSetAllocationName(impl->allocator, static_cast<VmaAllocation>(ae.allocation), name.c_str());
 	}
 
+	static const auto IV_MASK = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+	                            VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT |
+	                            VK_IMAGE_USAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR | VK_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_BIT_EXT |
+	                            VK_IMAGE_USAGE_VIDEO_DECODE_DST_BIT_KHR | VK_IMAGE_USAGE_VIDEO_DECODE_DPB_BIT_KHR | VK_IMAGE_USAGE_VIDEO_ENCODE_SRC_BIT_KHR |
+	                            VK_IMAGE_USAGE_VIDEO_ENCODE_DPB_BIT_KHR | VK_IMAGE_USAGE_SAMPLE_WEIGHT_BIT_QCOM | VK_IMAGE_USAGE_SAMPLE_BLOCK_MATCH_BIT_QCOM |
+	                            VK_IMAGE_USAGE_VIDEO_ENCODE_QUANTIZATION_DELTA_MAP_BIT_KHR | VK_IMAGE_USAGE_VIDEO_ENCODE_EMPHASIS_MAP_BIT_KHR;
+
 	Result<void, AllocateException> DeviceVkResource::allocate_image_views(std::span<ImageView<>> dst, std::span<const IVCI> cis, SourceLocationAtFrame loc) {
 		assert(dst.size() == cis.size());
 		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
@@ -372,11 +379,13 @@ namespace vuk {
 			ci.subresourceRange.layerCount = ci.subresourceRange.layerCount == 65535 ? VK_REMAINING_ARRAY_LAYERS : ci.subresourceRange.layerCount;
 			ci.subresourceRange.levelCount = ci.subresourceRange.levelCount == 65535 ? VK_REMAINING_MIP_LEVELS : ci.subresourceRange.levelCount;
 
-			VkImageView iv;
-			VkResult res = ctx->vkCreateImageView(this->device, &ci, nullptr, &iv);
-			if (res != VK_SUCCESS) {
-				deallocate_image_views({ dst.data(), (uint64_t)i });
-				return { expected_error, AllocateException{ res } };
+			VkImageView iv = VK_NULL_HANDLE;
+			if (image_entry.usage.m_mask & IV_MASK) {
+				VkResult res = ctx->vkCreateImageView(this->device, &ci, nullptr, &iv);
+				if (res != VK_SUCCESS) {
+					deallocate_image_views({ dst.data(), (uint64_t)i });
+					return { expected_error, AllocateException{ res } };
+				}
 			}
 			ive.extent = image_entry.extent;
 			ive.sample_count = image_entry.sample_count;
@@ -1139,23 +1148,24 @@ namespace vuk {
 		}
 	}
 
-	Result<void, AllocateException>
-	DeviceVkResource::allocate_virtual_address_spaces(std::span<VirtualAddressSpace> dst, std::span<const VirtualAddressSpaceCreateInfo> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException> DeviceVkResource::allocate_virtual_address_spaces(std::span<VirtualAddressSpace> dst,
+	                                                                                  std::span<const VirtualAddressSpaceCreateInfo> cis,
+	                                                                                  SourceLocationAtFrame loc) {
 		assert(dst.size() == cis.size());
 		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
 			std::lock_guard _(impl->mutex);
 			auto& ci = cis[i];
-			
+
 			VmaVirtualBlockCreateInfo vbci{};
 			vbci.size = ci.size;
-			
+
 			VmaVirtualBlock block;
 			VkResult res = vmaCreateVirtualBlock(&vbci, &block);
 			if (res != VK_SUCCESS) {
 				deallocate_virtual_address_spaces({ dst.data(), (uint64_t)i });
 				return { expected_error, AllocateException{ res } };
 			}
-			
+
 			dst[i] = VirtualAddressSpace{ block, ci.size };
 		}
 		return { expected_value };
@@ -1171,23 +1181,24 @@ namespace vuk {
 		}
 	}
 
-	Result<void, AllocateException>
-	DeviceVkResource::allocate_virtual_allocations(std::span<VirtualAllocation> dst, std::span<const VirtualAllocationCreateInfo> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException> DeviceVkResource::allocate_virtual_allocations(std::span<VirtualAllocation> dst,
+	                                                                               std::span<const VirtualAllocationCreateInfo> cis,
+	                                                                               SourceLocationAtFrame loc) {
 		assert(dst.size() == cis.size());
 		for (int64_t i = 0; i < (int64_t)dst.size(); i++) {
 			std::lock_guard _(impl->mutex);
 			auto& ci = cis[i];
-			
+
 			if (!ci.address_space || !*ci.address_space) {
 				deallocate_virtual_allocations({ dst.data(), (uint64_t)i });
 				return { expected_error, AllocateException{ VK_ERROR_INITIALIZATION_FAILED } };
 			}
-			
+
 			VmaVirtualAllocationCreateInfo vaci{};
 			vaci.size = ci.size;
 			vaci.alignment = ci.alignment;
 			vaci.pUserData = ci.address_space; // Store address space pointer in user data for validation/debugging
-			
+
 			VmaVirtualAllocation allocation;
 			uint64_t offset;
 			VkResult res = vmaVirtualAllocate(static_cast<VmaVirtualBlock>(ci.address_space->block), &vaci, &allocation, &offset);
@@ -1195,7 +1206,7 @@ namespace vuk {
 				deallocate_virtual_allocations({ dst.data(), (uint64_t)i });
 				return { expected_error, AllocateException{ res } };
 			}
-			
+
 			dst[i] = VirtualAllocation{ allocation, offset, ci.address_space };
 		}
 		return { expected_value };
@@ -1397,8 +1408,9 @@ namespace vuk {
 		return upstream->deallocate_render_passes(src);
 	}
 
-	Result<void, AllocateException>
-	DeviceNestedResource::allocate_virtual_address_spaces(std::span<VirtualAddressSpace> dst, std::span<const VirtualAddressSpaceCreateInfo> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException> DeviceNestedResource::allocate_virtual_address_spaces(std::span<VirtualAddressSpace> dst,
+	                                                                                      std::span<const VirtualAddressSpaceCreateInfo> cis,
+	                                                                                      SourceLocationAtFrame loc) {
 		return upstream->allocate_virtual_address_spaces(dst, cis, loc);
 	}
 
@@ -1406,8 +1418,9 @@ namespace vuk {
 		upstream->deallocate_virtual_address_spaces(src);
 	}
 
-	Result<void, AllocateException>
-	DeviceNestedResource::allocate_virtual_allocations(std::span<VirtualAllocation> dst, std::span<const VirtualAllocationCreateInfo> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException> DeviceNestedResource::allocate_virtual_allocations(std::span<VirtualAllocation> dst,
+	                                                                                   std::span<const VirtualAllocationCreateInfo> cis,
+	                                                                                   SourceLocationAtFrame loc) {
 		return upstream->allocate_virtual_allocations(dst, cis, loc);
 	}
 
