@@ -1156,6 +1156,9 @@ namespace vuk {
 						if (auto res = allocator.allocate_images(std::span{ static_cast<Image<>*>(&im), 1 }, std::span{ &ici, 1 }); !res) {
 							return res;
 						}
+						if (node->debug_info && node->debug_info->result_names.size() > 0 && !node->debug_info->result_names[0].empty()) {
+							ctx.set_name(ctx.resolve_image(im).image, node->debug_info->result_names[0].c_str());
+						}
 						allocator.deallocate(std::span{ static_cast<Image<>*>(&im), 1 });
 						done(node, host_stream, im);
 						/*

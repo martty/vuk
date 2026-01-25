@@ -45,7 +45,7 @@ namespace vuk {
 							r.replace({ node, 0 }, node->slice.src.node->construct.args[*field_idx + 1]);
 						}
 						// slicing a slice
-						else if (node->slice.src.node->kind == Node::SLICE && node->slice.src.index <= 1 && node->slice.axis == Node::NamedAxis::FIELD) {
+						else if (node->slice.src.node->kind == Node::SLICE && node->slice.src.index == 1) {
 							auto new_slice = make_slice_with_new_src(node, node->slice.src.node->slice.src);
 							add_node(new_slice.node);
 							r.replace({ node, 0 }, new_slice);

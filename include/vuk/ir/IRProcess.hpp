@@ -335,10 +335,10 @@ namespace vuk {
 		if (acc & (eMemoryRW | eDepthStencilRW)) {
 			usage |= ImageUsageFlagBits::eDepthStencilAttachment;
 		}
-		if (acc & (eMemoryRW | eTransferRead)) {
+		if (acc & (eMemoryRW | eTransferRead | eCopyRead | eBlitRead | eResolveRead)) {
 			usage |= ImageUsageFlagBits::eTransferSrc;
 		}
-		if (acc & (eMemoryRW | eTransferWrite)) {
+		if (acc & (eMemoryRW | eTransferWrite | eCopyWrite | eBlitWrite | eResolveWrite | eClear)) {
 			usage |= ImageUsageFlagBits::eTransferDst;
 		}
 		if (acc & (eMemoryRW | eFragmentRW | eComputeRW | eRayTracingRW)) {

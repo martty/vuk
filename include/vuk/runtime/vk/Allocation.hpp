@@ -811,9 +811,9 @@ namespace vuk {
 		uint16_t level_count = 0xffff;
 		uint16_t base_layer = 0xffff;
 		uint16_t layer_count = 0xffff;
-		VkImageUsageFlags view_usage : 10;  // 8 bytes
-		Image<> image = {};                 // 16 bytes
-		Format format = Format::eUndefined; // 32 bytes in total
+		VkImageUsageFlags view_usage : 10 = 0; // 8 bytes
+		Image<> image = {};                    // 16 bytes
+		Format format = Format::eUndefined;    // 32 bytes in total
 
 		static IVCI from(ImageViewCreateInfo ivci) {
 			assert(ivci.pNext == nullptr && "Compression does not support pNextended IVCIs");

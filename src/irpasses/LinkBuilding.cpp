@@ -240,7 +240,7 @@ namespace vuk {
 					if (!is_write_access(access)) { // Read and ReadWrite
 						add_read(node, parm, i);
 					}
-					auto& base = *arg_ty->imbued.T;
+					auto base = Type::stripped(*arg_ty->imbued.T);
 					if (do_ssa && base->is_imageview()) {
 						access_to_usage(impl.image_usage_flags[parm], access);
 					}
