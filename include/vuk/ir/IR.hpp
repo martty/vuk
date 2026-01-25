@@ -1277,16 +1277,8 @@ namespace vuk {
 			                              .constant = { .value = new (new char[sizeof(T)]) T(value), .owned = true } }));
 		}
 
-		void set_value(Ref ref, Ref value) {
-			emplace_op(Node{ .kind = Node::SET, .set = { .dst = ref, .value = value, .index = -1 } });
-		}
-
-		void set_value(Ref ref, size_t index, Ref value) {
-			emplace_op(Node{ .kind = Node::SET, .set = { .dst = ref, .value = value, .index = (int)index } });
-		}
-
-		void set_value_on_allocate_src(Ref ref, size_t index, Ref value) {
-			emplace_op(Node{ .kind = Node::SET, .set = { .dst = ref, .value = value, .index = (int)index, .set_on_allocate = true } });
+		Node* set_value(Ref ref, Ref value) {
+			return emplace_op(Node{ .kind = Node::SET, .set = { .dst = ref, .value = value, .index = -1 } });
 		}
 
 		template<class T>

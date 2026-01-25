@@ -149,6 +149,13 @@ namespace vuk {
 	}
 
 	inline Value<ImageView<>> blit_image(Value<ImageView<>> src, Value<ImageView<>> dst, Filter filter, VUK_CALLSTACK) {
+		// source and destination have to have 1 sample and 1 level
+		current_module->set_value(src.sample_count.get_head(), current_module->make_constant(Samples::e1));
+		current_module->set_value(dst.sample_count.get_head(), current_module->make_constant(Samples::e1));
+		current_module->set_value(dst.level_count.get_head(), current_module->make_constant<uint16_t>(1));
+		current_module->set_value(src.level_count.get_head(), current_module->make_constant<uint16_t>(1));
+		// same number of layers in both
+		src.same_layers_as(dst);
 		auto blit = make_pass(
 		    "blit image",
 		    [=](CommandBuffer& cbuf, VUK_IA(Access::eBlitRead) src, VUK_IA(Access::eBlitWrite) dst) {
@@ -252,6 +259,8 @@ namespace vuk {
 	}
 
 	inline Value<ImageView<>> copy(Value<ImageView<>> src, Value<ImageView<>> dst, VUK_CALLSTACK) {
+		// same layers, levels & samples
+		src.similar_to(dst);
 		auto img2img = make_pass("copy image to image", [](CommandBuffer& cbuf, VUK_IA(Access::eCopyRead) src, VUK_IA(Access::eCopyWrite) dst) {
 			auto& src_ve = src->get_meta();
 			auto& dst_ve = dst->get_meta();

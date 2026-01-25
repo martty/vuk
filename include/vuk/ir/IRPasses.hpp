@@ -30,13 +30,13 @@ namespace vuk {
 
 		Result<void> operator()() override;
 	};
-	struct expand_default_view : IRPass {
+	struct expand_composites : IRPass {
 		using IRPass::IRPass;
 
 		Result<void> operator()() override;
 	};
-	struct propagate_usage_flags : IRPass {
-		using IRPass::IRPass;
+	struct propagate_usage_flags : IRAnalysisPass {
+		using IRAnalysisPass::IRAnalysisPass;
 
 		Result<void> operator()() override;
 	};

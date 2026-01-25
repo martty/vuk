@@ -420,6 +420,17 @@ namespace vuk {
 		void add_result(Node* node, size_t output_idx, Ref parm);
 		void process_node_links(Node* node);
 
+		/// @brief Walks back through the link chain to find the definition of a Ref.
+		/// @param ref The Ref to find the definition for
+		/// @return The Ref pointing to the definition
+		static Ref to_def(Ref ref) {
+			auto link = &ref.link();
+			while (link->prev && link->prev->def) {
+				link = link->prev;
+			}
+			return link->def;
+		}
+
 		/// @brief Visits all nodes in preorder (parent first) and applies the given function to each element.
 		/// @param f A callable object to be applied to each element during the preorder traversal.
 		template<class F>

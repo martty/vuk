@@ -333,7 +333,7 @@ target_sources(vuk PRIVATE
 	src/IRDump.cpp
 	src/irpasses/LinkBuilding.cpp
 	src/irpasses/ReifyInference.cpp
-	src/irpasses/ExpandDefaultView.cpp
+	src/irpasses/ExpandComposites.cpp
 	src/irpasses/PropagateUsageFlags.cpp
 	src/irpasses/ConstantFolding.cpp
 	src/irpasses/DuplicatedResourceRef.cpp

@@ -3,8 +3,35 @@
 #include "vuk/RenderGraph.hpp"
 
 namespace vuk {
-	Result<void> expand_default_view::operator()() {
+	Result<void> expand_composites::operator()() {
 		rewrite([this](Node* node, Replacer& r) {
+			// Expand PLACEHOLDER nodes with composite types into CONSTRUCT nodes
+			if (node->kind == Node::PLACEHOLDER) {
+				auto placeholder_type = Type::stripped(node->type[0]);
+
+				if (placeholder_type->kind == Type::COMPOSITE_TY) {
+					// Create placeholder arguments for each field of the composite
+					std::vector<Ref> field_placeholders;
+					for (auto& field_type : placeholder_type->composite.types) {
+						auto field_placeholder = current_module->make_placeholder(field_type);
+						add_node(field_placeholder.node);
+						field_placeholders.push_back(field_placeholder);
+					}
+
+					// Create CONSTRUCT node with the placeholder fields
+					auto construct_ref = current_module->make_construct(placeholder_type, nullptr, field_placeholders);
+					add_node(construct_ref.node);
+
+					// Move debug info
+					if (node->debug_info) {
+						construct_ref.node->debug_info = node->debug_info;
+						node->debug_info = nullptr;
+					}
+
+					r.replace({ node, 0 }, construct_ref);
+				}
+			}
+
 			if (node->kind == Node::ALLOCATE) {
 				auto alloc_type = Type::stripped(node->type[0]);
 				auto src_type = Type::stripped(node->allocate.src.type());

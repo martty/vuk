@@ -182,6 +182,9 @@ namespace vuk {
 			proxy* operator->() {                                                                                                                                    \
 				return this;                                                                                                                                           \
 			}                                                                                                                                                        \
+			const proxy* operator->() const {                                                                                                                        \
+				return this;                                                                                                                                           \
+			}                                                                                                                                                        \
 		};                                                                                                                                                         \
 	}
 
@@ -232,6 +235,9 @@ namespace vuk {
 			proxy* operator->() {                                                                                                                                    \
 				return this;                                                                                                                                           \
 			}                                                                                                                                                        \
+			const proxy* operator->() const {                                                                                                                        \
+				return this;                                                                                                                                           \
+			}                                                                                                                                                        \
 		};                                                                                                                                                         \
 	}
 
@@ -280,6 +286,9 @@ namespace vuk {
 		struct proxy {                                                                                                                                             \
 			EVAL(MAKE_EXPAND TRANSFORMSC(WRAPPED_T, (__VA_ARGS__)));                                                                                                 \
 			proxy* operator->() {                                                                                                                                    \
+				return this;                                                                                                                                           \
+			}                                                                                                                                                        \
+			const proxy* operator->() const {                                                                                                                        \
 				return this;                                                                                                                                           \
 			}                                                                                                                                                        \
 		};                                                                                                                                                         \

@@ -153,6 +153,25 @@ namespace vuk {
 #pragma clang diagnostic pop
 		}
 
+		const auto operator->() const noexcept
+		  requires(erased_tuple_adaptor<T>::value)
+		{
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-value"
+			return std::apply(
+			    [head = get_head(), this](auto... a) {
+				    size_t i = 0;
+				    return typename erased_tuple_adaptor<T>::proxy{ [&, this](auto a, auto i) {
+					    Ref ref = current_module->make_extract(head, i);
+					    ExtRef exref = make_ext_ref(ref);
+					    node->deps.push_back(exref.node);
+					    return exref;
+					  }((a, head), i++)... };
+			    },
+			    erased_tuple_adaptor<T>::member_types);
+#pragma clang diagnostic pop
+		}
+
 		/// @brief Submit, wait, and retrieve the resource value on the host
 		/// @param allocator Allocator to use for resource allocation
 		/// @param compiler Compiler to use for graph compilation
@@ -336,7 +355,7 @@ namespace vuk {
 
 	template<class T = void>
 	using val_view = Value<view<T>>;
-	
+
 	// Arithmetic operators for Value<uint64_t>
 
 	template<Format f>
@@ -375,7 +394,9 @@ namespace vuk {
 		// Image inferences
 		void same_extent_as(const Value<ImageView<f>>& src) {
 			this->node->deps.push_back(src.node);
-			current_module->set_value(extent.get_head(), src.extent.get_head());
+			current_module->set_value(extent->width.get_head(), src.extent->width.get_head());
+			current_module->set_value(extent->height.get_head(), src.extent->height.get_head());
+			current_module->set_value(extent->depth.get_head(), src.extent->depth.get_head());
 		}
 
 		/// @brief Inference target has the same width & height as the source
@@ -406,11 +427,16 @@ namespace vuk {
 			current_module->set_value(layer_count.get_head(), src.layer_count.get_head());
 		}
 
+		/// @brief Inference target has the same number of samples as the source
+		void same_samples_as(const Value<ImageView<f>>& src) {
+			current_module->set_value(sample_count.get_head(), src.sample_count.get_head());
+		}
+
 		/// @brief Inference target is similar to(same shape, same format, same sample count) the source
 		void similar_to(const Value<ImageView<f>>& src) {
 			same_shape_as(src);
 			same_format_as(src);
-			this->set_with_extract(this->get_head(), src.get_head(), 4);
+			same_samples_as(src);
 		}
 
 		Value<ImageView<f>> mip(uint32_t mip) {

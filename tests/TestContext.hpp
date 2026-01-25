@@ -244,7 +244,6 @@ namespace vuk {
 	}
 
 	// Helper to render a fullscreen triangle to clear or fill an attachment
-	// This is useful in render passes where clear_image cannot be used
 	inline Value<ImageView<>> render_fullscreen_color(Value<ImageView<>> target, std::array<float, 4> color) {
 		static const char* fullscreen_vert = R"(#version 450
 #pragma shader_stage(vertex)

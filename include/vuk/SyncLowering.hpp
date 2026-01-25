@@ -202,6 +202,7 @@ namespace vuk {
 		case eDepthStencilRW:
 		case eColorRead:
 		case eDepthStencilRead:
+		case eDepthStencilWrite:
 			return true;
 		default:
 			return false;

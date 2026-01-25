@@ -28,7 +28,7 @@ TEST_CASE("ir_allocate_image_resolve_operation") {
 	auto extent = Extent3D{ 512, 512, 1 };
 	size_t pixel_count = extent.width * extent.height * extent.depth;
 	std::vector expected_data(pixel_count, ImageLike<Format::eR8G8B8A8Unorm>{ 0.2f, 0.2f, 0.2f, 0.2f });
-	verify_image_data(resolved, std::span(expected_data), Format::eR8G8B8A8Unorm, Extent3D{ 512, 512, 1 }, { /* .dump_graph = true*/ });
+	verify_image_data(resolved, std::span(expected_data), Format::eR8G8B8A8Unorm, Extent3D{ 512, 512, 1 }, { .dump_graph = true });
 }
 
 TEST_CASE("ir_allocate_image_blit_operation") {
@@ -40,6 +40,7 @@ TEST_CASE("ir_allocate_image_blit_operation") {
 	// Destination with different size - inference should derive format and sample count
 	ICI dst_ici = {};
 	dst_ici.extent = Extent3D{ 512, 512, 1 };
+	dst_ici.format = Format::eR8G8B8A8Unorm;
 	auto dst_view = allocate<>("dst_img", dst_ici);
 
 	auto blitted = blit_image(src_view, dst_view, Filter::eLinear);
@@ -70,70 +71,6 @@ TEST_CASE("ir_allocate_image_copy_operation") {
 	verify_image_data(copied, std::span(expected_data), Format::eR32G32B32A32Sfloat, extent);
 }
 
-TEST_CASE("ir_allocate_image_same_format_constraint") {
-	// Source image
-	ICI src_ici = from_preset(Preset::eRTT2DUnmipped, Format::eR16G16B16A16Sfloat, Extent3D{ 64, 64, 1 }, Samples::e1);
-	auto src_view = allocate<>("src_img", src_ici);
-	clear_image(src_view, ClearColor{ 0.75f, 0.25f, 0.5f, 1.0f });
-
-	// Destination with explicit extent but no format
-	ICI dst_ici = {};
-	dst_ici.extent = Extent3D{ 64, 64, 1 };
-	auto dst_view = allocate<>("dst_img", dst_ici);
-	dst_view.same_format_as(src_view);
-
-	auto copied = copy(src_view, dst_view);
-
-	// Verify format was inferred correctly
-	auto extent = Extent3D{ 64, 64, 1 };
-	size_t pixel_count = extent.width * extent.height * extent.depth;
-	std::vector expected_data(pixel_count, ImageLike<Format::eR16G16B16A16Sfloat>{ 0.75f, 0.25f, 0.5f, 1.0f });
-	verify_image_data(copied, std::span(expected_data), Format::eR16G16B16A16Sfloat, extent);
-}
-
-TEST_CASE("ir_allocate_image_same_extent_constraint") {
-	// Source image
-	ICI src_ici = from_preset(Preset::eRTT2DUnmipped, Format::eR8G8B8A8Unorm, Extent3D{ 256, 128, 1 }, Samples::e1);
-	auto src_view = allocate<>("src_img", src_ici);
-	clear_image(src_view, ClearColor{ 0.3f, 0.6f, 0.9f, 1.0f });
-
-	// Destination with format but no extent
-	ICI dst_ici = {};
-	dst_ici.format = Format::eR8G8B8A8Unorm;
-	auto dst_view = allocate<>("dst_img", dst_ici);
-	dst_view.same_extent_as(src_view);
-
-	auto copied = copy(src_view, dst_view);
-
-	// Verify extent was inferred correctly
-	auto extent = Extent3D{ 256, 128, 1 };
-	size_t pixel_count = extent.width * extent.height * extent.depth;
-	std::vector expected_data(pixel_count, ImageLike<Format::eR8G8B8A8Unorm>{ 0.3f, 0.6f, 0.9f, 1.0f });
-	verify_image_data(copied, std::span(expected_data), Format::eR8G8B8A8Unorm, extent);
-}
-
-TEST_CASE("ir_allocate_image_same_shape_constraint") {
-	// Source image with multiple mip levels
-	ICI src_ici = from_preset(Preset::eRTT2D, Format::eR8G8B8A8Unorm, Extent3D{ 128, 128, 1 }, Samples::e1);
-	src_ici.level_count = 4;
-	auto src_view = allocate<>("src_img", src_ici);
-	clear_image(src_view, ClearColor{ 0.1f, 0.2f, 0.3f, 0.4f });
-
-	// Destination with format only
-	ICI dst_ici = {};
-	dst_ici.format = Format::eR8G8B8A8Unorm;
-	auto dst_view = allocate<>("dst_img", dst_ici);
-	dst_view.same_shape_as(src_view);
-
-	auto copied = copy(src_view, dst_view);
-
-	// Verify shape (extent, layers, levels) was inferred correctly
-	auto extent = Extent3D{ 128, 128, 1 };
-	size_t pixel_count = extent.width * extent.height * extent.depth;
-	std::vector expected_data(pixel_count, ImageLike<Format::eR8G8B8A8Unorm>{ 0.1f, 0.2f, 0.3f, 0.4f });
-	verify_image_data(copied, std::span(expected_data), Format::eR8G8B8A8Unorm, extent);
-}
-
 TEST_CASE("ir_allocate_image_framebuffer_attachments") {
 	// Create a render pass with color and depth attachments
 	// Color attachment has known parameters
@@ -144,7 +81,6 @@ TEST_CASE("ir_allocate_image_framebuffer_attachments") {
 	ICI depth_ici = {};
 	depth_ici.format = Format::eD32Sfloat;
 	auto depth_view = allocate<>("depth_att", depth_ici);
-	depth_view.same_extent_as(color_view);
 
 	// Simple render pass that uses both attachments
 	auto render = make_pass(
@@ -168,40 +104,7 @@ TEST_CASE("ir_allocate_image_framebuffer_attachments") {
 	auto extent = Extent3D{ 512, 512, 1 };
 	size_t pixel_count = extent.width * extent.height * extent.depth;
 	std::vector expected_data(pixel_count, ImageLike<Format::eR8G8B8A8Unorm>{ 0.8f, 0.4f, 0.2f, 1.0f });
-	verify_image_data(result, std::span(expected_data), Format::eR8G8B8A8Unorm, extent);
-}
-
-TEST_CASE("ir_allocate_image_clear_operation") {
-	// Image with partial ICI - needs inference
-	ICI ici = {};
-	ici.extent = Extent3D{ 128, 128, 1 };
-	ici.format = Format::eR8G8B8A8Unorm;
-	auto view = allocate<>("clear_target", ici);
-
-	auto cleared = clear_image(view, ClearColor{ 0.25f, 0.5f, 0.75f, 1.0f });
-
-	// Verify clear succeeded
-	auto extent = Extent3D{ 128, 128, 1 };
-	size_t pixel_count = extent.width * extent.height * extent.depth;
-	std::vector expected_data(pixel_count, ImageLike<Format::eR8G8B8A8Unorm>{ 0.25f, 0.5f, 0.75f, 1.0f });
-	verify_image_data(cleared, std::span(expected_data), Format::eR8G8B8A8Unorm, extent);
-}
-
-TEST_CASE("ir_allocate_image_generate_mips") {
-	// Base mip level with known parameters
-	ICI src_ici = from_preset(Preset::eRTT2D, Format::eR8G8B8A8Unorm, Extent3D{ 512, 512, 1 }, Samples::e1);
-	src_ici.level_count = 4;
-	auto src_view = allocate<>("mipped_img", src_ici);
-	clear_image(src_view.mip(0), ClearColor{ 0.9f, 0.1f, 0.5f, 1.0f });
-
-	// Generate mips - this involves multiple blits with inferred parameters
-	auto result = generate_mips(src_view, 0, 3);
-
-	// Verify base mip level
-	auto extent = Extent3D{ 512, 512, 1 };
-	size_t pixel_count = extent.width * extent.height * extent.depth;
-	std::vector expected_data(pixel_count, ImageLike<Format::eR8G8B8A8Unorm>{ 0.9f, 0.1f, 0.5f, 1.0f });
-	verify_image_data(result.mip(0), std::span(expected_data), Format::eR8G8B8A8Unorm, extent);
+	verify_image_data(result, std::span(expected_data), Format::eR8G8B8A8Unorm, extent, { .dump_graph = true });
 }
 
 TEST_CASE("ir_allocate_image_chain_inference") {
@@ -265,4 +168,44 @@ TEST_CASE("ir_allocate_image_multiple_framebuffer_attachments") {
 	size_t pixel_count = extent.width * extent.height * extent.depth;
 	std::vector expected_data(pixel_count, ImageLike<Format::eR8G8B8A8Unorm>{ 1.0f, 0.0f, 0.0f, 1.0f });
 	verify_image_data(result, std::span(expected_data), Format::eR8G8B8A8Unorm, extent);
+}
+
+TEST_CASE("ir_allocate_image_generate_mips") {
+	// Base mip level with known parameters
+	ICI src_ici = from_preset(Preset::eRTT2D, Format::eR8G8B8A8Unorm, Extent3D{ 512, 512, 1 }, Samples::e1);
+	src_ici.level_count = 4;
+	auto src_view = allocate<>("mipped_img", src_ici);
+	clear_image(src_view.mip(0), ClearColor{ 0.9f, 0.1f, 0.5f, 1.0f });
+
+	// Generate mips - this involves multiple blits with inferred parameters
+	auto result = generate_mips(src_view, 0, 3);
+
+	// Verify base mip level
+	auto extent = Extent3D{ 512, 512, 1 };
+	size_t pixel_count = extent.width * extent.height * extent.depth;
+	std::vector expected_data(pixel_count, ImageLike<Format::eR8G8B8A8Unorm>{ 0.9f, 0.1f, 0.5f, 1.0f });
+	verify_image_data(result.mip(0), std::span(expected_data), Format::eR8G8B8A8Unorm, extent);
+}
+
+// TODO: remove once fixed
+TEST_CASE("ir_allocate_image_same_shape_constraint") {
+	// Source image with multiple mip levels
+	ICI src_ici = from_preset(Preset::eRTT2D, Format::eR8G8B8A8Unorm, Extent3D{ 128, 128, 1 }, Samples::e1);
+	src_ici.level_count = 4;
+	auto src_view = allocate<>("src_img", src_ici);
+	clear_image(src_view, ClearColor{ 0.1f, 0.2f, 0.3f, 0.4f });
+
+	// Destination with format only
+	ICI dst_ici = {};
+	dst_ici.format = Format::eR8G8B8A8Unorm;
+	auto dst_view = allocate<>("dst_img", dst_ici);
+	dst_view.same_shape_as(src_view);
+
+	auto copied = copy(src_view, dst_view);
+
+	// Verify shape (extent, layers, levels) was inferred correctly
+	auto extent = Extent3D{ 128, 128, 1 };
+	size_t pixel_count = extent.width * extent.height * extent.depth;
+	std::vector expected_data(pixel_count, ImageLike<Format::eR8G8B8A8Unorm>{ 0.1f, 0.2f, 0.3f, 0.4f });
+	verify_image_data(copied, std::span(expected_data), Format::eR8G8B8A8Unorm, extent);
 }

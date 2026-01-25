@@ -30,7 +30,7 @@ namespace vuk {
 	static_assert(sizeof(op_compute_class) == Node::Kind::NODE_KIND_MAX * sizeof(DomainFlags));
 
 	Result<void> constant_folding::operator()() {
-		for (int i = 0; i < 4; i++) {
+		for (int i = 0; i < 10; i++) {
 			rewrite([this](Node* node, Replacer& r) {
 				switch (node->kind) {
 				case Node::SLICE: {
