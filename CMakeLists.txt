@@ -352,6 +352,7 @@ target_sources(vuk PRIVATE
 	src/Name.cpp
 	src/IR.cpp
 	src/IRDump.cpp
+	src/ICEHandler.cpp
 	src/irpasses/LinkBuilding.cpp
 	src/irpasses/ReifyInference.cpp
 	src/irpasses/ExpandComposites.cpp

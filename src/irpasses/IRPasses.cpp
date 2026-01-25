@@ -1,6 +1,7 @@
 #include "vuk/Exception.hpp"
 #include "vuk/ir/GraphDumper.hpp"
 #include "vuk/ir/GraphSnapshots.hpp"
+#include "vuk/ir/ICEHandler.hpp"
 #include "vuk/ir/IRPasses.hpp"
 #include "vuk/ir/IRProcess.hpp"
 #include "vuk/RenderGraph.hpp"
@@ -252,7 +253,7 @@ namespace vuk {
 					} else {
 						auto node_it = std::find(nodes.begin(), nodes.end(), arg) != nodes.end();
 						auto wq_it = std::find(work_queue.begin(), work_queue.end(), arg) != work_queue.end();
-						assert(node_it || wq_it);
+						VUK_ICE(node_it || wq_it);
 					}
 				}
 			} else {
@@ -264,7 +265,7 @@ namespace vuk {
 					} else {
 						auto node_it = std::find(nodes.begin(), nodes.end(), arg) != nodes.end();
 						auto wq_it = std::find(work_queue.begin(), work_queue.end(), arg) != work_queue.end();
-						assert(node_it || wq_it);
+						VUK_ICE(node_it || wq_it);
 					}
 				}
 			}
@@ -319,7 +320,7 @@ namespace vuk {
 					if (arg_ty->kind == Type::IMBUED_TY) {
 						auto access = arg_ty->imbued.access;
 						if (is_write_access(access)) { // Write and ReadWrite
-							assert(!link.undef_sync);
+							VUK_ICE(!link.undef_sync);
 							auto dst_access = arg_ty->imbued.access;
 							link.undef_sync = to_use(dst_access);
 						} else if (!link.read_sync) { // generate Read sync, if we haven't before
@@ -344,15 +345,15 @@ namespace vuk {
 										arg_ty = r.node->call.args[0].type()->shader_fn.args[r.index - first_parm].get(); // TODO: insert casts instead
 										parm = r.node->call.args[r.index];
 									} else {
-										assert(0);
+										VUK_ICE(0);
 									}
 								} else if (r.node->kind == Node::CONVERGE || r.node->kind == Node::CONSTRUCT) {
 									continue;
 								} else {
-									assert(0);
+									VUK_ICE(0);
 								}
 
-								assert(arg_ty->kind == Type::IMBUED_TY); // TODO: handle discharged CALLs
+								VUK_ICE(arg_ty->kind == Type::IMBUED_TY); // TODO: handle discharged CALLs
 								Access dst_access = arg_ty->imbued.access;
 
 								if (is_transfer_access(dst_access)) {
@@ -386,12 +387,12 @@ namespace vuk {
 				}
 			} break;
 			case Node::RELEASE: {
-				assert(node->scheduled_item);
+				VUK_ICE(node->scheduled_item);
 				auto& node_si = *node->scheduled_item;
 				for (size_t i = 0; i < node->release.src.size(); i++) {
 					auto& parm = node->release.src[i];
 					auto& link = parm.link();
-					assert(!link.undef_sync);
+					VUK_ICE(!link.undef_sync);
 					if (node->release.dst_access != Access::eNone) {
 						link.undef_sync = to_use(node->release.dst_access);
 					} else {
@@ -415,11 +416,11 @@ namespace vuk {
 					break;
 				}
 				auto& link = parm.link();
-				assert(!link.undef_sync);
+				VUK_ICE(!link.undef_sync);
 				if (node->use.access != Access::eNone) {
 					link.undef_sync = to_use(node->use.access);
 				} else {
-					assert(node->use.src.node->kind == Node::CONVERGE);
+					VUK_ICE(node->use.src.node->kind == Node::CONVERGE);
 					auto& converge = node->use.src.node->converge;
 					// find something with sync and broadcast that onto the convergence
 					// it is possible we find nothing - in this case no sync is needed
@@ -635,8 +636,8 @@ namespace vuk {
 					auto [it, succ] = arg_set.try_emplace(parm, i);
 					if (!succ) {
 						auto other_arg_ty = args[it->second - first_parm];
-						assert(arg_ty->kind == Type::IMBUED_TY);
-						assert(other_arg_ty->kind == Type::IMBUED_TY);
+						VUK_ICE(arg_ty->kind == Type::IMBUED_TY);
+						VUK_ICE(other_arg_ty->kind == Type::IMBUED_TY);
 						if (arg_ty->imbued.access == other_arg_ty->imbued.access) { // same is okay
 							continue;
 						}
@@ -711,7 +712,7 @@ namespace vuk {
 						base_ty = current_module->types.get_builtin_sampler();
 						break;
 					default:
-						assert(0);
+						VUK_ICE(0);
 					}
 
 					arg_types.push_back(current_module->types.make_imbued_ty(base_ty, acc));
@@ -754,6 +755,39 @@ namespace vuk {
 		impl->dump_html_graph_snapshots_to_disk = compile_options.dump_html_graph_snapshots_to_disk;
 		impl->enable_html_graph_snapshots = compile_options.enable_html_graph_snapshots;
 		GraphDumper::begin_graph(compile_options.dump_graph, compile_options.graph_label);
+
+		// Set up ICE handler to dump debug information on internal compiler errors
+		auto& ice_handler = ICEHandler::get_instance();
+		ice_handler.set_dump_callback([this, &alloc, &compile_options]() {
+			// Dump graph if enabled
+			GraphDumper::end_cluster();
+			GraphDumper::end_graph();
+
+			// Dump HTML snapshots if enabled and available
+			if (compile_options.enable_html_graph_snapshots && impl->graph_snapshot_collector.has_snapshots()) {
+				impl->graph_snapshot_collector.write_to_disk("ice_dump.html");
+				std::fprintf(stderr, "HTML graph snapshots written to: ice_dump.html\n");
+			}
+
+			// Try to linearize and dump IR listing if possible
+			std::pmr::polymorphic_allocator<std::byte> allocator(&impl->mbr);
+			auto linear_res = impl->linearize(alloc.get_context(), allocator);
+			if (linear_res) {
+				std::fprintf(stderr, "\nIR listing:\n");
+				size_t instr_counter = 0;
+				for (auto& pitem : impl->item_list) {
+					auto& item = *pitem;
+					instr_counter++;
+					std::fprintf(stderr, "[%06zx] %s\n", instr_counter, exec_to_string(item).c_str());
+				}
+			} else {
+				std::fprintf(stderr, "Failed to linearize IR for dump\n");
+			}
+
+#ifdef WIN32
+			__debugbreak();
+#endif
+		});
 
 		impl->refs.assign(nodes.begin(), nodes.end());
 		// tail nodes
@@ -842,14 +876,14 @@ namespace vuk {
 		impl->scheduled_execables.clear();
 
 		for (auto& node : impl->ref_nodes) {
-			assert(node);
+			VUK_ICE(node);
 			ScheduledItem item{ .execable = node, .scheduled_domain = vuk::DomainFlagBits::eAny };
 			auto it = impl->scheduled_execables.emplace(item);
 			it->execable->scheduled_item = &*it;
 		}
 
 		for (auto& node : impl->nodes) {
-			assert(node);
+			VUK_ICE(node);
 			switch (node->kind) {
 			case Node::SLICE:
 			case Node::CALL: {
@@ -886,6 +920,9 @@ namespace vuk {
 		// we have added some nodes to the current module - but these are considered to be linked
 		// so we advanced the frontier of the current module to improve GC
 		current_module->link_frontier = current_module->node_counter;
+
+		// Clear ICE handler now that compilation succeeded
+		ice_handler.clear_dump_callback();
 
 		return { expected_value };
 	}

@@ -28,7 +28,7 @@ TEST_CASE("ir_allocate_image_resolve_operation") {
 	auto extent = Extent3D{ 512, 512, 1 };
 	size_t pixel_count = extent.width * extent.height * extent.depth;
 	std::vector expected_data(pixel_count, ImageLike<Format::eR8G8B8A8Unorm>{ 0.2f, 0.2f, 0.2f, 0.2f });
-	verify_image_data(resolved, std::span(expected_data), Format::eR8G8B8A8Unorm, Extent3D{ 512, 512, 1 }, { .dump_html_graph_snapshots_to_disk = true });
+	verify_image_data(resolved, std::span(expected_data), Format::eR8G8B8A8Unorm, Extent3D{ 512, 512, 1 }, {});
 }
 
 TEST_CASE("ir_allocate_image_blit_operation") {
@@ -104,7 +104,7 @@ TEST_CASE("ir_allocate_image_framebuffer_attachments") {
 	auto extent = Extent3D{ 512, 512, 1 };
 	size_t pixel_count = extent.width * extent.height * extent.depth;
 	std::vector expected_data(pixel_count, ImageLike<Format::eR8G8B8A8Unorm>{ 0.8f, 0.4f, 0.2f, 1.0f });
-	verify_image_data(result, std::span(expected_data), Format::eR8G8B8A8Unorm, extent, { .dump_graph = true });
+	verify_image_data(result, std::span(expected_data), Format::eR8G8B8A8Unorm, extent);
 }
 
 TEST_CASE("ir_allocate_image_chain_inference") {

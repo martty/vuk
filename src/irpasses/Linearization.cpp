@@ -130,6 +130,9 @@ namespace vuk {
 					case Node::GET_ALLOCATION_SIZE: {
 						impl.schedule_dependency(node->get_allocation_size.ptr, RW::eRead);
 					} break;
+					case Node::GET_CI: {
+						impl.schedule_dependency(node->get_ci.src, RW::eRead);
+					} break;
 					default:
 						VUK_ICE(false);
 						break;

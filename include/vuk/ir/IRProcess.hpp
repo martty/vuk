@@ -374,5 +374,6 @@ namespace vuk {
 #ifndef VUK_ENABLE_ICE
 #define VUK_ICE(expression) (void)((!!(expression)) || assert(expression))
 #else
-#define VUK_ICE(expression) (void)((!!(expression)) || (GraphDumper::end_cluster(), GraphDumper::end_graph(), false) || (assert(expression), false))
+#include "vuk/ir/ICEHandler.hpp"
+#define VUK_ICE(expression) (void)((!!(expression)) || (vuk::ICEHandler::get_instance().trigger(#expression, __FILE__, __LINE__), assert(expression), false))
 #endif
