@@ -39,7 +39,7 @@ namespace {
 		      auto doge_image = stbi_load((root / "examples/doge.png").generic_string().c_str(), &x, &y, &chans, 4);
 
 		      texture_of_doge = vuk::ImageAttachment::from_preset(
-		          vuk::ImageAttachment::Preset::eMap2D, vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u }, vuk::Samples::e1);
+		          vuk::ImageAttachment::Preset::eMap2D, vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u }, vuk::SampleCountFlagBits::e1);
 		      texture_of_doge.level_count = 1;
 		      auto [image, view, future] = vuk::create_image_and_view_with_data(allocator, vuk::DomainFlagBits::eTransferOnTransfer, texture_of_doge, doge_image);
 		      image_of_doge = std::move(image);
@@ -108,7 +108,7 @@ namespace {
 		      // from the final image, and we don't need to specify here
 		      // We use the swapchain format, since resolving needs identical formats
 		      auto ms_img = vuk::declare_ia("06_ms");
-		      ms_img->sample_count = vuk::Samples::e8;
+		      ms_img->sample_count = vuk::SampleCountFlagBits::e8;
 		      ms_img = vuk::clear_image(std::move(ms_img), vuk::ClearColor{ 0.f, 0.f, 0.f, 0.f });
 
 		      auto depth_img = vuk::declare_ia("06_depth");

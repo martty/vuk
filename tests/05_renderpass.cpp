@@ -30,7 +30,7 @@ TEST_CASE("renderpass clear") {
 			return dst;
 		});
 		auto data = { 1u, 2u, 3u, 4u };
-		auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, Samples::e1);
+		auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, SampleCountFlagBits::e1);
 		ia.level_count = 1;
 		auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data));
 
@@ -52,7 +52,7 @@ TEST_CASE("renderpass framebuffer inference") {
 			return dst;
 		});
 		auto data = { 1u, 2u, 3u, 4u };
-		auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, Samples::e1);
+		auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, SampleCountFlagBits::e1);
 		ia.level_count = 1;
 		auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data));
 
@@ -213,7 +213,7 @@ TEST_CASE("lift compute 3") {
 	auto [b0, buf0] = create_buffer(*test_context.allocator, MemoryUsage::eGPUonly, DomainFlagBits::eAny, std::span(data));
 
 	auto data2 = { 4u, 4u, 2u, 2u };
-	auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, Samples::e1);
+	auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, SampleCountFlagBits::e1);
 	auto [img, img0] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data2));
 
 	auto pass = lift_compute(test_context.runtime->get_pipeline(vuk::PipelineBaseCreateInfo::from_inline_glsl(R"(#version 450
@@ -239,16 +239,16 @@ void main() {
 
 TEST_CASE("separate sampler") {
 	auto data2 = { 4.f, 4.f, 2.f, 2.f };
-	auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 2, 2, 1 }, Samples::e1);
+	auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 2, 2, 1 }, SampleCountFlagBits::e1);
 	auto [img, img0] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data2));
 
 	auto nearest_samp = vuk::acquire_sampler("nearest", SamplerCreateInfo{ .magFilter = vuk::Filter::eNearest, .minFilter = vuk::Filter::eNearest });
 	auto linear_samp = vuk::acquire_sampler("linear", SamplerCreateInfo{ .magFilter = vuk::Filter::eLinear, .minFilter = vuk::Filter::eLinear });
 
 	auto out_nearest =
-	    vuk::declare_ia("out_nearest", ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 2, 2, 1 }, Samples::e1));
+	    vuk::declare_ia("out_nearest", ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 2, 2, 1 }, SampleCountFlagBits::e1));
 	auto out_linear =
-	    vuk::declare_ia("out_linear", ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 2, 2, 1 }, Samples::e1));
+	    vuk::declare_ia("out_linear", ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 2, 2, 1 }, SampleCountFlagBits::e1));
 
 	auto pass = lift_compute(test_context.runtime->get_pipeline(vuk::PipelineBaseCreateInfo::from_inline_glsl(R"(#version 450
 #pragma shader_stage(compute)
@@ -287,7 +287,7 @@ void main() {
 
 TEST_CASE("combined sampler") {
 	auto data2 = { 4.f, 4.f, 2.f, 2.f };
-	auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 2, 2, 1 }, Samples::e1);
+	auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 2, 2, 1 }, SampleCountFlagBits::e1);
 	auto [img, img0] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data2));
 
 	auto nearest_samp = vuk::acquire_sampler("nearest", SamplerCreateInfo{ .magFilter = vuk::Filter::eNearest, .minFilter = vuk::Filter::eNearest });
@@ -295,7 +295,7 @@ TEST_CASE("combined sampler") {
 	auto image_and_samp = vuk::combine_image_sampler("combined", img0, nearest_samp);
 
 	auto out_nearest =
-	    vuk::declare_ia("out_nearest", ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 2, 2, 1 }, Samples::e1));
+	    vuk::declare_ia("out_nearest", ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 2, 2, 1 }, SampleCountFlagBits::e1));
 
 	auto pass = lift_compute(test_context.runtime->get_pipeline(vuk::PipelineBaseCreateInfo::from_inline_glsl(R"(#version 450
 #pragma shader_stage(compute)
@@ -379,7 +379,7 @@ void main() {
 
 TEST_CASE("attachmentless fb") {
 	auto data = { 1u, 1u, 1u, 1u };
-	auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, Samples::e1);
+	auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, SampleCountFlagBits::e1);
 	ia.level_count = 1;
 	auto [img, img_val] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data));
 

@@ -135,7 +135,7 @@ namespace {
 		      // The intermediate offscreen textures need to be bound
 		      auto position_image = vuk::declare_ia("05_position");
 		      position_image->format = vuk::Format::eR16G16B16A16Sfloat;
-		      position_image->sample_count = vuk::Samples::e1;
+		      position_image->sample_count = vuk::SampleCountFlagBits::e1;
 		      position_image->layer_count = 1;
 		      position_image = vuk::clear_image(std::move(position_image), vuk::ClearColor{ 1.f, 0.f, 0.f, 0.f });
 

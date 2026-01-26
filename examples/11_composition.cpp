@@ -40,7 +40,7 @@ std::pair<vuk::Unique<vuk::Image>, vuk::Value<vuk::ImageAttachment>> load_hdr(vu
 	vuk::ImageAttachment ia;
 	ia.format = vuk::Format::eR32G32B32A32Sfloat;
 	ia.extent = vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u };
-	ia.sample_count = vuk::Samples::e1;
+	ia.sample_count = vuk::SampleCountFlagBits::e1;
 	ia.image_type = vuk::ImageType::e2D;
 	ia.view_type = vuk::ImageViewType::e2D;
 	ia.tiling = vuk::ImageTiling::eOptimal;
@@ -116,7 +116,7 @@ namespace {
 			                       .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eColorAttachment,
 			                       .extent = { 1024, 1024, 1 },
 			                       .format = vuk::Format::eR32G32B32A32Sfloat,
-			                       .sample_count = vuk::Samples::e1,
+			                       .sample_count = vuk::SampleCountFlagBits::e1,
 			                       .view_type = vuk::ImageViewType::eCube,
 			                       .layout = vuk::ImageLayout::eReadOnlyOptimal,
 			                       .base_level = 0,
@@ -198,7 +198,7 @@ namespace {
 		                                        .image_type = vuk::ImageType::e2D,
 		                                        .extent = { 1024, 1024, 1 },
 		                                        .format = vuk::Format::eR8G8B8A8Srgb,
-		                                        .sample_count = vuk::Samples::e1,
+		                                        .sample_count = vuk::SampleCountFlagBits::e1,
 		                                        .view_type = vuk::ImageViewType::eCube,
 		                                        .level_count = 1,
 		                                        .layer_count = 6 });
@@ -253,7 +253,7 @@ namespace {
 			          });
 			      // The intermediate offscreen textures need to be bound
 			      auto temp_position = vuk::clear_image(
-			          vuk::declare_ia("temp_pos", { .format = vuk::Format::eR16G16B16A16Sfloat, .sample_count = vuk::Samples::e1, .layer_count = 1 }),
+			          vuk::declare_ia("temp_pos", { .format = vuk::Format::eR16G16B16A16Sfloat, .sample_count = vuk::SampleCountFlagBits::e1, .layer_count = 1 }),
 			          vuk::White<float>);
 			      auto temp_normal = vuk::clear_image(vuk::declare_ia("temp_normal", { .format = vuk::Format::eR16G16B16A16Sfloat }), vuk::White<float>);
 			      auto temp_color = vuk::clear_image(vuk::declare_ia("temp_color", { .format = vuk::Format::eR8G8B8A8Srgb }), vuk::White<float>);
@@ -340,7 +340,7 @@ namespace {
 			          return std::tuple{ position, normal, color };
 		          });
 		      auto final_position =
-		          vuk::clear_image(vuk::declare_ia("final_pos", { .format = vuk::Format::eR16G16B16A16Sfloat, .sample_count = vuk::Samples::e1, .layer_count = 1 }),
+		          vuk::clear_image(vuk::declare_ia("final_pos", { .format = vuk::Format::eR16G16B16A16Sfloat, .sample_count = vuk::SampleCountFlagBits::e1, .layer_count = 1 }),
 		                           vuk::White<float>);
 		      auto final_normal = vuk::clear_image(vuk::declare_ia("final_normal", { .format = vuk::Format::eR16G16B16A16Sfloat }), vuk::White<float>);
 		      auto final_color = vuk::clear_image(vuk::declare_ia("final_color", { .format = vuk::Format::eR8G8B8A8Srgb }), vuk::White<float>);
@@ -379,7 +379,7 @@ namespace {
 			                                    return cube_face;
 		                                    });
 
-		      auto final_deferred = vuk::declare_ia("final_deferred", { .format = vuk::Format::eR8G8B8A8Srgb, .sample_count = vuk::Samples::e1 });
+		      auto final_deferred = vuk::declare_ia("final_deferred", { .format = vuk::Format::eR8G8B8A8Srgb, .sample_count = vuk::SampleCountFlagBits::e1 });
 		      final_position.same_extent_as(final_deferred);
 		      final_deferred = resolve(final_deferred, final_position, final_normal, final_color);
 

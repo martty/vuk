@@ -805,7 +805,7 @@ namespace vuk {
 			ImageEntry ie{};
 			ie.format = (Format)format;
 			ie.extent = { extent.width, extent.height, 1 };
-			ie.sample_count = Samples::e1;
+			ie.sample_count = SampleCountFlagBits::e1;
 			ie.image = images[i];
 			ie.allocation = nullptr;
 

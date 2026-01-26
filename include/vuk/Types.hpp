@@ -120,30 +120,7 @@ namespace vuk {
 		eMultiSampled = 1025,
 	};
 
-	struct Samples {
-		SampleCountFlagBits count;
-
-		struct Framebuffer {};
-
-		constexpr Samples() noexcept : count(SampleCountFlagBits::e1) {}
-		constexpr Samples(SampleCountFlagBits samples) noexcept : count(samples) {}
-		constexpr Samples(Framebuffer) noexcept : count(SampleCountFlagBits::eInfer) {}
-
-		constexpr static auto e1 = SampleCountFlagBits::e1;
-		constexpr static auto e2 = SampleCountFlagBits::e2;
-		constexpr static auto e4 = SampleCountFlagBits::e4;
-		constexpr static auto e8 = SampleCountFlagBits::e8;
-		constexpr static auto e16 = SampleCountFlagBits::e16;
-		constexpr static auto e32 = SampleCountFlagBits::e32;
-		constexpr static auto e64 = SampleCountFlagBits::e64;
-		constexpr static auto eInfer = SampleCountFlagBits::eInfer;
-	};
-
-	std::string format_as(const Samples& samples);
-
-	inline bool operator==(Samples const& a, Samples const& b) noexcept {
-		return a.count == b.count;
-	}
+	std::string format_as(const SampleCountFlagBits& samples);
 
 	struct Offset3D;
 	struct Offset2D {

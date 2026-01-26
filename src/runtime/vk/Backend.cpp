@@ -376,7 +376,7 @@ namespace vuk {
 			descr.storeOp = is_readonly_layout((VkImageLayout)ve.layout) ? VK_ATTACHMENT_STORE_OP_NONE_KHR : VK_ATTACHMENT_STORE_OP_STORE;
 
 			descr.format = (VkFormat)ve.format;
-			descr.samples = (VkSampleCountFlagBits)ve.sample_count.count;
+			descr.samples = (VkSampleCountFlagBits)ve.sample_count;
 
 			if ((aspect & ImageAspectFlagBits::eColor) == ImageAspectFlags{}) { // not color -> depth or depth/stencil
 				rp.rpci.ds_ref = attref;
@@ -933,7 +933,7 @@ namespace vuk {
 			rpi.extent = Extent2D{ rpass.fbci.width, rpass.fbci.height };
 			auto& spdesc = rpass.rpci.subpass_descriptions[i];
 			rpi.color_attachments = std::span<const VkAttachmentReference>(spdesc.pColorAttachments, spdesc.colorAttachmentCount);
-			rpi.samples = rpass.fbci.sample_count.count;
+			rpi.samples = rpass.fbci.sample_count;
 			rpi.depth_stencil_attachment = spdesc.pDepthStencilAttachment;
 			for (uint32_t i = 0; i < spdesc.colorAttachmentCount; i++) {
 				rpi.color_attachment_ivs[i] = rpass.fbci.attachments[i];

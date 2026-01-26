@@ -45,7 +45,6 @@ namespace vuk {
 	ADAPT_STRUCT_FOR_IR(BufferCreateInfo, memory_usage, size, alignment);
 	ADAPT_STRUCT_FOR_IR(Extent3D, width, height, depth);
 	static_assert(erased_tuple_adaptor<Extent3D>::value);
-	ADAPT_STRUCT_FOR_IR(Samples, count);
 	ADAPT_STRUCT_FOR_IR(IVCI, base_level, level_count, base_layer, layer_count, image, format);
 	ADAPT_STRUCT_FOR_IR(ImageViewEntry, base_level, level_count, base_layer, layer_count, format, extent, sample_count, layout);
 	ADAPT_TEMPLATED_STRUCT_FOR_IR(class, Flags, m_mask);

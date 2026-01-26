@@ -36,7 +36,7 @@ inline void void_clear_image(Value<ImageAttachment> in, Clear clear_value) {
 
 TEST_CASE("MT") {
 	auto data = { 1u, 2u, 3u, 4u };
-	auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, Samples::e1);
+	auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, SampleCountFlagBits::e1);
 	auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data));
 
 	size_t alignment = format_to_texel_block_size(*fut->format);
@@ -54,7 +54,7 @@ TEST_CASE("MT") {
 TEST_CASE("MT reconvergence") {
 	for (int i = 0; i < 2; i++) {
 		auto data = { 1u, 2u, 3u, 4u };
-		auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, Samples::e1);
+		auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, SampleCountFlagBits::e1);
 		ia.level_count = 2;
 		auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data));
 

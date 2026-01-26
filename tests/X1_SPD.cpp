@@ -14,7 +14,7 @@ TEST_CASE("SPD") {
 		auto col = i % 256;
 		data[i] = sinf((float)row / 64) * sinf((float)col / 64);
 	}
-	auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 256, 256, 1 }, Samples::e1);
+	auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 256, 256, 1 }, SampleCountFlagBits::e1);
 	auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data));
 
 	size_t alignment = format_to_texel_block_size(fut->format);

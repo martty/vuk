@@ -150,8 +150,8 @@ namespace vuk {
 
 	inline Value<ImageView<>> blit_image(Value<ImageView<>> src, Value<ImageView<>> dst, Filter filter, VUK_CALLSTACK) {
 		// source and destination have to have 1 sample and 1 level
-		current_module->set_value(src.sample_count.get_head(), current_module->make_constant(Samples::e1));
-		current_module->set_value(dst.sample_count.get_head(), current_module->make_constant(Samples::e1));
+		current_module->set_value(src.sample_count.get_head(), current_module->make_constant(SampleCountFlagBits::e1));
+		current_module->set_value(dst.sample_count.get_head(), current_module->make_constant(SampleCountFlagBits::e1));
 		current_module->set_value(dst.level_count.get_head(), current_module->make_constant<uint16_t>(1));
 		current_module->set_value(src.level_count.get_head(), current_module->make_constant<uint16_t>(1));
 		// same number of layers in both
@@ -293,7 +293,7 @@ namespace vuk {
 	inline Value<ImageView<>> resolve_into(Value<ImageView<>> src, Value<ImageView<>> dst, VUK_CALLSTACK) {
 		src.same_format_as(dst);
 		src.same_extent_as(dst);
-		current_module->set_value(dst.sample_count.get_head(), current_module->make_constant(Samples::e1));
+		current_module->set_value(dst.sample_count.get_head(), current_module->make_constant(SampleCountFlagBits::e1));
 		current_module->set_value(dst.level_count.get_head(), current_module->make_constant<uint16_t>(1));
 		current_module->set_value(src.level_count.get_head(), current_module->make_constant<uint16_t>(1));
 		src.same_layers_as(dst);

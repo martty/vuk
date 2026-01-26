@@ -160,7 +160,7 @@ namespace vuk::extra {
 			ie.image_type = ImageType::e2D;
 			ie.format = (Format)vkswapchain->image_format;
 			ie.extent = { vkswapchain->extent.width, vkswapchain->extent.height, 1 };
-			ie.sample_count = Samples::e1;
+			ie.sample_count = SampleCountFlagBits::e1;
 			ie.level_count = 1;
 			ie.layer_count = 1;
 			ie.image = images[i];

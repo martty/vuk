@@ -17,7 +17,7 @@ TEST_CASE("ir_allocate_image_basic") {
 	ICI ici = {};
 	ici.format = Format::eR8G8B8A8Unorm;
 	ici.extent = Extent3D{ 256, 256, 1 };
-	ici.sample_count = Samples::e1;
+	ici.sample_count = SampleCountFlagBits::e1;
 	ici.usage = ImageUsageFlagBits::eSampled | ImageUsageFlagBits::eTransferDst | ImageUsageFlagBits::eTransferSrc;
 	ici.level_count = 1;
 	ici.layer_count = 1;
@@ -34,7 +34,7 @@ TEST_CASE("ir_allocate_image_basic") {
 TEST_CASE("ir_allocate_image_infer_from_copy_source") {
 	// Create source image with data
 	auto data = { 1u, 2u, 3u, 4u };
-	auto src_ici = from_preset(Preset::eGeneric2D, Format::eR32Uint, Extent3D{ 2, 2, 1 }, Samples::e1);
+	auto src_ici = from_preset(Preset::eGeneric2D, Format::eR32Uint, Extent3D{ 2, 2, 1 }, SampleCountFlagBits::e1);
 	src_ici.level_count = 1;
 	auto [src_view, src_fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, src_ici, std::span(data));
 
@@ -42,7 +42,7 @@ TEST_CASE("ir_allocate_image_infer_from_copy_source") {
 	ICI dst_ici = {};
 	dst_ici.format = Format::eR32Uint;
 	dst_ici.extent = Extent3D{ 2, 2, 1 };
-	dst_ici.sample_count = Samples::e1;
+	dst_ici.sample_count = SampleCountFlagBits::e1;
 	dst_ici.usage = ImageUsageFlagBits::eSampled | ImageUsageFlagBits::eTransferDst | ImageUsageFlagBits::eTransferSrc;
 	dst_ici.level_count = 1;
 	dst_ici.layer_count = 1;
@@ -57,7 +57,7 @@ TEST_CASE("ir_allocate_image_infer_from_copy_source") {
 
 TEST_CASE("ir_allocate_image_infer_extent_from_copy") {
 	// Create source with specific dimensions
-	auto src_ici = from_preset(Preset::eGeneric2D, Format::eR16G16B16A16Sfloat, Extent3D{ 64, 64, 1 }, Samples::e1);
+	auto src_ici = from_preset(Preset::eGeneric2D, Format::eR16G16B16A16Sfloat, Extent3D{ 64, 64, 1 }, SampleCountFlagBits::e1);
 	src_ici.level_count = 1;
 	auto src_img = *allocate_image(*test_context.allocator, src_ici);
 	auto src_view = discard("src", src_img->default_view());
@@ -66,7 +66,7 @@ TEST_CASE("ir_allocate_image_infer_extent_from_copy") {
 	ICI dst_ici = {};
 	dst_ici.format = Format::eR16G16B16A16Sfloat;
 	dst_ici.extent = Extent3D{ 64, 64, 1 }; // Must match source for copy
-	dst_ici.sample_count = Samples::e1;
+	dst_ici.sample_count = SampleCountFlagBits::e1;
 	dst_ici.usage = ImageUsageFlagBits::eSampled | ImageUsageFlagBits::eTransferDst;
 	dst_ici.level_count = 1;
 	dst_ici.layer_count = 1;
@@ -83,7 +83,7 @@ TEST_CASE("ir_allocate_image_infer_extent_from_copy") {
 TEST_CASE("ir_allocate_image_chain_copy") {
 	// Create source
 	auto data = { 10u, 20u, 30u, 40u };
-	auto src_ici = from_preset(Preset::eGeneric2D, Format::eR32Uint, Extent3D{ 2, 2, 1 }, Samples::e1);
+	auto src_ici = from_preset(Preset::eGeneric2D, Format::eR32Uint, Extent3D{ 2, 2, 1 }, SampleCountFlagBits::e1);
 	src_ici.level_count = 1;
 	auto [src_view, src_fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, src_ici, std::span(data));
 
@@ -108,7 +108,7 @@ TEST_CASE("ir_allocate_image_chain_copy") {
 
 TEST_CASE("ir_allocate_image_clear_verify") {
 	// Allocate image in IR
-	ICI ici = from_preset(Preset::eGeneric2D, Format::eR8G8B8A8Unorm, Extent3D{ 2, 2, 1 }, Samples::e1);
+	ICI ici = from_preset(Preset::eGeneric2D, Format::eR8G8B8A8Unorm, Extent3D{ 2, 2, 1 }, SampleCountFlagBits::e1);
 	ici.level_count = 1;
 	auto view = allocate<>("clear_test_img", ici);
 
@@ -124,7 +124,7 @@ TEST_CASE("ir_allocate_image_clear_verify") {
 TEST_CASE("ir_allocate_image_different_formats") {
 	// R8 format
 	{
-		ICI ici = from_preset(Preset::eGeneric2D, Format::eR8Unorm, Extent3D{ 256, 256, 1 }, Samples::e1);
+		ICI ici = from_preset(Preset::eGeneric2D, Format::eR8Unorm, Extent3D{ 256, 256, 1 }, SampleCountFlagBits::e1);
 		ici.level_count = 1;
 		auto view = allocate<>("r8_img", ici);
 
@@ -135,7 +135,7 @@ TEST_CASE("ir_allocate_image_different_formats") {
 
 	// R16G16 format
 	{
-		ICI ici = from_preset(Preset::eGeneric2D, Format::eR16G16Sfloat, Extent3D{ 256, 256, 1 }, Samples::e1);
+		ICI ici = from_preset(Preset::eGeneric2D, Format::eR16G16Sfloat, Extent3D{ 256, 256, 1 }, SampleCountFlagBits::e1);
 		ici.level_count = 1;
 		auto view = allocate<>("r16g16_img", ici);
 
@@ -147,7 +147,7 @@ TEST_CASE("ir_allocate_image_different_formats") {
 
 	// R32G32B32A32 format
 	{
-		ICI ici = from_preset(Preset::eGeneric2D, Format::eR32G32B32A32Sfloat, Extent3D{ 256, 256, 1 }, Samples::e1);
+		ICI ici = from_preset(Preset::eGeneric2D, Format::eR32G32B32A32Sfloat, Extent3D{ 256, 256, 1 }, SampleCountFlagBits::e1);
 		ici.level_count = 1;
 		auto view = allocate<>("r32_img", ici);
 
@@ -161,7 +161,7 @@ TEST_CASE("ir_allocate_image_different_formats") {
 TEST_CASE("ir_allocate_image_different_usages") {
 	// Sampled usage
 	{
-		ICI ici = from_preset(Preset::eMap2D, Format::eR8G8B8A8Srgb, Extent3D{ 256, 256, 1 }, Samples::e1);
+		ICI ici = from_preset(Preset::eMap2D, Format::eR8G8B8A8Srgb, Extent3D{ 256, 256, 1 }, SampleCountFlagBits::e1);
 		ici.level_count = 1;
 		ici.usage |= ImageUsageFlagBits::eTransferSrc | ImageUsageFlagBits::eTransferDst;
 		auto view = allocate<>("sampled_img", ici);
@@ -173,7 +173,7 @@ TEST_CASE("ir_allocate_image_different_usages") {
 
 	// Render target usage
 	{
-		ICI ici = from_preset(Preset::eRTT2D, Format::eR8G8B8A8Unorm, Extent3D{ 256, 256, 1 }, Samples::e1);
+		ICI ici = from_preset(Preset::eRTT2D, Format::eR8G8B8A8Unorm, Extent3D{ 256, 256, 1 }, SampleCountFlagBits::e1);
 		ici.level_count = 1;
 		ici.usage |= ImageUsageFlagBits::eTransferSrc | ImageUsageFlagBits::eTransferDst;
 		auto view = allocate<>("rtt_img", ici);
@@ -185,7 +185,7 @@ TEST_CASE("ir_allocate_image_different_usages") {
 
 	// Storage usage
 	{
-		ICI ici = from_preset(Preset::eSTT2D, Format::eR32G32B32A32Sfloat, Extent3D{ 256, 256, 1 }, Samples::e1);
+		ICI ici = from_preset(Preset::eSTT2D, Format::eR32G32B32A32Sfloat, Extent3D{ 256, 256, 1 }, SampleCountFlagBits::e1);
 		ici.level_count = 1;
 		ici.usage |= ImageUsageFlagBits::eTransferSrc | ImageUsageFlagBits::eTransferDst;
 		auto view = allocate<>("storage_img", ici);
@@ -199,7 +199,7 @@ TEST_CASE("ir_allocate_image_different_usages") {
 TEST_CASE("ir_allocate_image_different_dimensions") {
 	// 1D image
 	{
-		ICI ici = from_preset(Preset::eMap1D, Format::eR32G32B32A32Uint, Extent3D{ 128, 1, 1 }, Samples::e1);
+		ICI ici = from_preset(Preset::eMap1D, Format::eR32G32B32A32Uint, Extent3D{ 128, 1, 1 }, SampleCountFlagBits::e1);
 		ici.level_count = 1;
 		ici.usage |= ImageUsageFlagBits::eTransferSrc;
 		auto view = allocate<>("1d_img", ici);
@@ -211,7 +211,7 @@ TEST_CASE("ir_allocate_image_different_dimensions") {
 
 	// 2D image
 	{
-		ICI ici = from_preset(Preset::eMap2D, Format::eR32G32B32A32Uint, Extent3D{ 128, 128, 1 }, Samples::e1);
+		ICI ici = from_preset(Preset::eMap2D, Format::eR32G32B32A32Uint, Extent3D{ 128, 128, 1 }, SampleCountFlagBits::e1);
 		ici.level_count = 1;
 		ici.usage |= ImageUsageFlagBits::eTransferSrc;
 		auto view = allocate<>("2d_img", ici);
@@ -223,7 +223,7 @@ TEST_CASE("ir_allocate_image_different_dimensions") {
 
 	// 3D image
 	{
-		ICI ici = from_preset(Preset::eMap3D, Format::eR32G32B32A32Uint, Extent3D{ 64, 64, 64 }, Samples::e1);
+		ICI ici = from_preset(Preset::eMap3D, Format::eR32G32B32A32Uint, Extent3D{ 64, 64, 64 }, SampleCountFlagBits::e1);
 		ici.level_count = 1;
 		ici.usage |= ImageUsageFlagBits::eTransferSrc;
 		auto view = allocate<>("3d_img", ici);
@@ -235,7 +235,7 @@ TEST_CASE("ir_allocate_image_different_dimensions") {
 }
 
 TEST_CASE("ir_allocate_image_with_mips") {
-	ICI ici = from_preset(Preset::eMap2D, Format::eR8G8B8A8Srgb, Extent3D{ 256, 256, 1 }, Samples::e1);
+	ICI ici = from_preset(Preset::eMap2D, Format::eR8G8B8A8Srgb, Extent3D{ 256, 256, 1 }, SampleCountFlagBits::e1);
 	ici.usage |= ImageUsageFlagBits::eTransferSrc;
 	auto view = allocate<>("mipped_img", ici);
 
@@ -247,7 +247,7 @@ TEST_CASE("ir_allocate_image_with_mips") {
 TEST_CASE("ir_allocate_image_depth_stencil") {
 	// Depth only
 	{
-		ICI ici = from_preset(Preset::eRTT2DUnmipped, Format::eD32Sfloat, Extent3D{ 1024, 768, 1 }, Samples::e1);
+		ICI ici = from_preset(Preset::eRTT2DUnmipped, Format::eD32Sfloat, Extent3D{ 1024, 768, 1 }, SampleCountFlagBits::e1);
 		ici.usage |= ImageUsageFlagBits::eTransferSrc | ImageUsageFlagBits::eTransferDst;
 		auto view = allocate<>("depth_img", ici);
 
@@ -259,7 +259,7 @@ TEST_CASE("ir_allocate_image_depth_stencil") {
 
 	// Depth-stencil
 	/* {
-	  ICI ici = from_preset(Preset::eRTT2DUnmipped, Format::eD24UnormS8Uint, Extent3D{ 1024, 768, 1 }, Samples::e1);
+	  ICI ici = from_preset(Preset::eRTT2DUnmipped, Format::eD24UnormS8Uint, Extent3D{ 1024, 768, 1 }, SampleCountFlagBits::e1);
 	  auto view = allocate<>("ds_img", ici);
 
 	  ClearDepthStencil clear_value{ 0.5f, 128 };
@@ -273,7 +273,7 @@ TEST_CASE("ir_allocate_image_depth_stencil") {
 TEST_CASE("ir_allocate_image_compressed") {
 	// BC1 - can't clear compressed formats, so just verify allocation works
 	{
-		ICI ici = from_preset(Preset::eMap2D, Format::eBc1RgbaSrgbBlock, Extent3D{ 512, 512, 1 }, Samples::e1);
+		ICI ici = from_preset(Preset::eMap2D, Format::eBc1RgbaSrgbBlock, Extent3D{ 512, 512, 1 }, SampleCountFlagBits::e1);
 		auto ici_value = make_constant("bc1_ici", ici);
 		auto view = allocate<>("bc1_img", ici_value);
 
@@ -284,7 +284,7 @@ TEST_CASE("ir_allocate_image_compressed") {
 
 	// BC7
 	{
-		ICI ici = from_preset(Preset::eMap2D, Format::eBc7SrgbBlock, Extent3D{ 512, 512, 1 }, Samples::e1);
+		ICI ici = from_preset(Preset::eMap2D, Format::eBc7SrgbBlock, Extent3D{ 512, 512, 1 }, SampleCountFlagBits::e1);
 		auto ici_value = make_constant("bc7_ici", ici);
 		auto view = allocate<>("bc7_img", ici_value);
 
@@ -296,7 +296,7 @@ TEST_CASE("ir_allocate_image_compressed") {
 /*
 TEST_CASE("ir_allocate_custom_image_view") {
   // Allocate image in IR
-  ICI ici = from_preset(Preset::eGeneric2D, Format::eR8G8B8A8Unorm, Extent3D{ 512, 512, 1 }, Samples::e1);
+  ICI ici = from_preset(Preset::eGeneric2D, Format::eR8G8B8A8Unorm, Extent3D{ 512, 512, 1 }, SampleCountFlagBits::e1);
   auto ici_value = make_constant("img_ici", ici);
   auto img = allocate<>("img", ici_value);
 

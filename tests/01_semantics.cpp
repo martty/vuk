@@ -497,7 +497,7 @@ TEST_CASE("multi fn calls") {
 
 TEST_CASE("release sync") {
 	auto data = { 1u, 2u, 3u, 4u };
-	auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, Samples::e1);
+	auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, SampleCountFlagBits::e1);
 	ia.level_count = 1;
 	auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data));
 

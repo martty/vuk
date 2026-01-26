@@ -148,8 +148,8 @@ namespace vuk {
 		return fmt::format("{}x{}x{}", extent.width, extent.height, extent.depth);
 	}
 
-	std::string format_as(const Samples& samples) {
-		return fmt::format("{}x", (uint32_t)samples.count);
+	std::string format_as(const SampleCountFlagBits& samples) {
+		return fmt::format("{}x", (uint32_t)samples);
 	}
 
 	std::string format_as(const ICI& ici) {

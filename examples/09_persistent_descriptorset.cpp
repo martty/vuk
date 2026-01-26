@@ -132,7 +132,7 @@ void main() {
 
 		      // Similarly to buffers, we allocate the image and enqueue the upload
 		      auto doge_ia = vuk::ImageAttachment::from_preset(
-		          vuk::ImageAttachment::Preset::eMap2D, vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u }, vuk::Samples::e1);
+		          vuk::ImageAttachment::Preset::eMap2D, vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u }, vuk::SampleCountFlagBits::e1);
 		      doge_ia.usage |= vuk::ImageUsageFlagBits::eTransferSrc;
 		      doge_ia.level_count = 1;
 		      auto [image, view, doge_src] = vuk::create_image_and_view_with_data(allocator, vuk::DomainFlagBits::eTransferOnTransfer, doge_ia, doge_image);
@@ -180,7 +180,7 @@ void main() {
 				          vuk::ImageAttachment::Preset::eMap2D,
 				          vuk::Format::eR8G8B8A8Unorm,
 				          vuk::Extent3D{ (unsigned)initial_doge_texture->extent.width, (unsigned)initial_doge_texture->extent.height, 1u },
-				          vuk::Samples::e1);
+				          vuk::SampleCountFlagBits::e1);
 				      ia.usage = vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eTransferDst;
 				      ia.level_count = 1;
 				      // Store allocations

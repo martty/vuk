@@ -34,7 +34,7 @@ namespace vuk {
 		ImageUsageFlags usage = {};
 		Extent3D extent = {};
 		Format format = Format::eUndefined;
-		Samples sample_count = Samples::eInfer;
+		SampleCountFlagBits sample_count = SampleCountFlagBits::eInfer;
 		uint16_t level_count = 0xffff;
 		uint16_t layer_count = 0xffff;
 
@@ -48,7 +48,7 @@ namespace vuk {
 			vkici.extent = (VkExtent3D)extent;
 			vkici.mipLevels = level_count;
 			vkici.arrayLayers = layer_count;
-			vkici.samples = (VkSampleCountFlagBits)sample_count.count;
+			vkici.samples = (VkSampleCountFlagBits)sample_count;
 			vkici.tiling = (VkImageTiling)tiling;
 			vkici.usage = (VkImageUsageFlags)usage;
 			vkici.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -769,7 +769,7 @@ namespace vuk {
 
 	/* struct ImageConstraints {
 	  Format format = Format::eUndefined;
-	  Samples samples = Samples::eInfer;
+	  SampleCountFlagBits samples = SampleCountFlagBits::eInfer;
 	};*/
 
 	template<Format f>
@@ -960,11 +960,11 @@ namespace vuk {
 		return static_cast<Preset>(static_cast<uint32_t>(usage) | static_cast<uint32_t>(dim) | static_cast<uint32_t>(mip));
 	}
 
-	static ICI from_preset(Preset preset, Format format, Extent3D extent, Samples sample_count) {
+	static ICI from_preset(Preset preset, Format format, Extent3D extent, SampleCountFlagBits sample_count) {
 		ICI ici = {};
 		ici.format = format;
 		ici.extent = extent;
-		ici.sample_count = sample_count.count;
+		ici.sample_count = sample_count;
 
 		UsagePreset usage_preset = get_usage_preset(preset);
 		MipPreset mip_preset = get_mip_preset(preset);
@@ -1034,7 +1034,7 @@ namespace vuk {
 		VkImageView api_view;
 		size_t id;
 		Extent3D extent;
-		Samples sample_count;
+		SampleCountFlagBits sample_count;
 		ImageLayout layout;
 		size_t hash;
 	};

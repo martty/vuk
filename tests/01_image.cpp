@@ -13,7 +13,7 @@ using namespace vuk;
 
 TEST_CASE("constant_image_view_metadata") {
 	auto data = { 11u, 22u, 33u, 44u };
-	auto ici = from_preset(Preset::eMap2D, Format::eR32Uint, Extent3D{ 2, 2, 1 }, Samples::e1);
+	auto ici = from_preset(Preset::eMap2D, Format::eR32Uint, Extent3D{ 2, 2, 1 }, SampleCountFlagBits::e1);
 
 	auto [view, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ici, std::span(data));
 
@@ -27,7 +27,7 @@ TEST_CASE("constant_image_view_metadata") {
 	CHECK(meta.extent.width == 2);
 	CHECK(meta.extent.height == 2);
 	CHECK(meta.extent.depth == 1);
-	CHECK(meta.sample_count == Samples::e1);
+	CHECK(meta.sample_count == SampleCountFlagBits::e1);
 	CHECK(meta.base_level == 0);
 	CHECK(meta.level_count == 2);
 	CHECK(meta.base_layer == 0);
@@ -36,7 +36,7 @@ TEST_CASE("constant_image_view_metadata") {
 
 TEST_CASE("constant_image_view_members") {
 	auto data = { 11u, 22u, 33u, 44u };
-	auto ici = from_preset(Preset::eMap2D, Format::eR32Uint, Extent3D{ 2, 2, 1 }, Samples::e1);
+	auto ici = from_preset(Preset::eMap2D, Format::eR32Uint, Extent3D{ 2, 2, 1 }, SampleCountFlagBits::e1);
 
 	auto [view, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ici, std::span(data));
 
@@ -45,7 +45,7 @@ TEST_CASE("constant_image_view_members") {
 	AllocaCtx ctx;
 	auto format = *(Format*)(*ctx.eval(view_const.format.get_head()));
 	auto extent = *(Extent3D*)(*ctx.eval(view_const.extent.get_head()));
-	auto sample_count = *(Samples*)(*ctx.eval(view_const.sample_count.get_head()));
+	auto sample_count = *(SampleCountFlagBits*)(*ctx.eval(view_const.sample_count.get_head()));
 	auto base_level = *(uint16_t*)(*ctx.eval(view_const.base_level.get_head()));
 	auto level_count = *(uint16_t*)(*ctx.eval(view_const.level_count.get_head()));
 	auto base_layer = *(uint16_t*)(*ctx.eval(view_const.base_layer.get_head()));
@@ -55,7 +55,7 @@ TEST_CASE("constant_image_view_members") {
 	CHECK(extent.width == 2);
 	CHECK(extent.height == 2);
 	CHECK(extent.depth == 1);
-	CHECK(sample_count == Samples::e1);
+	CHECK(sample_count == SampleCountFlagBits::e1);
 	CHECK(base_level == 0);
 	CHECK(level_count == 2);
 	CHECK(base_layer == 0);
@@ -64,7 +64,7 @@ TEST_CASE("constant_image_view_members") {
 
 TEST_CASE("image_as_ir_constant") {
 	auto data = { 1u, 2u, 3u, 4u };
-	auto ici = from_preset(Preset::eGeneric2D, Format::eR32Uint, Extent3D{ 2, 2, 1 }, Samples::e1);
+	auto ici = from_preset(Preset::eGeneric2D, Format::eR32Uint, Extent3D{ 2, 2, 1 }, SampleCountFlagBits::e1);
 
 	auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ici, std::span(data));
 
@@ -86,7 +86,7 @@ TEST_CASE("image_as_ir_constant") {
 
 TEST_CASE("image_acquire_external") {
 	auto data = { 5u, 6u, 7u, 8u };
-	auto ici = from_preset(Preset::eGeneric2D, Format::eR32Uint, Extent3D{ 2, 2, 1 }, Samples::e1);
+	auto ici = from_preset(Preset::eGeneric2D, Format::eR32Uint, Extent3D{ 2, 2, 1 }, SampleCountFlagBits::e1);
 
 	auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ici, std::span(data));
 
@@ -113,7 +113,7 @@ TEST_CASE("image_acquire_external") {
 
 TEST_CASE("image_view_in_pass") {
 	auto data = { 10u, 20u, 30u, 40u };
-	auto ici = from_preset(Preset::eGeneric2D, Format::eR32Uint, Extent3D{ 2, 2, 1 }, Samples::e1);
+	auto ici = from_preset(Preset::eGeneric2D, Format::eR32Uint, Extent3D{ 2, 2, 1 }, SampleCountFlagBits::e1);
 
 	auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ici, std::span(data));
 
@@ -144,7 +144,7 @@ TEST_CASE("image_view_in_pass") {
 
 TEST_CASE("combine_image_sampler") {
 	auto data = { 100u, 200u, 300u, 400u };
-	auto ici = from_preset(Preset::eGeneric2D, Format::eR32Uint, Extent3D{ 2, 2, 1 }, Samples::e1);
+	auto ici = from_preset(Preset::eGeneric2D, Format::eR32Uint, Extent3D{ 2, 2, 1 }, SampleCountFlagBits::e1);
 
 	auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ici, std::span(data));
 

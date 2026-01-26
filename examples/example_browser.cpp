@@ -68,7 +68,7 @@ void vuk::ExampleRunner::render() {
 				auto small_target = vuk::clear_image(vuk::declare_ia("_img",
 				                                                     { .extent = { (uint32_t)size.x, (uint32_t)size.y, 1 },
 				                                                       .format = app->swapchain->images[0].format,
-				                                                       .sample_count = vuk::Samples::e1,
+				                                                       .sample_count = vuk::SampleCountFlagBits::e1,
 				                                                       .level_count = 1,
 				                                                       .layer_count = 1 }),
 				                                     vuk::ClearColor(0.1f, 0.2f, 0.3f, 1.f));

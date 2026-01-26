@@ -62,7 +62,7 @@ namespace {
 		      auto doge_image = stbi_load((root / "examples/doge.png").generic_string().c_str(), &x, &y, &chans, 4);
 
 		      texture_of_doge = vuk::ImageAttachment::from_preset(
-		          vuk::ImageAttachment::Preset::eMap2D, vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u }, vuk::Samples::e1);
+		          vuk::ImageAttachment::Preset::eMap2D, vuk::Format::eR8G8B8A8Srgb, vuk::Extent3D{ (unsigned)x, (unsigned)y, 1u }, vuk::SampleCountFlagBits::e1);
 		      texture_of_doge.level_count = 1;
 		      auto [image, view, future] = vuk::create_image_and_view_with_data(allocator, vuk::DomainFlagBits::eTransferOnTransfer, texture_of_doge, doge_image);
 		      image_of_doge = std::move(image);
@@ -86,7 +86,7 @@ namespace {
 		      auto rttf = vuk::clear_image(
 		          vuk::declare_ia(
 		              "08_rttf",
-		              { .extent = { (unsigned)x, (unsigned)y }, .format = runner.app->swapchain->images[0].format, .sample_count = vuk::Samples::e1, .layer_count = 1 }),
+		              { .extent = { (unsigned)x, (unsigned)y }, .format = runner.app->swapchain->images[0].format, .sample_count = vuk::SampleCountFlagBits::e1, .layer_count = 1 }),
 		          vuk::ClearColor{ 0.f, 0.f, 0.f, 1.f });
 
 		      // standard render to texture

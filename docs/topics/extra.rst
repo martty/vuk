@@ -212,7 +212,7 @@ Complete Example
        vuk::ImageAttachment::Preset::eGeneric2D,
        vuk::Format::eR8G8B8A8Srgb,
        vuk::Extent3D{ 512, 512, 1 },
-       vuk::Samples::e1
+       vuk::SampleCountFlagBits::e1
    );
    ia.level_count = vuk::compute_mip_levels(ia.extent);
    

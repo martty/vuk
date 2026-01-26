@@ -20,7 +20,7 @@ TEST_CASE("image ptr basic") {
 
 	// Bool conversion and comparison
 	{
-		auto ici = from_preset(Preset::eMap2D, Format::eR8G8B8A8Unorm, Extent3D{ 256, 256, 1 }, Samples::e1);
+		auto ici = from_preset(Preset::eMap2D, Format::eR8G8B8A8Unorm, Extent3D{ 256, 256, 1 }, SampleCountFlagBits::e1);
 
 		Image<> img1;
 		Image<> img2;
@@ -48,7 +48,7 @@ TEST_CASE("image ptr basic") {
 
 	// ICI from preset
 	{
-		auto ici_map = from_preset(Preset::eMap2D, Format::eR8G8B8A8Unorm, Extent3D{ 256, 256, 1 }, Samples::e1);
+		auto ici_map = from_preset(Preset::eMap2D, Format::eR8G8B8A8Unorm, Extent3D{ 256, 256, 1 }, SampleCountFlagBits::e1);
 
 		CHECK(ici_map.format == Format::eR8G8B8A8Unorm);
 		CHECK(ici_map.extent.width == 256);
@@ -57,7 +57,7 @@ TEST_CASE("image ptr basic") {
 		CHECK(!!(ici_map.usage & ImageUsageFlagBits::eSampled));
 		CHECK(!!(ici_map.usage & ImageUsageFlagBits::eTransferDst));
 
-		auto ici_rtt = from_preset(Preset::eRTT2D, Format::eR8G8B8A8Unorm, Extent3D{ 512, 512, 1 }, Samples::e1);
+		auto ici_rtt = from_preset(Preset::eRTT2D, Format::eR8G8B8A8Unorm, Extent3D{ 512, 512, 1 }, SampleCountFlagBits::e1);
 
 		CHECK(!!(ici_rtt.usage & ImageUsageFlagBits::eColorAttachment));
 		CHECK(!!(ici_rtt.usage & ImageUsageFlagBits::eSampled));
@@ -81,7 +81,7 @@ TEST_CASE("image_view basic") {
 
 	// From image
 	{
-		auto ici = from_preset(Preset::eMap2D, Format::eR8G8B8A8Unorm, Extent3D{ 256, 256, 1 }, Samples::e1);
+		auto ici = from_preset(Preset::eMap2D, Format::eR8G8B8A8Unorm, Extent3D{ 256, 256, 1 }, SampleCountFlagBits::e1);
 
 		Image<> img;
 		test_context.allocator->allocate_images(std::span{ &img, 1 }, std::span{ &ici, 1 });
@@ -100,7 +100,7 @@ TEST_CASE("image_view basic") {
 
 		CHECK(view1 == view2);
 
-		auto ici = from_preset(Preset::eMap2D, Format::eR8G8B8A8Unorm, Extent3D{ 256, 256, 1 }, Samples::e1);
+		auto ici = from_preset(Preset::eMap2D, Format::eR8G8B8A8Unorm, Extent3D{ 256, 256, 1 }, SampleCountFlagBits::e1);
 
 		Image<> img;
 		test_context.allocator->allocate_images(std::span{ &img, 1 }, std::span{ &ici, 1 });
@@ -131,7 +131,7 @@ TEST_CASE("image_view basic") {
 TEST_CASE("image_view_mip_selection") {
 	CHECK(test_context.runtime->get_image_count() == 0);
 	CHECK(test_context.runtime->get_active_image_view_count() == 0);
-	auto ici = from_preset(Preset::eMap2D, Format::eR8G8B8A8Unorm, Extent3D{ 256, 256, 1 }, Samples::e1);
+	auto ici = from_preset(Preset::eMap2D, Format::eR8G8B8A8Unorm, Extent3D{ 256, 256, 1 }, SampleCountFlagBits::e1);
 	ici.level_count = 4; // 256->128->64->32
 
 	Image<> img;
@@ -153,7 +153,7 @@ TEST_CASE("image_view_mip_selection") {
 TEST_CASE("image_view_mip_range") {
 	CHECK(test_context.runtime->get_image_count() == 0);
 	CHECK(test_context.runtime->get_active_image_view_count() == 0);
-	auto ici = from_preset(Preset::eMap2D, Format::eR8G8B8A8Unorm, Extent3D{ 256, 256, 1 }, Samples::e1);
+	auto ici = from_preset(Preset::eMap2D, Format::eR8G8B8A8Unorm, Extent3D{ 256, 256, 1 }, SampleCountFlagBits::e1);
 	ici.level_count = 4;
 
 	Image<> img;
@@ -172,7 +172,7 @@ TEST_CASE("image_view_mip_range") {
 TEST_CASE("image_view_layer_selection") {
 	CHECK(test_context.runtime->get_image_count() == 0);
 	CHECK(test_context.runtime->get_active_image_view_count() == 0);
-	auto ici = from_preset(Preset::eMap2D, Format::eR8G8B8A8Unorm, Extent3D{ 256, 256, 1 }, Samples::e1);
+	auto ici = from_preset(Preset::eMap2D, Format::eR8G8B8A8Unorm, Extent3D{ 256, 256, 1 }, SampleCountFlagBits::e1);
 	ici.layer_count = 6; // Array texture
 
 	Image<> img;
@@ -191,7 +191,7 @@ TEST_CASE("image_view_layer_selection") {
 TEST_CASE("image_view_layer_range") {
 	CHECK(test_context.runtime->get_image_count() == 0);
 	CHECK(test_context.runtime->get_active_image_view_count() == 0);
-	auto ici = from_preset(Preset::eMap2D, Format::eR8G8B8A8Unorm, Extent3D{ 256, 256, 1 }, Samples::e1);
+	auto ici = from_preset(Preset::eMap2D, Format::eR8G8B8A8Unorm, Extent3D{ 256, 256, 1 }, SampleCountFlagBits::e1);
 	ici.layer_count = 6;
 
 	Image<> img;
@@ -210,7 +210,7 @@ TEST_CASE("image_view_layer_range") {
 TEST_CASE("image_view_chaining") {
 	CHECK(test_context.runtime->get_image_count() == 0);
 	CHECK(test_context.runtime->get_active_image_view_count() == 0);
-	auto ici = from_preset(Preset::eMap2D, Format::eR8G8B8A8Unorm, Extent3D{ 256, 256, 1 }, Samples::e1);
+	auto ici = from_preset(Preset::eMap2D, Format::eR8G8B8A8Unorm, Extent3D{ 256, 256, 1 }, SampleCountFlagBits::e1);
 	ici.level_count = 4;
 	ici.layer_count = 6;
 
@@ -232,7 +232,7 @@ TEST_CASE("image_view_chaining") {
 TEST_CASE("image_view_extent_calculation") {
 	CHECK(test_context.runtime->get_image_count() == 0);
 	CHECK(test_context.runtime->get_active_image_view_count() == 0);
-	auto ici = from_preset(Preset::eMap2D, Format::eR8G8B8A8Unorm, Extent3D{ 256, 256, 1 }, Samples::e1);
+	auto ici = from_preset(Preset::eMap2D, Format::eR8G8B8A8Unorm, Extent3D{ 256, 256, 1 }, SampleCountFlagBits::e1);
 	ici.level_count = 4;
 
 	Image<> img;
@@ -263,7 +263,7 @@ TEST_CASE("image_view_extent_calculation") {
 TEST_CASE("allocate_image_with_preset") {
 	Allocator allocator(test_context.runtime->get_vk_resource());
 
-	auto ici = from_preset(Preset::eMap2D, Format::eR8G8B8A8Unorm, Extent3D{ 256, 256, 1 }, Samples::e1);
+	auto ici = from_preset(Preset::eMap2D, Format::eR8G8B8A8Unorm, Extent3D{ 256, 256, 1 }, SampleCountFlagBits::e1);
 
 	auto& resolver = allocator.get_context();
 	auto initial_image_count = resolver.get_image_count();
@@ -290,7 +290,7 @@ TEST_CASE("allocate_image_with_preset") {
 TEST_CASE("unique_image_ownership") {
 	Allocator allocator(test_context.runtime->get_vk_resource());
 
-	auto ici = from_preset(Preset::eMap2D, Format::eR8G8B8A8Unorm, Extent3D{ 256, 256, 1 }, Samples::e1);
+	auto ici = from_preset(Preset::eMap2D, Format::eR8G8B8A8Unorm, Extent3D{ 256, 256, 1 }, SampleCountFlagBits::e1);
 
 	auto& resolver = allocator.get_context();
 	auto initial_image_count = resolver.get_image_count();
@@ -325,7 +325,7 @@ TEST_CASE("unique_image_ownership") {
 TEST_CASE("unique_image_view_ownership") {
 	Allocator allocator(test_context.runtime->get_vk_resource());
 
-	auto ici = from_preset(Preset::eMap2D, Format::eR8G8B8A8Unorm, Extent3D{ 256, 256, 1 }, Samples::e1);
+	auto ici = from_preset(Preset::eMap2D, Format::eR8G8B8A8Unorm, Extent3D{ 256, 256, 1 }, SampleCountFlagBits::e1);
 	ici.level_count = 4; // Need multiple mip levels
 
 	auto& resolver = allocator.get_context();

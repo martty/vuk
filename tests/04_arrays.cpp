@@ -74,7 +74,7 @@ TEST_CASE("zero len arrayed buffers") {
 TEST_CASE("arrayed images, commands") {
 	{
 		auto data = { 1u, 2u, 3u, 4u };
-		auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, Samples::e1);
+		auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, SampleCountFlagBits::e1);
 		auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data));
 		auto [img2, fut2] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data));
 
@@ -105,7 +105,7 @@ TEST_CASE("arrayed images, commands") {
 TEST_CASE("arrayed images, divergent source sync") {
 	{
 		auto data = { 1u, 2u, 3u, 4u };
-		auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, Samples::e1);
+		auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, SampleCountFlagBits::e1);
 		auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data));
 		auto [img2, fut2] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data));
 
@@ -142,7 +142,7 @@ TEST_CASE("arrayed images, divergent source sync") {
 TEST_CASE("image slicing, mips") {
 	{
 		auto data = { 1u, 2u, 3u, 4u };
-		auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, Samples::e1);
+		auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, SampleCountFlagBits::e1);
 		ia.level_count = 2;
 		auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data));
 
@@ -191,7 +191,7 @@ namespace {
 
 TEST_CASE("image slicing, reconvergence") {
 	auto data = { 1u, 2u, 3u, 4u };
-	auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, Samples::e1);
+	auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, SampleCountFlagBits::e1);
 	ia.level_count = 2;
 	auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data));
 
@@ -214,7 +214,7 @@ TEST_CASE("image slicing, reconvergence") {
 TEST_CASE("image slicing, reconvergence 2") {
 	{
 		auto data = { 1u, 2u, 3u, 4u };
-		auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, Samples::e1);
+		auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, SampleCountFlagBits::e1);
 		ia.level_count = 2;
 		auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data));
 
@@ -238,7 +238,7 @@ TEST_CASE("image slicing, reconvergence 2") {
 TEST_CASE("image slicing, reconvergence 3") {
 	{
 		auto data = { 1u, 2u, 3u, 4u };
-		auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, Samples::e1);
+		auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, SampleCountFlagBits::e1);
 		ia.level_count = 2;
 		auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data));
 
@@ -266,7 +266,7 @@ inline void void_clear_image(Value<ImageAttachment> in, Clear clear_value) {
 TEST_CASE("image slicing, reconvergence with undef") {
 	{
 		auto data = { 1u, 2u, 3u, 4u };
-		auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, Samples::e1);
+		auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, SampleCountFlagBits::e1);
 		ia.level_count = 2;
 		auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data));
 
@@ -288,7 +288,7 @@ TEST_CASE("image slicing, reconvergence with undef") {
 TEST_CASE("image slicing, forced reconvergence") {
 	{
 		auto data = { 1u, 2u, 3u, 4u };
-		auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, Samples::e1);
+		auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, SampleCountFlagBits::e1);
 		ia.level_count = 2;
 		auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data));
 
@@ -349,7 +349,7 @@ vuk::Value<vuk::ImageAttachment> generate_mips(std::string& trace, vuk::Value<vu
 }
 
 TEST_CASE("mip generation") {
-	auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 64, 64, 1 }, Samples::e1);
+	auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 64, 64, 1 }, SampleCountFlagBits::e1);
 	auto img = vuk::clear_image(vuk::declare_ia("src", ia), vuk::ClearColor(0.1f, 0.1f, 0.1f, 0.1f));
 	std::string trace = "";
 	generate_mips(trace, std::move(img), 5).wait(*test_context.allocator, test_context.compiler);
@@ -357,7 +357,7 @@ TEST_CASE("mip generation") {
 }
 
 TEST_CASE("read convergence") {
-	auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 64, 64, 1 }, Samples::e1);
+	auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 64, 64, 1 }, SampleCountFlagBits::e1);
 	auto img = vuk::clear_image(vuk::declare_ia("src", ia), vuk::ClearColor(0.1f, 0.1f, 0.1f, 0.1f));
 	std::string trace = "";
 	auto mipped = generate_mips(trace, std::move(img), 5);
@@ -374,7 +374,7 @@ TEST_CASE("read convergence") {
 }
 
 TEST_CASE("read convergence 2") {
-	auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 64, 64, 1 }, Samples::e1);
+	auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 64, 64, 1 }, SampleCountFlagBits::e1);
 	auto img = vuk::clear_image(vuk::declare_ia("src", ia), vuk::ClearColor(0.1f, 0.1f, 0.1f, 0.1f));
 	auto img2 = vuk::clear_image(vuk::declare_ia("src2", ia), vuk::ClearColor(0.1f, 0.1f, 0.1f, 0.1f));
 	std::string trace = "";
@@ -388,7 +388,7 @@ TEST_CASE("read convergence 2") {
 }
 
 TEST_CASE("mip generation 2") {
-	auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 64, 64, 1 }, Samples::e1);
+	auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 64, 64, 1 }, SampleCountFlagBits::e1);
 	auto img = vuk::declare_ia("src", ia);
 	vuk::clear_image(img.mip(0), vuk::ClearColor(0.1f, 0.1f, 0.1f, 0.1f));
 	vuk::clear_image(img.mip(4), vuk::ClearColor(0.6f, 0.1f, 0.1f, 0.1f));
@@ -434,7 +434,7 @@ void generate_mips_2(std::string& trace, vuk::Value<vuk::ImageAttachment> image,
 }
 
 TEST_CASE("mip generation 3") {
-	auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 64, 64, 1 }, Samples::e1);
+	auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 64, 64, 1 }, SampleCountFlagBits::e1);
 	auto img = vuk::declare_ia("src", ia);
 	vuk::clear_image(img.mip(0), vuk::ClearColor(0.1f, 0.1f, 0.1f, 0.1f));
 	vuk::clear_image(img.mip(4), vuk::ClearColor(0.6f, 0.1f, 0.1f, 0.1f));
@@ -451,7 +451,7 @@ TEST_CASE("mip generation 3") {
 }
 
 TEST_CASE("mip generation 4") {
-	auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 64, 64, 1 }, Samples::e1);
+	auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 64, 64, 1 }, SampleCountFlagBits::e1);
 	auto img = vuk::declare_ia("src", ia);
 	vuk::clear_image(img.mip(0), vuk::ClearColor(0.1f, 0.1f, 0.1f, 0.1f));
 	vuk::clear_image(img.mip(4), vuk::ClearColor(0.6f, 0.1f, 0.1f, 0.1f));
@@ -468,7 +468,7 @@ TEST_CASE("mip generation 4") {
 }
 
 TEST_CASE("mip generation 5") {
-	auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 64, 64, 1 }, Samples::e1);
+	auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 64, 64, 1 }, SampleCountFlagBits::e1);
 	auto img = vuk::declare_ia("src", ia);
 	vuk::clear_image(img, vuk::ClearColor(0.1f, 0.1f, 0.1f, 0.1f));
 	std::string trace = "";
@@ -484,7 +484,7 @@ TEST_CASE("mip generation 5") {
 }
 
 TEST_CASE("mip2mip dep") {
-	auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 64, 64, 1 }, Samples::e1);
+	auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 64, 64, 1 }, SampleCountFlagBits::e1);
 	auto img = vuk::declare_ia("src", ia);
 	vuk::clear_image(img.mip(0), vuk::ClearColor(0.1f, 0.1f, 0.1f, 0.1f));
 	vuk::clear_image(img.mip(4), vuk::ClearColor(0.6f, 0.1f, 0.1f, 0.1f));
@@ -537,7 +537,7 @@ vuk::Value<vuk::ImageAttachment> bloom_pass(std::string& trace,
 }
 
 TEST_CASE("mip down-up") {
-	auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 64, 64, 1 }, Samples::e1);
+	auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 64, 64, 1 }, SampleCountFlagBits::e1);
 	auto src = vuk::clear_image(vuk::declare_ia("src", ia), vuk::ClearColor(0.1f, 0.1f, 0.1f, 0.1f));
 	auto downsample = vuk::declare_ia("down", ia);
 	auto upsample = vuk::declare_ia("up", ia);
@@ -629,7 +629,7 @@ auto frw_pass = make_pass("frw", [](CommandBuffer& cbuf, VUK_IA(Access::eTransfe
 
 TEST_CASE("alienated subresource") {
   auto data = { 1u, 2u, 3u, 4u };
-  auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, Samples::e1);
+  auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, SampleCountFlagBits::e1);
   ia.level_count = 2;
   auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data));
 

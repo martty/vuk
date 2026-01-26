@@ -18,8 +18,6 @@ namespace vuk {
 
 	template<>
 	class erased_tuple_adaptor<Extent3D>;
-	template<>
-	class erased_tuple_adaptor<Samples>;
 
 	template<class T>
 	struct is_value : std::false_type {};
@@ -368,7 +366,7 @@ namespace vuk {
 
 		Value<Format> format = f;
 		Value<Extent3D> extent;
-		Value<Samples> sample_count;
+		Value<SampleCountFlagBits> sample_count;
 
 		Value<ImageView<f>>() = default;
 
@@ -382,7 +380,7 @@ namespace vuk {
 			auto ici = current_module->make_get_ci(image);
 			format = Value<Format>(current_module->make_extract(ivci, 5));
 			extent = Value<Extent3D>(current_module->make_extract(ici, 4));
-			sample_count = Value<Samples>(current_module->make_extract(ici, 6));
+			sample_count = Value<SampleCountFlagBits>(current_module->make_extract(ici, 6));
 		}
 
 		Value<ImageView<f>>(ExtRef extref) : Value<ImageView<f>>(Ref(extref.node->get_node(), extref.index)) {}

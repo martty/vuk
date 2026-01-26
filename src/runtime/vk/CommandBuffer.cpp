@@ -743,7 +743,7 @@ namespace vuk {
 		fbci.layers = 1;
 		fbci.attachmentCount = 0;
 		fbci.pAttachments = nullptr;
-		fbci.sample_count = Samples{ samples };
+		fbci.sample_count = SampleCountFlagBits{ samples };
 
 		VkFramebuffer framebuffer = VK_NULL_HANDLE;
 		auto fb_res = allocator->allocate_framebuffers(std::span{ &framebuffer, 1 }, std::span{ &fbci, 1 });

@@ -34,7 +34,7 @@ namespace vuk::extra {
 		io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
 
 		ImGuiData data;
-		ICI font_ici = from_preset(Preset::eMap2D, Format::eR8G8B8A8Srgb, Extent3D{ (unsigned)width, (unsigned)height, 1u }, Samples::e1);
+		ICI font_ici = from_preset(Preset::eMap2D, Format::eR8G8B8A8Srgb, Extent3D{ (unsigned)width, (unsigned)height, 1u }, SampleCountFlagBits::e1);
 		font_ici.level_count = 1; // no mips for font texture
 		auto [view, fut] = create_image_with_data(allocator, DomainFlagBits::eTransferOnTransfer, font_ici, pixels);
 		data.font_image_view = std::move(view);

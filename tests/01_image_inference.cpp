@@ -14,7 +14,7 @@ using namespace vuk;
 
 TEST_CASE("ir_allocate_image_resolve_operation") {
 	// Multisampled source
-	ICI ms_ici = from_preset(Preset::eRTT2DUnmipped, Format::eR8G8B8A8Unorm, Extent3D{ 512, 512, 1 }, Samples::e4);
+	ICI ms_ici = from_preset(Preset::eRTT2DUnmipped, Format::eR8G8B8A8Unorm, Extent3D{ 512, 512, 1 }, SampleCountFlagBits::e4);
 	auto ms_view = allocate<>("ms_img", ms_ici);
 	clear_image(ms_view, ClearColor{ 0.2f, 0.2f, 0.2f, 0.2f });
 
@@ -33,7 +33,7 @@ TEST_CASE("ir_allocate_image_resolve_operation") {
 
 TEST_CASE("ir_allocate_image_blit_operation") {
 	// Source image with known parameters
-	ICI src_ici = from_preset(Preset::eRTT2DUnmipped, Format::eR8G8B8A8Unorm, Extent3D{ 256, 256, 1 }, Samples::e1);
+	ICI src_ici = from_preset(Preset::eRTT2DUnmipped, Format::eR8G8B8A8Unorm, Extent3D{ 256, 256, 1 }, SampleCountFlagBits::e1);
 	auto src_view = allocate<>("src_img", src_ici);
 	clear_image(src_view, ClearColor{ 0.5f, 0.5f, 0.5f, 0.5f });
 
@@ -54,7 +54,7 @@ TEST_CASE("ir_allocate_image_blit_operation") {
 
 TEST_CASE("ir_allocate_image_copy_operation") {
 	// Source image with known parameters
-	ICI src_ici = from_preset(Preset::eRTT2DUnmipped, Format::eR32G32B32A32Sfloat, Extent3D{ 128, 128, 1 }, Samples::e1);
+	ICI src_ici = from_preset(Preset::eRTT2DUnmipped, Format::eR32G32B32A32Sfloat, Extent3D{ 128, 128, 1 }, SampleCountFlagBits::e1);
 	auto src_view = allocate<>("src_img", src_ici);
 	clear_image(src_view, ClearColor{ 1.0f, 0.0f, 0.0f, 1.0f });
 
@@ -74,7 +74,7 @@ TEST_CASE("ir_allocate_image_copy_operation") {
 TEST_CASE("ir_allocate_image_framebuffer_attachments") {
 	// Create a render pass with color and depth attachments
 	// Color attachment has known parameters
-	ICI color_ici = from_preset(Preset::eRTT2DUnmipped, Format::eR8G8B8A8Unorm, Extent3D{ 512, 512, 1 }, Samples::e1);
+	ICI color_ici = from_preset(Preset::eRTT2DUnmipped, Format::eR8G8B8A8Unorm, Extent3D{ 512, 512, 1 }, SampleCountFlagBits::e1);
 	auto color_view = allocate<>("color_att", color_ici);
 
 	// Depth attachment infers extent and samples from color attachment via framebuffer constraints
@@ -109,7 +109,7 @@ TEST_CASE("ir_allocate_image_framebuffer_attachments") {
 
 TEST_CASE("ir_allocate_image_chain_inference") {
 	// Test inference chain: src -> intermediate -> dst
-	ICI src_ici = from_preset(Preset::eRTT2DUnmipped, Format::eR8G8B8A8Unorm, Extent3D{ 64, 64, 1 }, Samples::e1);
+	ICI src_ici = from_preset(Preset::eRTT2DUnmipped, Format::eR8G8B8A8Unorm, Extent3D{ 64, 64, 1 }, SampleCountFlagBits::e1);
 	auto src_view = allocate<>("src", src_ici);
 	clear_image(src_view, ClearColor{ 0.4f, 0.5f, 0.6f, 0.7f });
 
@@ -136,7 +136,7 @@ TEST_CASE("ir_allocate_image_chain_inference") {
 
 TEST_CASE("ir_allocate_image_multiple_framebuffer_attachments") {
 	// Test inference with multiple color attachments
-	ICI color0_ici = from_preset(Preset::eRTT2DUnmipped, Format::eR8G8B8A8Unorm, Extent3D{ 256, 256, 1 }, Samples::e1);
+	ICI color0_ici = from_preset(Preset::eRTT2DUnmipped, Format::eR8G8B8A8Unorm, Extent3D{ 256, 256, 1 }, SampleCountFlagBits::e1);
 	auto color0 = allocate<>("color0", color0_ici);
 
 	// Second color attachment infers extent from first
@@ -167,7 +167,7 @@ TEST_CASE("ir_allocate_image_multiple_framebuffer_attachments") {
 
 TEST_CASE("ir_allocate_image_generate_mips") {
 	// Base mip level with known parameters
-	ICI src_ici = from_preset(Preset::eRTT2D, Format::eR8G8B8A8Unorm, Extent3D{ 512, 512, 1 }, Samples::e1);
+	ICI src_ici = from_preset(Preset::eRTT2D, Format::eR8G8B8A8Unorm, Extent3D{ 512, 512, 1 }, SampleCountFlagBits::e1);
 	src_ici.level_count = 4;
 	auto src_view = allocate<>("mipped_img", src_ici);
 	clear_image(src_view.mip(0), ClearColor{ 0.9f, 0.1f, 0.5f, 1.0f });
@@ -185,7 +185,7 @@ TEST_CASE("ir_allocate_image_generate_mips") {
 // TODO: remove once fixed
 TEST_CASE("ir_allocate_image_same_shape_constraint") {
 	// Source image with multiple mip levels
-	ICI src_ici = from_preset(Preset::eRTT2D, Format::eR8G8B8A8Unorm, Extent3D{ 128, 128, 1 }, Samples::e1);
+	ICI src_ici = from_preset(Preset::eRTT2D, Format::eR8G8B8A8Unorm, Extent3D{ 128, 128, 1 }, SampleCountFlagBits::e1);
 	src_ici.level_count = 4;
 	auto src_view = allocate<>("src_img", src_ici);
 	clear_image(src_view, ClearColor{ 0.1f, 0.2f, 0.3f, 0.4f });

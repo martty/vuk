@@ -60,7 +60,7 @@ TEST_CASE("buffer fill & update") {
 TEST_CASE("image upload/download") {
 	{
 		auto data = { 1u, 2u, 3u, 4u };
-		auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, Samples::e1);
+		auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, SampleCountFlagBits::e1);
 		auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data));
 
 		size_t alignment = format_to_texel_block_size(*fut->format);
@@ -76,7 +76,7 @@ TEST_CASE("image upload/download") {
 TEST_CASE("image clear") {
 	{
 		auto data = { 1u, 2u, 3u, 4u };
-		auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, Samples::e1);
+		auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, SampleCountFlagBits::e1);
 		auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data));
 
 		size_t alignment = format_to_texel_block_size(*fut->format);
@@ -93,10 +93,10 @@ TEST_CASE("image clear") {
 TEST_CASE("image blit") {
 	{
 		auto data = { 1.f, 0.f, 0.f, 1.f };
-		auto ia_src = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 2, 2, 1 }, Samples::e1);
+		auto ia_src = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 2, 2, 1 }, SampleCountFlagBits::e1);
 		ia_src.level_count = 1;
 		auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia_src, std::span(data));
-		auto ia_dst = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 1, 1, 1 }, Samples::e1);
+		auto ia_dst = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 1, 1, 1 }, SampleCountFlagBits::e1);
 		ia_dst.level_count = 1;
 		auto img2 = allocate_image(*test_context.allocator, ia_dst);
 		size_t alignment = format_to_texel_block_size(*fut->format);
@@ -110,10 +110,10 @@ TEST_CASE("image blit") {
 	}
 	{
 		auto data = { 1.f, 0.f, 0.f, 1.f };
-		auto ia_src = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 2, 2, 1 }, Samples::e1);
+		auto ia_src = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 2, 2, 1 }, SampleCountFlagBits::e1);
 		ia_src.level_count = 1;
 		auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia_src, std::span(data));
-		auto ia_dst = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 1, 1, 1 }, Samples::e1);
+		auto ia_dst = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Sfloat, { 1, 1, 1 }, SampleCountFlagBits::e1);
 		ia_dst.level_count = 1;
 		auto img2 = allocate_image(*test_context.allocator, ia_dst);
 		size_t alignment = format_to_texel_block_size(*fut->format);
@@ -130,7 +130,7 @@ TEST_CASE("image blit") {
 TEST_CASE("poll wait") {
 	{
 		auto data = { 1u, 2u, 3u, 4u };
-		auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, Samples::e1);
+		auto ia = ImageAttachment::from_preset(ImageAttachment::Preset::eGeneric2D, Format::eR32Uint, { 2, 2, 1 }, SampleCountFlagBits::e1);
 		auto [img, fut] = create_image_with_data(*test_context.allocator, DomainFlagBits::eAny, ia, std::span(data));
 
 		size_t alignment = format_to_texel_block_size(*fut->format);

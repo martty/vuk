@@ -154,7 +154,7 @@ namespace std {
 			             to_integral(x.format),
 			             to_integral(x.image_type),
 			             x.level_count,
-			             x.sample_count.count,
+			             to_integral(x.sample_count),
 			             to_integral(x.tiling),
 			             x.usage);
 			return h;

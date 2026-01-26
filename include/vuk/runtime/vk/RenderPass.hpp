@@ -58,7 +58,7 @@ namespace vuk {
 	struct FramebufferCreateInfo : public VkFramebufferCreateInfo {
 		FramebufferCreateInfo() : VkFramebufferCreateInfo{ .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO } {}
 		std::vector<ImageView<>> attachments;
-		Samples sample_count = Samples::eInfer;
+		SampleCountFlagBits sample_count = SampleCountFlagBits::eInfer;
 
 		bool operator==(const FramebufferCreateInfo& o) const noexcept {
 			return std::tie(flags, attachments, width, height, renderPass, layers, sample_count) ==
