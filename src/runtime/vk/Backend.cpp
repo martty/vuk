@@ -1141,10 +1141,9 @@ namespace vuk {
 							} else {
 								auto bci = *get_value<IVCI>(node->allocate.src);
 								ImageView<> iv;
-								if (auto res = allocator.allocate_image_views(std::span{ static_cast<ImageView<>*>(&iv), 1 }, std::span{ &bci, 1 }); !res) {
-									return res;
-								}
-								allocator.deallocate(std::span{ static_cast<ImageView<>*>(&iv), 1 });
+								ImageViewEntry ive = ImageViewEntry{ bci };
+								iv.view_key = ctx.add_image_view(ive);
+
 								new_value = arena.emplace(iv);
 							}
 						}

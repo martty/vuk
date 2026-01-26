@@ -33,6 +33,22 @@ namespace vuk {
 	Result<void> constant_folding::operator()() {
 		for (int i = 0; i < 10; i++) {
 			rewrite([this](Node* node, Replacer& r) {
+				DomainFlags op_class = op_compute_class[node->kind];
+				if (node->kind == Node::GET_CI) {
+					apply_generic_args(
+					    [&](Ref& arg) {
+						    if (arg.type()->kind == Type::ALIASED_TY) {
+							    auto ridx = arg.type()->aliased.ref_idx;
+							    if (arg.node->generic_node.arg_count == (uint8_t)~0u) {
+								    r.replace(arg, arg.node->variable_node.args[ridx]);
+							    } else {
+								    r.replace(arg, arg.node->fixed_node.args[ridx]);
+							    }
+						    }
+					    },
+					    node);
+				}
+
 				switch (node->kind) {
 				case Node::SLICE: {
 					if (!node->type[0]->is_synchronized()) {

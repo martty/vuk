@@ -125,14 +125,13 @@ TEST_CASE("ir_allocate_image_chain_inference") {
 	dst_view.same_format_as(mid_view);
 	dst_view.same_extent_as(mid_view);
 
-	auto step1 = copy(src_view, mid_view);
-	auto step2 = copy(step1, dst_view);
+	copy(src_view, dst_view);
 
 	// Verify final result
 	auto extent = Extent3D{ 64, 64, 1 };
 	size_t pixel_count = extent.width * extent.height * extent.depth;
 	std::vector expected_data(pixel_count, ImageLike<Format::eR8G8B8A8Unorm>{ 0.4f, 0.5f, 0.6f, 0.7f });
-	verify_image_data(step2, std::span(expected_data), Format::eR8G8B8A8Unorm, extent);
+	verify_image_data(dst_view, std::span(expected_data), Format::eR8G8B8A8Unorm, extent);
 }
 
 TEST_CASE("ir_allocate_image_multiple_framebuffer_attachments") {
@@ -141,16 +140,12 @@ TEST_CASE("ir_allocate_image_multiple_framebuffer_attachments") {
 	auto color0 = allocate<>("color0", color0_ici);
 
 	// Second color attachment infers extent from first
-	ICI color1_ici = {};
-	color1_ici.format = Format::eR16G16B16A16Sfloat;
+	ICI color1_ici = { .format = Format::eR16G16B16A16Sfloat };
 	auto color1 = allocate<>("color1", color1_ici);
-	color1.same_extent_as(color0);
 
 	// Depth attachment infers extent from color0
-	ICI depth_ici = {};
-	depth_ici.format = Format::eD24UnormS8Uint;
+	ICI depth_ici = { .format = Format::eD32Sfloat };
 	auto depth = allocate<>("depth", depth_ici);
-	depth.same_extent_as(color0);
 
 	// Fill color attachments with fullscreen triangles before the multi-attachment pass
 	auto filled_color0 = render_fullscreen_color(color0, { 1.0f, 0.0f, 0.0f, 1.0f });

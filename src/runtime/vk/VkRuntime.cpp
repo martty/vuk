@@ -947,12 +947,12 @@ namespace vuk {
 		return *it;
 	}
 
-	static const auto IV_MASK = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
-	                            VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT |
-	                            VK_IMAGE_USAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR | VK_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_BIT_EXT |
-	                            VK_IMAGE_USAGE_VIDEO_DECODE_DST_BIT_KHR | VK_IMAGE_USAGE_VIDEO_DECODE_DPB_BIT_KHR | VK_IMAGE_USAGE_VIDEO_ENCODE_SRC_BIT_KHR |
-	                            VK_IMAGE_USAGE_VIDEO_ENCODE_DPB_BIT_KHR | VK_IMAGE_USAGE_SAMPLE_WEIGHT_BIT_QCOM | VK_IMAGE_USAGE_SAMPLE_BLOCK_MATCH_BIT_QCOM |
-	                            VK_IMAGE_USAGE_VIDEO_ENCODE_QUANTIZATION_DELTA_MAP_BIT_KHR | VK_IMAGE_USAGE_VIDEO_ENCODE_EMPHASIS_MAP_BIT_KHR;
+	static const uint64_t IV_MASK = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+	                                VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT |
+	                                VK_IMAGE_USAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR | VK_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_BIT_EXT |
+	                                VK_IMAGE_USAGE_VIDEO_DECODE_DST_BIT_KHR | VK_IMAGE_USAGE_VIDEO_DECODE_DPB_BIT_KHR | VK_IMAGE_USAGE_VIDEO_ENCODE_SRC_BIT_KHR |
+	                                VK_IMAGE_USAGE_VIDEO_ENCODE_DPB_BIT_KHR | VK_IMAGE_USAGE_SAMPLE_WEIGHT_BIT_QCOM | VK_IMAGE_USAGE_SAMPLE_BLOCK_MATCH_BIT_QCOM |
+	                                VK_IMAGE_USAGE_VIDEO_ENCODE_QUANTIZATION_DELTA_MAP_BIT_KHR | VK_IMAGE_USAGE_VIDEO_ENCODE_EMPHASIS_MAP_BIT_KHR;
 
 	uint32_t Resolver::add_image_view(ImageViewEntry ive) {
 		auto& image_entry = resolve_image(ive.image);
@@ -987,31 +987,32 @@ namespace vuk {
 				return index;
 			}
 		}
-		if (ive.api_view == VK_NULL_HANDLE && image_entry.usage.m_mask & IV_MASK) {
+		if (ive.api_view == VK_NULL_HANDLE) {
 			ive.id = impl->iv_id_counter++;
+			if (image_entry.usage.m_mask & IV_MASK) {
+				VkImageViewCreateInfo ci{ VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
+				VkImageViewUsageCreateInfo uvci{ VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO };
+				uvci.usage = (VkImageUsageFlags)ive.view_usage;
+				if (uvci.usage != 0) {
+					ci.pNext = &uvci;
+				}
 
-			VkImageViewCreateInfo ci{ VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
-			VkImageViewUsageCreateInfo uvci{ VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO };
-			uvci.usage = (VkImageUsageFlags)ive.view_usage;
-			if (uvci.usage != 0) {
-				ci.pNext = &uvci;
+				ci.image = image_entry.image;
+				ci.viewType = (VkImageViewType)ive.view_type;
+				ci.format = (VkFormat)ive.format;
+				ci.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+				ci.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+				ci.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+				ci.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+				ci.subresourceRange.aspectMask = (VkImageAspectFlags)format_to_aspect(ive.format);
+				ci.subresourceRange.baseMipLevel = ive.base_level;
+				ci.subresourceRange.levelCount = ive.level_count;
+				ci.subresourceRange.baseArrayLayer = ive.base_layer;
+				ci.subresourceRange.layerCount = ive.layer_count;
+
+				VkResult res = impl->create_image_view_fn(impl->device, &ci, nullptr, &ive.api_view);
+				// TODO: PAV: handle error
 			}
-
-			ci.image = image_entry.image;
-			ci.viewType = (VkImageViewType)ive.view_type;
-			ci.format = (VkFormat)ive.format;
-			ci.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-			ci.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-			ci.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-			ci.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-			ci.subresourceRange.aspectMask = (VkImageAspectFlags)format_to_aspect(ive.format);
-			ci.subresourceRange.baseMipLevel = ive.base_level;
-			ci.subresourceRange.levelCount = ive.level_count;
-			ci.subresourceRange.baseArrayLayer = ive.base_layer;
-			ci.subresourceRange.layerCount = ive.layer_count;
-
-			VkResult res = impl->create_image_view_fn(impl->device, &ci, nullptr, &ive.api_view);
-			// TODO: PAV: handle error
 		}
 
 		std::lock_guard _(impl->images_mtx);
@@ -1030,9 +1031,11 @@ namespace vuk {
 	}
 
 	void Resolver::remove_image_view(uint32_t key) {
-		auto& ve = resolve_image_view(key);
+		if (impl->image_views[key].api_view == VK_NULL_HANDLE) {
+			return;
+		}
 
-		impl->destroy_image_view_fn(impl->device, ve.api_view, nullptr);
+		impl->destroy_image_view_fn(impl->device, impl->image_views[key].api_view, nullptr);
 		impl->image_views[key] = ImageViewEntry{};
 		impl->image_view_freelist.push_back(key);
 	}
