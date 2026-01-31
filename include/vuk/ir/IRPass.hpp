@@ -92,22 +92,14 @@ namespace vuk {
 			}
 			memcpy(dst, composite_v, t->size);
 			if (t->is_imageview()) {
-				assert(false);
-				/*/ if (axis == Node::NamedAxis::MIP) {
-				  auto& sliced = *static_cast<ImageAttachment*>(dst);
-				  sliced.base_level += start;
-				  if (count != Range::REMAINING) {
-				    sliced.level_count = count;
-				  }
+				auto& sliced = *static_cast<ImageView<>*>(dst);
+				if (axis == Node::NamedAxis::MIP) {
+					sliced = sliced.mip_range(start, count);
 				} else if (axis == Node::NamedAxis::LAYER) {
-				  auto& sliced = *static_cast<ImageAttachment*>(dst);
-				  sliced.base_layer += start;
-				  if (count != Range::REMAINING) {
-				    sliced.layer_count = count;
-				  }
+					sliced = sliced.layer_range(start, count);
 				} else {
-				  assert(0);
-				}*/
+					assert(0);
+				}
 			} else if (t->is_bufferlike_view()) {
 				if (axis == 0) {
 					auto& sliced = *static_cast<Buffer<>*>(dst);
@@ -565,6 +557,10 @@ namespace vuk {
 					value2 = iit->value;
 				}
 
+				if (value2 == needle) { // cycle
+					// fmt::print("Skipping replace {} -> {} (cycle)\n", fmt::to_string(needle), fmt::to_string(value));
+					return;
+				}
 				// search needle in values (extend chains longer)
 				iit = std::find_if(replaces.begin(), replaces.end(), [=](Replace& a) { return a.value == needle; });
 				while (iit != replaces.end()) { //

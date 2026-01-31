@@ -155,9 +155,9 @@ namespace vuk {
 			rewrite([](Node* node, Replacer& r) {
 				if (node->kind == Node::SET) {
 					auto& set = node->set;
-					if (set.value.node->kind != Node::PLACEHOLDER) {
+					if (set.value && set.value.node->kind != Node::PLACEHOLDER) {
 						r.replace(set.dst, set.value);
-					} else if (set.dst.node->kind != Node::PLACEHOLDER) {
+					} else if (set.dst && set.dst.node->kind != Node::PLACEHOLDER) {
 						r.replace(set.value, set.dst);
 					}
 				}
