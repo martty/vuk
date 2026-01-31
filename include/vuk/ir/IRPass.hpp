@@ -245,6 +245,22 @@ namespace vuk {
 				return { expected_value, eval_binop(math_binary.op, ref.type(), a, b) };
 
 			} break;
+			case Node::SELECT: {
+				auto& select = ref.node->select;
+
+				// Evaluate condition as size_t
+				auto cond = eval_as_size_t(select.condition);
+				if (!cond) {
+					return { expected_control, CannotBeConstantEvaluated{ ref } };
+				}
+
+				// If condition is non-zero, return a, otherwise return b
+				if (*cond != 0) {
+					return eval(select.a);
+				} else {
+					return eval(select.b);
+				}
+			} break;
 			case Node::GET_CI: {
 				auto src = ref.node->get_ci.src;
 				auto src_ = eval(src);

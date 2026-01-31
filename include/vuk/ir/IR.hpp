@@ -453,6 +453,7 @@ namespace vuk {
 			SET,
 			CAST,
 			MATH_BINARY,
+			SELECT,
 			COMPILE_PIPELINE,
 			ALLOCATE,
 			GET_ALLOCATION_SIZE,
@@ -554,6 +555,11 @@ namespace vuk {
 				Ref b;
 				BinOp op;
 			} math_binary;
+			struct : Fixed<3> {
+				Ref condition;
+				Ref a;
+				Ref b;
+			} select;
 			struct : Fixed<1> {
 				Ref src;
 				std::optional<Allocator> allocator;
@@ -609,6 +615,8 @@ namespace vuk {
 				return "call";
 			case MATH_BINARY:
 				return "math_b";
+			case SELECT:
+				return "select";
 			case SLICE:
 				return "slice";
 			case CONVERGE:
@@ -1497,6 +1505,14 @@ namespace vuk {
 			std::shared_ptr<Type>* tys = new std::shared_ptr<Type>[1]{ a.type() };
 
 			return first(emplace_op(Node{ .kind = Node::MATH_BINARY, .type = std::span{ tys, 1 }, .math_binary = { .a = a, .b = b, .op = op } }));
+		}
+
+		Ref make_select(Ref condition, Ref a, Ref b) {
+			assert(a.type() == b.type());
+			// Result type is the type of a (and b should match)
+			std::shared_ptr<Type>* tys = new std::shared_ptr<Type>[1]{ a.type() };
+
+			return first(emplace_op(Node{ .kind = Node::SELECT, .type = std::span{ tys, 1 }, .select = { .condition = condition, .a = a, .b = b } }));
 		}
 
 		// EDITS
