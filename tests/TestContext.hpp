@@ -329,6 +329,15 @@ void main() {
 		CHECK(std::equal(actual_data.begin(), actual_data.end(), expected_data.begin()));
 	}
 
+	// Helper to verify buffer contents match expected data (const version)
+	template<typename T, size_t Extent = dynamic_extent>
+	void verify_buffer_data(Value<Buffer<T>> buffer, std::span<const T, Extent> expected_data, RenderGraphCompileOptions options = {}) {
+		auto res = download_buffer(buffer).get(*test_context.allocator, test_context.compiler, options);
+		REQUIRE(res);
+		auto actual_data = res->to_span();
+		CHECK(std::equal(actual_data.begin(), actual_data.end(), expected_data.begin()));
+	}
+
 	// Helper to fill a buffer and verify it executes successfully
 	template<typename T>
 	void fill_and_verify(Value<Buffer<T>> buffer, T fill_value, size_t count, RenderGraphCompileOptions options = {}) {

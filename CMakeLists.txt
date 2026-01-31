@@ -490,7 +490,9 @@ if(VUK_BUILD_TESTS)
 				#tests/01_image.cpp
 				#tests/01_image_alloc.cpp
 				tests/01_image_inference.cpp
+				tests/01_buffer.cpp
 				#tests/01_buffer_alloc.cpp
+				tests/01_buffer_inference.cpp
 				#tests/imagelike_bridge_test.cpp
 				#tests/02_rg_errors.cpp
 				#tests/03_commands.cpp
