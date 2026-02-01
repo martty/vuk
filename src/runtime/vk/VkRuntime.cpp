@@ -6,6 +6,7 @@
 #include "vuk/ImageAttachment.hpp"
 #include "vuk/runtime/Cache.hpp"
 #include "vuk/runtime/vk/Allocator.hpp"
+#include "vuk/runtime/vk/DeviceFrameResource.hpp"
 #include "vuk/runtime/vk/DeviceVkResource.hpp"
 #include "vuk/runtime/vk/Program.hpp"
 #include "vuk/runtime/vk/Query.hpp"
@@ -193,6 +194,9 @@ namespace vuk {
 		install_resolver_callbacks(device, vkCreateImageView, vkDestroyImageView);
 
 		install_as_thread_resolver();
+
+		global_sfr = new DeviceSuperFrameResource(get_vk_resource(), 3);
+		global_allocator = Allocator(*global_sfr);
 	}
 
 	Executor* Runtime::get_executor(ExecutorTag tag) {
@@ -599,6 +603,7 @@ namespace vuk {
 
 	Runtime::~Runtime() {
 		if (impl) {
+			delete global_sfr;
 			this->vkDeviceWaitIdle(device);
 
 			this->vkDestroyPipelineCache(device, vk_pipeline_cache, nullptr);
@@ -612,6 +617,7 @@ namespace vuk {
 	}
 
 	void Runtime::next_frame() {
+		global_sfr->get_next_frame();
 		impl->frame_counter++;
 		collect(impl->frame_counter);
 	}

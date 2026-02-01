@@ -8,6 +8,7 @@
 
 namespace vuk {
 	thread_local std::shared_ptr<IRModule> current_module = std::make_shared<IRModule>();
+	thread_local Compiler thread_compiler;
 
 	std::shared_ptr<Type> IRModule::Types::make_imageview_ty() {
 		using T = Format;

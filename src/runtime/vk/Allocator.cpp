@@ -1,12 +1,16 @@
 #include "vuk/Exception.hpp"
-#include "vuk/runtime/vk/Allocator.hpp"
 #include "vuk/runtime/vk/Address.hpp"
+#include "vuk/runtime/vk/Allocator.hpp"
+#include "vuk/runtime/vk/DeviceFrameResource.hpp"
 #include "vuk/runtime/vk/PipelineInstance.hpp"
 #include "vuk/runtime/vk/Query.hpp"
 #include "vuk/runtime/vk/RenderPass.hpp"
 #include "vuk/runtime/vk/VkRuntime.hpp"
 
 namespace vuk {
+	DeviceSuperFrameResource* global_sfr;
+	Allocator global_allocator;
+
 	BufferUsageFlags DeviceResource::get_all_buffer_usage_flags(Runtime& runtime) {
 		auto all_buffer_usage_flags = BufferUsageFlagBits::eTransferRead | BufferUsageFlagBits::eTransferWrite | BufferUsageFlagBits::eUniformTexelBuffer |
 		                              BufferUsageFlagBits::eStorageTexelBuffer | BufferUsageFlagBits::eUniformBuffer | BufferUsageFlagBits::eStorageBuffer |
@@ -280,8 +284,9 @@ namespace vuk {
 		return device_resource->allocate_virtual_address_spaces(dst, cis, loc);
 	}
 
-	Result<void, AllocateException>
-	Allocator::allocate_virtual_address_spaces(std::span<VirtualAddressSpace> dst, std::span<const VirtualAddressSpaceCreateInfo> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException> Allocator::allocate_virtual_address_spaces(std::span<VirtualAddressSpace> dst,
+	                                                                           std::span<const VirtualAddressSpaceCreateInfo> cis,
+	                                                                           SourceLocationAtFrame loc) {
 		return device_resource->allocate_virtual_address_spaces(dst, cis, loc);
 	}
 
@@ -289,7 +294,8 @@ namespace vuk {
 		device_resource->deallocate_virtual_address_spaces(src);
 	}
 
-	Result<void, AllocateException> Allocator::allocate(std::span<VirtualAllocation> dst, std::span<const VirtualAllocationCreateInfo> cis, SourceLocationAtFrame loc) {
+	Result<void, AllocateException>
+	Allocator::allocate(std::span<VirtualAllocation> dst, std::span<const VirtualAllocationCreateInfo> cis, SourceLocationAtFrame loc) {
 		return device_resource->allocate_virtual_allocations(dst, cis, loc);
 	}
 

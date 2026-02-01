@@ -46,6 +46,11 @@ namespace vuk {
 			node = std::make_shared<ExtNode>(Ref{ node->get_node(), index }, node, access, domain); // previous extnode is a dep
 		}
 
+		/// @brief Submit the render graph for execution without waiting using the global allocator and compiler
+		/// @param options Optional compilation options
+		/// @return Result indicating success or error
+		Result<void> submit(RenderGraphCompileOptions options = {});
+
 		/// @brief Submit the render graph for execution without waiting
 		/// @param allocator Allocator to use for resource allocation
 		/// @param compiler Compiler to use for graph compilation
@@ -56,6 +61,11 @@ namespace vuk {
 		/// @brief Poll the execution status of this Value
 		/// @return Current status of execution (pending, ready, etc.)
 		[[nodiscard]] Result<Signal::Status> poll();
+
+		/// @brief Submit the render graph and wait for completion using the global allocator and compiler
+		/// @param options Optional compilation options
+		/// @return Result indicating success or error
+		Result<void> wait(RenderGraphCompileOptions options = {});
 
 		/// @brief Submit the render graph and wait for completion
 		/// @param allocator Allocator to use for resource allocation
@@ -126,9 +136,10 @@ namespace vuk {
 			return *reinterpret_cast<Value<U>*>(this); // TODO: not cool
 		}
 
-		/// @brief Access the underlying resource (only after declare or wait/get)
+		/// @brief Access the underlying resource
 		/// @return Pointer to the resource
 		T* operator->() noexcept {
+			auto result = wait();
 			return get_value<T>(get_head());
 		}
 
@@ -168,6 +179,19 @@ namespace vuk {
 			    },
 			    erased_tuple_adaptor<T>::member_types);
 #pragma clang diagnostic pop
+		}
+
+		/// @brief Submit, wait, and retrieve the resource value on the host using the global allocator and compiler
+		/// @param options Optional compilation options
+		/// @return Result containing the resource, or an error
+		[[nodiscard]] Result<T> get(RenderGraphCompileOptions options = {})
+		  requires(!std::is_array_v<T>)
+		{
+			if (auto result = wait(options)) {
+				return { expected_value, *get_value<T>(get_head()) };
+			} else {
+				return result;
+			}
 		}
 
 		/// @brief Submit, wait, and retrieve the resource value on the host
@@ -214,15 +238,10 @@ namespace vuk {
 
 		template<class U = T>
 		U operator*()
-		  requires(Unsynchronized<U> && !std::is_array_v<U>)
+		  requires(!std::is_array_v<U>)
 		{
-			AllocaCtx ctx;
-			auto v = ctx.eval(this->get_head());
-			if (v) {
-				return *static_cast<T*>(*v);
-			}
-			assert(false);
-			return U{}; // unreachable
+			this->wait();
+			return *get_value<U>(this->get_head());
 		}
 	};
 
@@ -493,6 +512,12 @@ namespace vuk {
 		}
 	};
 
+	/// @brief Submit multiple Values for execution using global allocator and compiler
+	/// @param values Span of Values to submit
+	/// @param options Optional compilation options
+	/// @return Result indicating success or error
+	Result<void> submit(std::span<UntypedValue> values, RenderGraphCompileOptions options);
+
 	/// @brief Submit multiple Values for execution
 	/// @param allocator Allocator to use for resource allocation
 	/// @param compiler Compiler to use for graph compilation
@@ -500,6 +525,12 @@ namespace vuk {
 	/// @param options Optional compilation options
 	/// @return Result indicating success or error
 	Result<void> submit(Allocator& allocator, Compiler& compiler, std::span<UntypedValue> values, RenderGraphCompileOptions options);
+
+	/// @brief Wait for multiple Values to complete execution using global allocator and compiler
+	/// @param values Span of Values to wait for
+	/// @param options Optional compilation options
+	/// @return Result indicating success or error
+	Result<void> wait_for_values_explicit(std::span<UntypedValue> values, RenderGraphCompileOptions options = {});
 
 	/// @brief Wait for multiple Values to complete execution
 	/// @param alloc Allocator to use for resource allocation
@@ -509,15 +540,27 @@ namespace vuk {
 	/// @return Result indicating success or error
 	Result<void> wait_for_values_explicit(Allocator& alloc, Compiler& compiler, std::span<UntypedValue> values, RenderGraphCompileOptions options = {});
 
+	/// @brief Wait for multiple Values to complete execution (variadic) using global allocator and compiler
+	/// @tparam Args Types of the Values
+	/// @param options Compilation options
+	/// @param futs Values to wait for
+	/// @return Result indicating success or error
+	template<class... Args>
+	Result<void> wait_for_values(RenderGraphCompileOptions options, Args&&... futs) {
+		auto cbs = std::array{ futs... };
+		return wait_for_values_explicit(cbs, options);
+	}
+
 	/// @brief Wait for multiple Values to complete execution (variadic)
 	/// @tparam Args Types of the Values
 	/// @param alloc Allocator to use for resource allocation
 	/// @param compiler Compiler to use for graph compilation
+	/// @param options Compilation options
 	/// @param futs Values to wait for
 	/// @return Result indicating success or error
 	template<class... Args>
-	Result<void> wait_for_values(Allocator& alloc, Compiler& compiler, Args&&... futs) {
+	Result<void> wait_for_values(Allocator& alloc, Compiler& compiler, RenderGraphCompileOptions options, Args&&... futs) {
 		auto cbs = std::array{ futs... };
-		return wait_for_values_explicit(alloc, compiler, cbs);
+		return wait_for_values_explicit(alloc, compiler, cbs, options);
 	}
 } // namespace vuk

@@ -597,6 +597,8 @@ namespace vuk {
 		Result<void> validate_read_undefined();
 		Result<void> validate_same_argument_different_access();
 	};
+
+	extern thread_local Compiler thread_compiler;
 } // namespace vuk
 
 namespace std {

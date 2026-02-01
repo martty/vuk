@@ -8,6 +8,10 @@
 #include <fmt/format.h>
 
 namespace vuk {
+	Result<void> submit(std::span<UntypedValue> values, RenderGraphCompileOptions options) {
+		return submit(global_allocator, thread_compiler, values, options);
+	}
+
 	Result<void> submit(Allocator& allocator, Compiler& compiler, std::span<UntypedValue> values, RenderGraphCompileOptions options) {
 		// DeviceVkResource is unsuitable for submits, because internally the lifetimes are not tracked
 		if (dynamic_cast<DeviceVkResource*>(&allocator.get_device_resource()) != nullptr) {
@@ -46,6 +50,10 @@ namespace vuk {
 		return { expected_value };
 	}
 
+	Result<void> wait_for_values_explicit(std::span<UntypedValue> values, RenderGraphCompileOptions options) {
+		return wait_for_values_explicit(global_allocator, thread_compiler, values, options);
+	}
+
 	Result<void> wait_for_values_explicit(Allocator& alloc, Compiler& compiler, std::span<UntypedValue> values, RenderGraphCompileOptions options) {
 		std::vector<SyncPoint> waits;
 		VUK_DO_OR_RETURN(submit(alloc, compiler, values, options));
@@ -69,6 +77,10 @@ namespace vuk {
 		return { expected_value };
 	}
 
+	Result<void> UntypedValue::wait(RenderGraphCompileOptions options) {
+		return wait(global_allocator, thread_compiler, options);
+	}
+
 	Result<void> UntypedValue::wait(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options) {
 		auto res = submit(allocator, compiler, options);
 		if (!res) {
@@ -81,6 +93,10 @@ namespace vuk {
 		}
 
 		return { expected_value };
+	}
+
+	Result<void> UntypedValue::submit(RenderGraphCompileOptions options) {
+		return vuk::submit(std::span{ this, 1 }, options);
 	}
 
 	Result<void> UntypedValue::submit(Allocator& allocator, Compiler& compiler, RenderGraphCompileOptions options) {
