@@ -21,6 +21,7 @@ namespace vuk {
 		/*SET*/ DomainFlagBits::ePlaceholder,
 		/*CAST*/ DomainFlagBits::eConstant,
 		/*MATH_BINARY*/ DomainFlagBits::eConstant,
+		/*LOGICAL_BINARY*/ DomainFlagBits::eConstant,
 		/*SELECT*/ DomainFlagBits::eConstant,
 		/*COMPILE_PIPELINE*/ DomainFlagBits::eConstant,
 		/*ALLOCATE*/ DomainFlagBits::eHost,

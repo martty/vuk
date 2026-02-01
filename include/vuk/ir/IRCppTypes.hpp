@@ -82,6 +82,9 @@ namespace vuk {
 
 		if constexpr (std::is_void_v<T>) {
 			return current_module->types.make_void_ty();
+		} else if constexpr (std::is_same_v<T, bool>) {
+			// Handle bool specially to use the boolean type (width=1, size=1 byte)
+			return current_module->types.boolean();
 		} else if constexpr (is_std_array<T>::value) {
 			using element_type = typename T::value_type;
 			constexpr size_t count = std::tuple_size_v<T>;

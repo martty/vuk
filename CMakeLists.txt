@@ -493,6 +493,7 @@ if(VUK_BUILD_TESTS)
 				tests/01_buffer.cpp
 				#tests/01_buffer_alloc.cpp
 				tests/01_buffer_inference.cpp
+				#tests/02_logical_select.cpp
 				#tests/imagelike_bridge_test.cpp
 				#tests/02_rg_errors.cpp
 				#tests/03_commands.cpp

@@ -120,11 +120,33 @@ namespace vuk {
 			switch (t->kind) {
 			case Type::INTEGER_TY: {
 				switch (t->scalar.width) {
+				case 1:
+					return f(*reinterpret_cast<bool*>(args)...);
+					break;
+				case 8:
+					return f(*reinterpret_cast<uint8_t*>(args)...);
+					break;
+				case 16:
+					return f(*reinterpret_cast<uint16_t*>(args)...);
+					break;
 				case 32:
 					return f(*reinterpret_cast<uint32_t*>(args)...);
 					break;
 				case 64:
 					return f(*reinterpret_cast<uint64_t*>(args)...);
+					break;
+				default:
+					assert(0);
+				}
+				break;
+			}
+			case Type::FLOAT_TY: {
+				switch (t->scalar.width) {
+				case 32:
+					return f(*reinterpret_cast<float*>(args)...);
+					break;
+				case 64:
+					return f(*reinterpret_cast<double*>(args)...);
 					break;
 				default:
 					assert(0);
@@ -173,8 +195,12 @@ namespace vuk {
 				eval_with_type(
 				    t,
 				    [&](auto a, auto b) {
-					    auto c = a / b;
-					    memcpy(result, &c, sizeof(c));
+					    if constexpr (!std::is_same_v<decltype(a), bool>) {
+						    auto c = a / b;
+						    memcpy(result, &c, sizeof(c));
+					    } else {
+						    assert(false && "DIV operation not supported for non-arithmetic types");
+					    }
 				    },
 				    a,
 				    b);
@@ -183,7 +209,108 @@ namespace vuk {
 				eval_with_type(
 				    t,
 				    [&](auto a, auto b) {
-					    auto c = a % b;
+					    if constexpr (!std::is_same_v<decltype(a), bool> && !std::is_floating_point_v<decltype(a)>) {
+						    auto c = a % b;
+						    memcpy(result, &c, sizeof(c));
+					    } else {
+						    assert(false && "MOD operation not supported for non-arithmetic types");
+					    }
+				    },
+				    a,
+				    b);
+			} break;
+			}
+			return result;
+		}
+
+		void* eval_logical_binop(Node::LogicalOp op, const std::shared_ptr<Type>& t, void* a, void* b) {
+			auto result = allocate_host_memory(sizeof(bool));
+			switch (op) {
+			case Node::LogicalOp::AND: {
+				eval_with_type(
+				    t,
+				    [&](auto a, auto b) {
+					    bool c = (a && b);
+					    memcpy(result, &c, sizeof(c));
+				    },
+				    a,
+				    b);
+			} break;
+			case Node::LogicalOp::OR: {
+				eval_with_type(
+				    t,
+				    [&](auto a, auto b) {
+					    bool c = (a || b);
+					    memcpy(result, &c, sizeof(c));
+				    },
+				    a,
+				    b);
+			} break;
+			case Node::LogicalOp::XOR: {
+				eval_with_type(
+				    t,
+				    [&](auto a, auto b) {
+					    bool c = ((a != 0) != (b != 0));
+					    memcpy(result, &c, sizeof(c));
+				    },
+				    a,
+				    b);
+			} break;
+			case Node::LogicalOp::EQ: {
+				eval_with_type(
+				    t,
+				    [&](auto a, auto b) {
+					    bool c = a == b;
+					    memcpy(result, &c, sizeof(c));
+				    },
+				    a,
+				    b);
+			} break;
+			case Node::LogicalOp::NE: {
+				eval_with_type(
+				    t,
+				    [&](auto a, auto b) {
+					    bool c = a != b;
+					    memcpy(result, &c, sizeof(c));
+				    },
+				    a,
+				    b);
+			} break;
+			case Node::LogicalOp::LT: {
+				eval_with_type(
+				    t,
+				    [&](auto a, auto b) {
+					    bool c = a < b;
+					    memcpy(result, &c, sizeof(c));
+				    },
+				    a,
+				    b);
+			} break;
+			case Node::LogicalOp::LE: {
+				eval_with_type(
+				    t,
+				    [&](auto a, auto b) {
+					    bool c = a <= b;
+					    memcpy(result, &c, sizeof(c));
+				    },
+				    a,
+				    b);
+			} break;
+			case Node::LogicalOp::GT: {
+				eval_with_type(
+				    t,
+				    [&](auto a, auto b) {
+					    bool c = a > b;
+					    memcpy(result, &c, sizeof(c));
+				    },
+				    a,
+				    b);
+			} break;
+			case Node::LogicalOp::GE: {
+				eval_with_type(
+				    t,
+				    [&](auto a, auto b) {
+					    bool c = a >= b;
 					    memcpy(result, &c, sizeof(c));
 				    },
 				    a,
@@ -243,6 +370,23 @@ namespace vuk {
 				}
 				auto& b = *b_;
 				return { expected_value, eval_binop(math_binary.op, ref.type(), a, b) };
+
+			} break;
+			case Node::LOGICAL_BINARY: {
+				auto& logical_binary = ref.node->logical_binary;
+
+				auto a_ = eval(logical_binary.a);
+				if (!a_) {
+					return a_;
+				}
+				auto& a = *a_;
+
+				auto b_ = eval(logical_binary.b);
+				if (!b_) {
+					return b_;
+				}
+				auto& b = *b_;
+				return { expected_value, eval_logical_binop(logical_binary.op, logical_binary.a.type(), a, b) };
 
 			} break;
 			case Node::SELECT: {
@@ -331,6 +475,8 @@ namespace vuk {
 				}
 				void* value = *res;
 				switch (base_ty->scalar.width) {
+				case 1:
+					return { expected_value, static_cast<size_t>(*static_cast<bool*>(value)) };
 				case 8:
 					return { expected_value, static_cast<size_t>(*static_cast<uint8_t*>(value)) };
 				case 16:

@@ -223,6 +223,11 @@ namespace vuk {
 			add_read(node, node->math_binary.b, 1);
 			add_breaking_result(node, 0);
 			break;
+		case Node::LOGICAL_BINARY:
+			add_read(node, node->logical_binary.a, 0);
+			add_read(node, node->logical_binary.b, 1);
+			add_breaking_result(node, 0);
+			break;
 		case Node::SELECT:
 			add_read(node, node->select.condition, 0);
 			add_read(node, node->select.a, 1);

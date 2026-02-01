@@ -522,6 +522,14 @@ namespace vuk {
 		return { make_ext_ref(ref) };
 	}
 
+	template<class T>
+	inline Value<T> select(Value<bool> condition, Value<T> true_value, Value<T> false_value) {
+		Ref ref = current_module->make_select(condition.get_head(), true_value.get_head(), false_value.get_head());
+		condition.node->deps.push_back(true_value.node);
+		condition.node->deps.push_back(false_value.node);
+		return std::move(condition).template transmute<T>(ref);
+	}
+
 	[[nodiscard]] inline Value<void> enqueue_presentation(Value<ImageView<>> in) {
 		return std::move(in).as_released<void>(Access::ePresent, DomainFlagBits::ePE);
 	}

@@ -256,6 +256,62 @@ namespace vuk {
 		return std::move(a).transmute<uint64_t>(ref);
 	}
 
+	// Logical operators for Value<bool>
+	inline Value<bool> operator&&(Value<bool> a, Value<bool> b) {
+		Ref ref = current_module->make_logical_binary_op(Node::LogicalOp::AND, a.get_head(), b.get_head());
+		a.node->deps.push_back(b.node);
+		return std::move(a).transmute<bool>(ref);
+	}
+
+	inline Value<bool> operator||(Value<bool> a, Value<bool> b) {
+		Ref ref = current_module->make_logical_binary_op(Node::LogicalOp::OR, a.get_head(), b.get_head());
+		a.node->deps.push_back(b.node);
+		return std::move(a).transmute<bool>(ref);
+	}
+
+	// Comparison operators (return Value<bool>)
+	template<class T>
+	inline Value<bool> operator==(Value<T> a, Value<T> b) {
+		Ref ref = current_module->make_logical_binary_op(Node::LogicalOp::EQ, a.get_head(), b.get_head());
+		a.node->deps.push_back(b.node);
+		return std::move(a).template transmute<bool>(ref);
+	}
+
+	template<class T>
+	inline Value<bool> operator!=(Value<T> a, Value<T> b) {
+		Ref ref = current_module->make_logical_binary_op(Node::LogicalOp::NE, a.get_head(), b.get_head());
+		a.node->deps.push_back(b.node);
+		return std::move(a).template transmute<bool>(ref);
+	}
+
+	template<class T>
+	inline Value<bool> operator<(Value<T> a, Value<T> b) {
+		Ref ref = current_module->make_logical_binary_op(Node::LogicalOp::LT, a.get_head(), b.get_head());
+		a.node->deps.push_back(b.node);
+		return std::move(a).template transmute<bool>(ref);
+	}
+
+	template<class T>
+	inline Value<bool> operator<=(Value<T> a, Value<T> b) {
+		Ref ref = current_module->make_logical_binary_op(Node::LogicalOp::LE, a.get_head(), b.get_head());
+		a.node->deps.push_back(b.node);
+		return std::move(a).template transmute<bool>(ref);
+	}
+
+	template<class T>
+	inline Value<bool> operator>(Value<T> a, Value<T> b) {
+		Ref ref = current_module->make_logical_binary_op(Node::LogicalOp::GT, a.get_head(), b.get_head());
+		a.node->deps.push_back(b.node);
+		return std::move(a).template transmute<bool>(ref);
+	}
+
+	template<class T>
+	inline Value<bool> operator>=(Value<T> a, Value<T> b) {
+		Ref ref = current_module->make_logical_binary_op(Node::LogicalOp::GE, a.get_head(), b.get_head());
+		a.node->deps.push_back(b.node);
+		return std::move(a).template transmute<bool>(ref);
+	}
+
 	template<class T>
 	struct is_value<Value<T>> : std::true_type {};
 
@@ -328,7 +384,8 @@ namespace vuk {
 		[[nodiscard]] Value<view<BufferLike<Type>>> subview(Value<uint64_t> offset, Value<uint64_t> new_count = ~(0ULL)) const {
 			// TODO: IR assert
 			// 	assert(offset + new_count <= count());
-			Ref item = current_module->make_slice(this->get_head(), 0, offset.get_head(), new_count.get_head());
+			Ref count = current_module->make_select((new_count == Value<uint64_t>(~(0ULL))).get_head(), new_count.get_head(), (new_count * sizeof(Type)).get_head());
+			Ref item = current_module->make_slice(this->get_head(), 0, (offset * sizeof(Type)).get_head(), count);
 			return Value(item);
 		}
 
@@ -336,18 +393,6 @@ namespace vuk {
 		void same_size(const Value<view<BufferLike<U>>>& src) {
 			this->node->deps.push_back(src.node);
 			current_module->set_value(sz_bytes.get_head(), src.sz_bytes.get_head());
-		}
-
-		void set_memory_usage(MemoryUsage mu) {
-			current_module->set_value_on_allocate_src(this->get_head(), 0, mu);
-		}
-
-		void set_size(Value<uint64_t> size) {
-			current_module->set_value_on_allocate_src(this->get_head(), 1, size.get_head());
-		}
-
-		void set_alignment(Value<uint64_t> alignment) {
-			current_module->set_value_on_allocate_src(this->get_head(), 2, alignment.get_head());
 		}
 	};
 

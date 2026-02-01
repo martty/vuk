@@ -213,6 +213,10 @@ namespace vuk {
 			return kind == Type::POINTER_TY && pointer.T->get()->kind == Type::ENUM_VALUE_TY;
 		}
 
+		bool is_boolean() const {
+			return kind == Type::INTEGER_TY && scalar.width == 1;
+		}
+
 		bool is_synchronized() {
 			if (kind == Type::COMPOSITE_TY && composite.synchronize != nullptr) {
 				return true;
@@ -349,6 +353,9 @@ namespace vuk {
 			case MEMORY_TY:
 				return "mem";
 			case INTEGER_TY:
+				if (t->scalar.width == 1) {
+					return "bool";
+				}
 				return t->scalar.width == 32 ? "i32" : "i64";
 			case FLOAT_TY:
 				return t->scalar.width == 32 ? "f32" : "f64";
@@ -436,6 +443,17 @@ namespace vuk {
 		static constexpr uint8_t MAX_ARGS = 5;
 
 		enum class BinOp { ADD, SUB, MUL, DIV, MOD };
+		enum class LogicalOp {
+			AND,
+			OR,
+			XOR, // Logical operations (&&, ||, logical XOR)
+			EQ,
+			NE, // Equality comparisons
+			LT,
+			LE,
+			GT,
+			GE // Relational comparisons
+		};
 		enum Kind {
 			PLACEHOLDER,
 			CONSTANT,
@@ -453,6 +471,7 @@ namespace vuk {
 			SET,
 			CAST,
 			MATH_BINARY,
+			LOGICAL_BINARY,
 			SELECT,
 			COMPILE_PIPELINE,
 			ALLOCATE,
@@ -555,6 +574,11 @@ namespace vuk {
 				Ref b;
 				BinOp op;
 			} math_binary;
+			struct : Fixed<2> {
+				Ref a;
+				Ref b;
+				LogicalOp op;
+			} logical_binary;
 			struct : Fixed<3> {
 				Ref condition;
 				Ref a;
@@ -615,6 +639,8 @@ namespace vuk {
 				return "call";
 			case MATH_BINARY:
 				return "math_b";
+			case LOGICAL_BINARY:
+				return "logical_b";
 			case SELECT:
 				return "select";
 			case SLICE:
@@ -962,7 +988,7 @@ namespace vuk {
 					}
 				}
 
-				return emplace_type(std::shared_ptr<Type>(new Type{ .kind = kind, .size = bit_width / 8, .scalar = { .width = bit_width } }));
+				return emplace_type(std::shared_ptr<Type>(new Type{ .kind = kind, .size = (bit_width + 8 - 1) / 8, .scalar = { .width = bit_width } }));
 			}
 
 			std::shared_ptr<Type> make_enum_ty() {
@@ -985,6 +1011,10 @@ namespace vuk {
 			std::shared_ptr<Type> make_opaque_ty(size_t tag, size_t size = sizeof(uint32_t)) {
 				auto t = new Type{ .kind = Type::OPAQUE_TY, .size = size, .opaque = { .tag = tag } };
 				return emplace_type(std::shared_ptr<Type>(t));
+			}
+
+			std::shared_ptr<Type> boolean() {
+				return make_scalar_ty(Type::INTEGER_TY, 1);
 			}
 
 			std::shared_ptr<Type> u16() {
@@ -1270,7 +1300,9 @@ namespace vuk {
 		template<class T>
 		Ref make_constant(T value) {
 			std::shared_ptr<Type>* ty;
-			if constexpr (std::is_same_v<T, uint64_t>) {
+			if constexpr (std::is_same_v<T, bool>) {
+				ty = new std::shared_ptr<Type>[1]{ types.boolean() };
+			} else if constexpr (std::is_same_v<T, uint64_t>) {
 				ty = new std::shared_ptr<Type>[1]{ types.u64() };
 			} else if constexpr (std::is_same_v<T, uint32_t>) {
 				ty = new std::shared_ptr<Type>[1]{ types.u32() };
@@ -1505,6 +1537,14 @@ namespace vuk {
 			std::shared_ptr<Type>* tys = new std::shared_ptr<Type>[1]{ a.type() };
 
 			return first(emplace_op(Node{ .kind = Node::MATH_BINARY, .type = std::span{ tys, 1 }, .math_binary = { .a = a, .b = b, .op = op } }));
+		}
+
+		Ref make_logical_binary_op(Node::LogicalOp op, Ref a, Ref b) {
+			assert(a.type() == b.type());
+			// For logical operations, result type should be a boolean/integer type
+			std::shared_ptr<Type>* tys = new std::shared_ptr<Type>[1]{ types.boolean() };
+
+			return first(emplace_op(Node{ .kind = Node::LOGICAL_BINARY, .type = std::span{ tys, 1 }, .logical_binary = { .a = a, .b = b, .op = op } }));
 		}
 
 		Ref make_select(Ref condition, Ref a, Ref b) {
