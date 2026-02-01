@@ -672,7 +672,7 @@ namespace vuk {
 		build_links(alloc.get_context(), allocator);
 
 		for (auto& node : module->op_arena) {
-			if (node.index < (module->module_id << 32 | module->link_frontier) && node.kind != Node::ACQUIRE) { // already linked
+			if (node.index < (module->module_id << 32 | module->link_frontier)) { // already linked
 				continue;
 			}
 
@@ -843,6 +843,18 @@ namespace vuk {
 		impl->depnodes.erase(std::unique(impl->depnodes.begin(), impl->depnodes.end()), impl->depnodes.end());
 
 		VUK_DO_OR_RETURN(impl->build_nodes());
+
+		// Capture snapshot after building nodes
+		if (compile_options.enable_html_graph_snapshots) {
+			struct BuildNodesPass : public IRPass {
+				BuildNodesPass(RGCImpl& impl, Runtime& runtime, std::pmr::polymorphic_allocator<std::byte> allocator) : IRPass(impl, runtime, allocator) {}
+				Result<void> operator()() override {
+					return { expected_value };
+				}
+			};
+			auto snapshot_pass = std::make_unique<BuildNodesPass>(*impl, alloc.get_context(), allocator);
+			snapshot_pass->capture_snapshot("After Build Nodes");
+		}
 
 		std::shuffle(impl->nodes.begin(), impl->nodes.end(), _random_generator);
 		VUK_DO_OR_RETURN(impl->build_links(alloc.get_context(), allocator));

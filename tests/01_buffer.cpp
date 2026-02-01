@@ -28,16 +28,13 @@ TEST_CASE("buffer_acquire_external") {
 	auto [buf, fut] = create_buffer(*test_context.allocator, MemoryUsage::eCPUonly, DomainFlagBits::eAny, std::span(data));
 
 	// Acquire as an external resource with storage buffer access
-	auto acquired = acquire("external_buf", buf.get(), Access::eComputeRead);
+	auto acquired = acquire("external_buf", buf.get(), Access::eNone);
 
 	// Use the acquired buffer in a pass that just passes it through
-	auto pass = make_pass(
-	    "passthrough",
-	    [](CommandBuffer& cb, VUK_ARG(Buffer<uint32_t>, Access::eComputeRead) input) {
-		    // Just pass through
-		    return input;
-	    },
-	    DomainFlagBits::eComputeQueue);
+	auto pass = make_pass("passthrough", [](CommandBuffer& cb, VUK_ARG(Buffer<uint32_t>, Access::eComputeRead) input) {
+		// Just pass through
+		return input;
+	});
 
 	auto result = pass(acquired);
 
@@ -81,7 +78,7 @@ TEST_CASE("buffer_subrange_operations") {
 	auto [src_buf, src_fut] = create_buffer(*test_context.allocator, MemoryUsage::eCPUonly, DomainFlagBits::eAny, std::span(data));
 
 	// Test 1: Create subview of first 256 elements
-	auto first_subview = src_fut.subview(0, 256);
+	auto first_subview = src_fut.subview(0ULL, 256ULL);
 	BufferCreateInfo first_bci{};
 	first_bci.memory_usage = MemoryUsage::eGPUonly;
 	first_bci.size = 256 * sizeof(uint32_t);
@@ -90,7 +87,7 @@ TEST_CASE("buffer_subrange_operations") {
 	auto first_copied = copy(first_subview, first_dst);
 
 	// Test 2: Create subview of middle 128 elements (from offset 400)
-	auto middle_subview = src_fut.subview(400, 128);
+	auto middle_subview = src_fut.subview(400ULL, 128ULL);
 	BufferCreateInfo middle_bci{};
 	middle_bci.memory_usage = MemoryUsage::eGPUonly;
 	middle_bci.size = 128 * sizeof(uint32_t);
@@ -99,7 +96,7 @@ TEST_CASE("buffer_subrange_operations") {
 	auto middle_copied = copy(middle_subview, middle_dst);
 
 	// Test 3: Create subview of last 64 elements
-	auto last_subview = src_fut.subview(960, 64);
+	auto last_subview = src_fut.subview(960ULL, 64ULL);
 	BufferCreateInfo last_bci{};
 	last_bci.memory_usage = MemoryUsage::eGPUonly;
 	last_bci.size = 64 * sizeof(uint32_t);

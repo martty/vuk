@@ -39,8 +39,8 @@ namespace vuk {
 				auto type_kind = nth(slice_node, 2).type()->kind;
 				bool forbid_elision = type_kind == Type::UNION_TY;
 				if (node->kind == Node::SLICE && !forbid_elision) {
-					auto scope_S = Cut{ slice_node->slice.axis, constant<uint64_t>(slice_node->slice.start), constant<uint64_t>(slice_node->slice.count) };
-					auto scope_Sp = Cut{ node->slice.axis, constant<uint64_t>(node->slice.start), constant<uint64_t>(node->slice.count) };
+					auto scope_S = Cut{ slice_node->slice.axis, *eval<uint64_t>(slice_node->slice.start), *eval<uint64_t>(slice_node->slice.count) };
+					auto scope_Sp = Cut{ node->slice.axis, *eval<uint64_t>(node->slice.start), *eval<uint64_t>(node->slice.count) };
 
 					if (scope_Sp.shrinks(scope_S)) { // cases 1 and 2, we can elide the convergence
 #ifdef VUK_DUMP_SSA

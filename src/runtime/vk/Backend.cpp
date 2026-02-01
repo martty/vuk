@@ -1681,13 +1681,14 @@ namespace vuk {
 
 		for (auto& node : impl->nodes) {
 			// shrink slice acquires
+			/*
 			if (node->execution_info && node->execution_info->kind == Node::SLICE && node->rel_acq) {
-				for (size_t i = 1; i < node->acquire.values.size(); i++) {
-					current_module->types.destroy(Type::stripped(node->type[i]).get(), node->acquire.values[i]);
-				}
-				node->acquire.values = { node->acquire.values.data(), 1 };
-				node->type = { node->type.data(), 1 };
-			}
+			  for (size_t i = 1; i < node->acquire.values.size(); i++) {
+			    current_module->types.destroy(Type::stripped(node->type[i]).get(), node->acquire.values[i]);
+			  }
+			  node->acquire.values = { node->acquire.values.data(), 1 };
+			  node->type = { node->type.data(), 1 };
+			}*/
 
 			// reset any nodes we ran
 			node->execution_info = nullptr;
