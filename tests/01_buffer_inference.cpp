@@ -21,10 +21,8 @@ TEST_CASE("ir_allocate_buffer_infer_size_from_copy") {
 	auto [src_buf, src_fut] = create_buffer(*test_context.allocator, MemoryUsage::eCPUonly, DomainFlagBits::eAny, std::span(data));
 
 	// Destination buffer with size left unspecified - should be inferred from copy source
-	BufferCreateInfo dst_bci{};
-	dst_bci.memory_usage = MemoryUsage::eGPUonly;
 	// Note: size NOT set - should be inferred from source!
-	auto dst_buffer = allocate<uint32_t>("inferred_dst", dst_bci);
+	auto dst_buffer = allocate<uint32_t>("inferred_dst", BufferCreateInfo{ .memory_usage = MemoryUsage::eGPUonly });
 
 	auto copied = copy(src_fut, dst_buffer);
 

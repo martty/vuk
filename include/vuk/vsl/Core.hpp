@@ -213,6 +213,7 @@ namespace vuk {
 
 	template<class T>
 	inline Value<Buffer<T>> copy(Value<Buffer<T>> src, Value<Buffer<T>> dst, VUK_CALLSTACK) {
+		src.same_size(dst);
 		auto buf2buf = vuk::make_pass("copy buffer to buffer",
 		                              [](vuk::CommandBuffer& command_buffer, VUK_ARG(Buffer<T>, vuk::eCopyRead) src, VUK_ARG(Buffer<T>, vuk::eCopyWrite) dst) {
 			                              command_buffer.copy_buffer(src->to_byte_view(), dst->to_byte_view());

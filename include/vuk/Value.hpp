@@ -378,8 +378,6 @@ namespace vuk {
 			return cast<byte>();
 		}
 
-		// TODO: PAV: operate on Ts, not bytes
-		// TODO: PAV: this is completely wrong
 		/// @brief Create a new view that is a subset of the original
 		[[nodiscard]] Value<view<BufferLike<Type>>> subview(Value<uint64_t> offset, Value<uint64_t> new_count = ~(0ULL)) const {
 			// TODO: IR assert

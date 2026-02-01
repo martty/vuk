@@ -152,15 +152,17 @@ namespace vuk {
 
 		capture_snapshot("After compute class assignment");
 
-		if (impl.set_nodes.size() > 0) {
+		while (impl.set_nodes.size() > 0) {
 			// apply SETs
-			rewrite([](Node* node, Replacer& r) {
+			rewrite([this](Node* node, Replacer& r) {
 				if (node->kind == Node::SET) {
 					auto& set = node->set;
 					if (set.value && set.value.node->kind != Node::PLACEHOLDER) {
 						r.replace(set.dst, set.value);
+						erase(impl.set_nodes, node);
 					} else if (set.dst && set.dst.node->kind != Node::PLACEHOLDER) {
 						r.replace(set.value, set.dst);
+						erase(impl.set_nodes, node);
 					}
 				}
 			});
