@@ -946,6 +946,51 @@ namespace vuk {
 			return Type::stripped(parm.type());
 		}
 
+		void* setup_callback_execution(VkQueueStream* vk_rec, std::shared_ptr<Type> fn_type, CommandBuffer& cobuf) {
+			// Begin debug region
+			if (!fn_type->debug_info.name.empty()) {
+				auto name_hash = static_cast<uint32_t>(std::hash<std::string>{}(fn_type->debug_info.name));
+				auto name_color = std::array<float, 4>{
+					static_cast<float>(name_hash & 255) / 255.0f,
+					static_cast<float>((name_hash >> 8) & 255) / 255.0f,
+					static_cast<float>((name_hash >> 16) & 255) / 255.0f,
+					1.0,
+				};
+				allocator.get_context().begin_region(vk_rec->cbuf, fn_type->debug_info.name.c_str(), name_color);
+			}
+
+			// Begin profiling
+			void* rpass_profile_data = nullptr;
+			if (vk_rec->callbacks->on_begin_pass) {
+				rpass_profile_data = vk_rec->callbacks->on_begin_pass(vk_rec->callbacks->user_data, fn_type->debug_info.name.c_str(), cobuf, vk_rec->domain);
+			}
+
+			// Prepare render pass
+			if (vk_rec->rp.rpci.attachments.size() > 0) {
+				vk_rec->prepare_render_pass();
+				fill_render_pass_info(vk_rec->rp, 0, cobuf);
+			}
+
+			return rpass_profile_data;
+		}
+
+		void teardown_callback_execution(VkQueueStream* vk_rec, std::shared_ptr<Type> fn_type, CommandBuffer& cobuf, void* rpass_profile_data) {
+			// End render pass
+			if (vk_rec->rp.handle) {
+				vk_rec->end_render_pass();
+			}
+
+			// End debug region
+			if (!fn_type->debug_info.name.empty()) {
+				allocator.get_context().end_region(vk_rec->cbuf);
+			}
+
+			// End profiling
+			if (vk_rec->callbacks->on_end_pass) {
+				vk_rec->callbacks->on_end_pass(vk_rec->callbacks->user_data, rpass_profile_data, cobuf);
+			}
+		}
+
 		std::optional<StreamResourceUse> get_dependency_info(Ref parm, Type* arg_ty, RW type, Stream* dst_stream) {
 			auto parm_ty = parm.type();
 			auto& link = parm.link();
@@ -1264,130 +1309,16 @@ namespace vuk {
 
 					// make the renderpass if needed!
 					recorder.synchronize_stream(dst_stream);
-					// run the user cb!
-					std::vector<void*, short_alloc<void*>> opaque_rets(*impl->arena_);
-					if (fn_type->kind == Type::OPAQUE_FN_TY) {
-						CommandBuffer cobuf(*dst_stream, ctx, allocator, vk_rec->cbuf);
-						if (!fn_type->debug_info.name.empty()) {
-							auto name_hash = static_cast<uint32_t>(std::hash<std::string>{}(fn_type->debug_info.name));
-							auto name_color = std::array<float, 4>{
-								static_cast<float>(name_hash & 255) / 255.0f,
-								static_cast<float>((name_hash >> 8) & 255) / 255.0f,
-								static_cast<float>((name_hash >> 16) & 255) / 255.0f,
-								1.0,
-							};
-							ctx.begin_region(vk_rec->cbuf, fn_type->debug_info.name.c_str(), name_color);
-						}
 
-						void* rpass_profile_data = nullptr;
-						if (vk_rec->callbacks->on_begin_pass)
-							rpass_profile_data = vk_rec->callbacks->on_begin_pass(vk_rec->callbacks->user_data, fn_type->debug_info.name.c_str(), cobuf, vk_rec->domain);
+					// Setup callback execution
+					CommandBuffer cobuf(*dst_stream, allocator.get_context(), allocator, vk_rec->cbuf);
+					auto rpass_profile_data = setup_callback_execution(vk_rec, fn_type, cobuf);
 
-						if (vk_rec->rp.rpci.attachments.size() > 0) {
-							vk_rec->prepare_render_pass();
-							fill_render_pass_info(vk_rec->rp, 0, cobuf);
-						}
+					// Execute user callback
+					auto opaque_rets = execute_user_callback(node->call.args, &cobuf);
 
-						std::vector<void*, short_alloc<void*>> opaque_args(*impl->arena_);
-						std::vector<void*, short_alloc<void*>> opaque_meta(*impl->arena_);
-						for (size_t i = first_parm; i < node->call.args.size(); i++) {
-							auto& parm = node->call.args[i];
-							opaque_args.push_back(get_value(parm));
-							opaque_meta.push_back(&parm);
-						}
-						opaque_rets.resize(fn_type->opaque_fn.return_types.size());
-						(*fn_type->callback)(cobuf, opaque_args, opaque_meta, opaque_rets);
-						if (vk_rec->rp.handle) {
-							vk_rec->end_render_pass();
-						}
-						if (!fn_type->debug_info.name.empty()) {
-							ctx.end_region(vk_rec->cbuf);
-						}
-						if (vk_rec->callbacks->on_end_pass)
-							vk_rec->callbacks->on_end_pass(vk_rec->callbacks->user_data, rpass_profile_data, cobuf);
-					} else if (fn_type->kind == Type::SHADER_FN_TY) {
-						CommandBuffer cobuf(*dst_stream, ctx, allocator, vk_rec->cbuf);
-						if (!fn_type->debug_info.name.empty()) {
-							auto name_hash = static_cast<uint32_t>(std::hash<std::string>{}(fn_type->debug_info.name));
-							auto name_color = std::array<float, 4>{
-								static_cast<float>(name_hash & 255) / 255.0f,
-								static_cast<float>((name_hash >> 8) & 255) / 255.0f,
-								static_cast<float>((name_hash >> 16) & 255) / 255.0f,
-								1.0,
-							};
-							ctx.begin_region(vk_rec->cbuf, fn_type->debug_info.name.c_str(), name_color);
-						}
-
-						void* rpass_profile_data = nullptr;
-						if (vk_rec->callbacks->on_begin_pass)
-							rpass_profile_data = vk_rec->callbacks->on_begin_pass(vk_rec->callbacks->user_data, fn_type->debug_info.name.c_str(), cobuf, vk_rec->domain);
-
-						if (vk_rec->rp.rpci.attachments.size() > 0) {
-							vk_rec->prepare_render_pass();
-							fill_render_pass_info(vk_rec->rp, 0, cobuf);
-						}
-
-						// call the cbuf directly: bind everything, then dispatch shader
-						opaque_rets.resize(fn_type->shader_fn.return_types.size());
-						auto pbi = reinterpret_cast<PipelineBaseInfo*>(fn_type->shader_fn.shader);
-
-						cobuf.bind_compute_pipeline(pbi);
-
-						auto& flat_bindings = pbi->reflection_info.flat_bindings;
-						for (size_t i = first_parm; i < (first_parm + flat_bindings.size()); i++) {
-							auto& parm = node->call.args[i];
-							if (parm.type()->kind != Type::POINTER_TY) {
-								auto binding_idx = i - first_parm;
-								auto& [set, binding] = flat_bindings[binding_idx];
-								auto val = get_value(parm);
-								switch (binding->type) {
-								case DescriptorType::eSampledImage:
-								case DescriptorType::eStorageImage:
-									cobuf.bind_image(set, binding->binding, *reinterpret_cast<ImageView<>*>(val));
-									break;
-								case DescriptorType::eUniformBuffer:
-								case DescriptorType::eStorageBuffer: {
-									auto& v = *reinterpret_cast<Buffer<>*>(val);
-									cobuf.bind_buffer(set, binding->binding, v);
-									break;
-								}
-								case DescriptorType::eSampler:
-									cobuf.bind_sampler(set, binding->binding, *reinterpret_cast<SamplerCreateInfo*>(val));
-									break;
-								case DescriptorType::eCombinedImageSampler: {
-									auto& si = *reinterpret_cast<SampledImage*>(val);
-									cobuf.bind_image(set, binding->binding, si.ia);
-									cobuf.bind_sampler(set, binding->binding, si.sci);
-									break;
-								}
-								default:
-									assert(0);
-								}
-
-								opaque_rets[binding_idx] = val;
-							}
-						}
-						// remaining arguments as push constants
-						size_t pc_offset = 0;
-						for (size_t i = (first_parm + flat_bindings.size()); i < node->call.args.size(); i++) {
-							auto& parm = node->call.args[i];
-							cobuf.push_constants(ShaderStageFlagBits::eCompute, pc_offset, get_value(parm), parm.type()->size);
-							pc_offset += parm.type()->size;
-						}
-
-						cobuf.dispatch(constant<uint32_t>(node->call.args[1]), constant<uint32_t>(node->call.args[2]), constant<uint32_t>(node->call.args[3]));
-
-						if (vk_rec->rp.handle) {
-							vk_rec->end_render_pass();
-						}
-						if (!fn_type->debug_info.name.empty()) {
-							ctx.end_region(vk_rec->cbuf);
-						}
-						if (vk_rec->callbacks->on_end_pass)
-							vk_rec->callbacks->on_end_pass(vk_rec->callbacks->user_data, rpass_profile_data, cobuf);
-					} else {
-						assert(0);
-					}
+					// Teardown callback execution
+					teardown_callback_execution(vk_rec, fn_type, cobuf, rpass_profile_data);
 
 					done(node, dst_stream, std::span(opaque_rets));
 

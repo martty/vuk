@@ -29,7 +29,7 @@ namespace vuk {
 		std::string name;
 	};
 
-	using UserCallbackType = fu2::unique_function<void(CommandBuffer&, std::span<void*>, std::span<void*>, std::span<void*>)>;
+	using UserCallbackType = fu2::unique_function<void(CommandBuffer*, std::span<void*>, std::span<void*>, std::span<void*>)>;
 
 	struct Type {
 		enum TypeKind {

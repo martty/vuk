@@ -1,6 +1,8 @@
 #pragma once
 
 #include "vuk/ir/IRProcess.hpp"
+#include "vuk/runtime/CommandBuffer.hpp"
+#include "vuk/runtime/vk/Program.hpp"
 #include <fmt/format.h>
 #include <string>
 #include <vector>
@@ -8,6 +10,41 @@
 namespace vuk {
 	struct IREvalContext {
 		virtual void* allocate_host_memory(size_t size) = 0;
+
+		template<class T>
+		class temporary_alloc {
+		public:
+			using value_type = T;
+
+			temporary_alloc(IREvalContext& ctx) noexcept : ctx_(&ctx) {}
+
+			template<class U>
+			temporary_alloc(const temporary_alloc<U>& other) noexcept : ctx_(other.ctx_) {}
+
+			T* allocate(size_t n) {
+				return static_cast<T*>(ctx_->allocate_host_memory(n * sizeof(T)));
+			}
+
+			void deallocate(T*, size_t) noexcept {
+				// No-op: arena-style allocation, no individual deallocation
+			}
+
+			template<class U>
+			bool operator==(const temporary_alloc<U>& other) const noexcept {
+				return ctx_ == other.ctx_;
+			}
+
+			template<class U>
+			bool operator!=(const temporary_alloc<U>& other) const noexcept {
+				return ctx_ != other.ctx_;
+			}
+
+			template<class U>
+			friend class temporary_alloc;
+
+		private:
+			IREvalContext* ctx_;
+		};
 
 		Result<void*, CannotBeConstantEvaluated> evaluate_construct(Node* node) {
 			// TODO : PAV : ImageAttachments?
@@ -350,7 +387,11 @@ namespace vuk {
 				return { expected_value, ref.node->acquire.values[ref.index] };
 			case Node::CALL: {
 				auto t = ref.type();
-				if (t->kind != Type::ALIASED_TY) {
+				auto fn_type = ref.node->call.args[0].type();
+				if (t->kind != Type::ALIASED_TY && fn_type->kind == Type::OPAQUE_FN_TY && fn_type->opaque_fn.execute_on == DomainFlagBits::eConstant) {
+					auto results = execute_user_callback(ref.node->call.args, nullptr);
+					return { expected_value, results[ref.index] };
+				} else {
 					return { expected_control, CannotBeConstantEvaluated{ ref } };
 				}
 				return eval(ref.node->call.args[t->aliased.ref_idx]);
@@ -492,6 +533,87 @@ namespace vuk {
 			}
 			assert(0 && "Expected integer type");
 			return { expected_control, CannotBeConstantEvaluated{ ref } };
+		}
+
+		std::vector<void*, temporary_alloc<void*>> execute_user_callback(std::span<Ref> call_args, CommandBuffer* cobuf) {
+			auto fn_type = call_args[0].type();
+			size_t first_parm = fn_type->kind == Type::OPAQUE_FN_TY ? 1 : 4;
+			std::vector<void*, temporary_alloc<void*>> opaque_rets(temporary_alloc<void*>(*this));
+
+			if (fn_type->kind == Type::OPAQUE_FN_TY) {
+				std::vector<void*, temporary_alloc<void*>> opaque_args(temporary_alloc<void*>(*this));
+				std::vector<void*, temporary_alloc<void*>> opaque_meta(temporary_alloc<void*>(*this));
+				for (size_t i = first_parm; i < call_args.size(); i++) {
+					auto& parm = call_args[i];
+					opaque_args.push_back(get_value(parm));
+					opaque_meta.push_back(&parm);
+				}
+				opaque_rets.resize(fn_type->opaque_fn.return_types.size());
+
+				// Allocate memory for unsynchronized return types
+				for (size_t i = 0; i < fn_type->opaque_fn.return_types.size(); i++) {
+					auto& ret_type = fn_type->opaque_fn.return_types[i];
+					if (ret_type->kind != Type::ALIASED_TY) {
+						opaque_rets[i] = allocate_host_memory(ret_type->size);
+					}
+				}
+
+				(*fn_type->callback)(cobuf, opaque_args, opaque_meta, opaque_rets);
+			} else if (fn_type->kind == Type::SHADER_FN_TY) {
+				assert(cobuf);
+				opaque_rets.resize(fn_type->shader_fn.return_types.size());
+				auto pbi = reinterpret_cast<PipelineBaseInfo*>(fn_type->shader_fn.shader);
+
+				cobuf->bind_compute_pipeline(pbi);
+
+				auto& flat_bindings = pbi->reflection_info.flat_bindings;
+				for (size_t i = first_parm; i < (first_parm + flat_bindings.size()); i++) {
+					auto& parm = call_args[i];
+					if (parm.type()->kind != Type::POINTER_TY) {
+						auto binding_idx = i - first_parm;
+						auto& [set, binding] = flat_bindings[binding_idx];
+						auto val = get_value(parm);
+						switch (binding->type) {
+						case DescriptorType::eSampledImage:
+						case DescriptorType::eStorageImage:
+							cobuf->bind_image(set, binding->binding, *reinterpret_cast<ImageView<>*>(val));
+							break;
+						case DescriptorType::eUniformBuffer:
+						case DescriptorType::eStorageBuffer: {
+							auto& v = *reinterpret_cast<Buffer<>*>(val);
+							cobuf->bind_buffer(set, binding->binding, v);
+							break;
+						}
+						case DescriptorType::eSampler:
+							cobuf->bind_sampler(set, binding->binding, *reinterpret_cast<SamplerCreateInfo*>(val));
+							break;
+						case DescriptorType::eCombinedImageSampler: {
+							auto& si = *reinterpret_cast<SampledImage*>(val);
+							cobuf->bind_image(set, binding->binding, si.ia);
+							cobuf->bind_sampler(set, binding->binding, si.sci);
+							break;
+						}
+						default:
+							assert(0);
+						}
+
+						opaque_rets[binding_idx] = val;
+					}
+				}
+				// remaining arguments as push constants
+				size_t pc_offset = 0;
+				for (size_t i = (first_parm + flat_bindings.size()); i < call_args.size(); i++) {
+					auto& parm = call_args[i];
+					cobuf->push_constants(ShaderStageFlagBits::eCompute, pc_offset, get_value(parm), parm.type()->size);
+					pc_offset += parm.type()->size;
+				}
+
+				cobuf->dispatch(constant<uint32_t>(call_args[1]), constant<uint32_t>(call_args[2]), constant<uint32_t>(call_args[3]));
+			} else {
+				assert(0);
+			}
+
+			return opaque_rets;
 		}
 	};
 

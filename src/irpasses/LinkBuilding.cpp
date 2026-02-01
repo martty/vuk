@@ -262,19 +262,23 @@ namespace vuk {
 
 			size_t index = 0;
 			for (auto& ret_t : node->type) {
-				assert(ret_t->kind == Type::ALIASED_TY);
-				auto ref_idx = ret_t->aliased.ref_idx;
-				auto& arg_ty = args[ref_idx - first_parm];
-				if (arg_ty->kind == Type::IMBUED_TY) {
-					auto access = arg_ty->imbued.access;
-					if (is_write_access(access)) {
-						add_result(node, index, node->call.args[ref_idx]);
+				if (ret_t->kind == Type::ALIASED_TY) {
+					auto ref_idx = ret_t->aliased.ref_idx;
+					auto& arg_ty = args[ref_idx - first_parm];
+					if (arg_ty->kind == Type::IMBUED_TY) {
+						auto access = arg_ty->imbued.access;
+						if (is_write_access(access)) {
+							add_result(node, index, node->call.args[ref_idx]);
+						} else {
+							Ref{ node, index }.link().def = { node, index };
+							Ref{ node, index }.link().prev = &node->call.args[ref_idx].link();
+						}
+
 					} else {
-						Ref{ node, index }.link().def = { node, index };
-						Ref{ node, index }.link().prev = &node->call.args[ref_idx].link();
+						assert(0);
 					}
 				} else {
-					assert(0);
+					add_breaking_result(node, index);
 				}
 				index++;
 			}

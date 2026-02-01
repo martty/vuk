@@ -117,8 +117,9 @@ namespace vuk {
 					node->compute_class = fn_type->opaque_fn.execute_on;
 				} else if (fn_type->shader_fn.execute_on != DomainFlagBits::eAny) {
 					node->compute_class = fn_type->shader_fn.execute_on;
+				} else {
+					node->compute_class = DomainFlagBits::eDevice;
 				}
-				node->compute_class = DomainFlagBits::eDevice;
 			}
 				[[fallthrough]];
 			default:

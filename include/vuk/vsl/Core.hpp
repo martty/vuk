@@ -9,6 +9,24 @@
 #include <span>
 
 namespace vuk {
+	/// @brief Computes the total size in bytes of an image based on its format and dimensions.
+	/// @param format The pixel format of the image.
+	/// @param extent The 3D dimensions (width, height, depth) of the image.
+	/// @return The total size of the image in bytes, accounting for block-compressed formats.
+	inline Value<uint64_t> compute_image_size(Value<Format> format, Value<Extent3D> extent) noexcept {
+		static auto pass = make_pass(
+		    "image_size",
+		    [](Format format, Extent3D extent) {
+			    auto block_extent = format_to_texel_block_extent(format);
+			    auto extent_in_blocks = Extent3D{ (extent.width + block_extent.width - 1) / block_extent.width,
+				                                    (extent.height + block_extent.height - 1) / block_extent.height,
+				                                    (extent.depth + block_extent.depth - 1) / block_extent.depth };
+			    return uint64_t(extent_in_blocks.width * extent_in_blocks.height * extent_in_blocks.depth * format_to_texel_block_size(format));
+		    },
+		    DomainFlagBits::eConstant);
+		return pass(std::move(format), std::move(extent));
+	}
+
 	/// @brief Fill a buffer with host data
 	/// @param allocator Allocator to use for temporary allocations
 	/// @param copy_domain The domain where the copy should happen (when dst is mapped, the copy happens on host)
@@ -190,6 +208,7 @@ namespace vuk {
 
 	template<class T>
 	inline Value<Buffer<T>> copy(Value<ImageView<>> src, Value<Buffer<T>> dst, VUK_CALLSTACK) {
+		current_module->set_value(dst.sz_bytes.get_head(), compute_image_size(src.format, src.extent).get_head());
 		auto image2buf = make_pass("copy image to buffer", [](CommandBuffer& cbuf, VUK_IA(Access::eCopyRead) src, VUK_ARG(Buffer<T>, Access::eCopyWrite) dst) {
 			auto& src_ve = src->get_meta();
 
@@ -311,7 +330,6 @@ namespace vuk {
 	}
 
 	/// @brief Generate mips for given ImageView<>
-
 	/// @param image input Future of ImageView<>
 	/// @param base_mip source mip level
 	/// @param num_mips number of mip levels to generate

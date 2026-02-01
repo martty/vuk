@@ -163,7 +163,11 @@ public:
 
 	template<typename Tuple, typename... Ts>
 	auto make_indices(const Tuple& tuple, type_list<Ts...>) {
-		return std::array{ tuple_element_index_v<Ts, Tuple>... };
+		if constexpr (sizeof...(Ts) == 0) {
+			return std::array<std::size_t, 0>{};
+		} else {
+			return std::array{ tuple_element_index_v<Ts, Tuple>... };
+		}
 	}
 
 	template<typename T1, typename T2>
@@ -177,37 +181,66 @@ public:
 		return std::pair{ indices, subtuple };
 	}
 
-	template<typename Tuple>
+	template<bool, typename Tuple>
 	struct TupleMap;
 
 	template<typename... T>
-	void pack_typed_tuple(std::span<void*> src, std::span<void*> meta, CommandBuffer& cb, void* dst) {
-		std::tuple<CommandBuffer*, T...>& tuple = *new (dst) std::tuple<CommandBuffer*, T...>;
-		std::get<0>(tuple) = &cb;
+	void pack_typed_tuple(std::span<void*> src, std::span<void*> meta, CommandBuffer* cb, void* dst) {
+		if (cb) {
 #define X(n)                                                                                                                                                   \
 	if constexpr ((sizeof...(T)) > n) {                                                                                                                          \
 		auto& elem = std::get<n + 1>(tuple);                                                                                                                       \
 		elem.ptr = reinterpret_cast<decltype(elem.ptr)>(src[n]);                                                                                                   \
 		elem.def = *reinterpret_cast<Ref*>(meta[n]);                                                                                                               \
 	}
-		X(0)
-		X(1)
-		X(2)
-		X(3)
-		X(4)
-		X(5)
-		X(6)
-		X(7)
-		X(8)
-		X(9)
-		X(10)
-		X(11)
-		X(12)
-		X(13)
-		X(14)
-		X(15)
-		static_assert(sizeof...(T) <= 16);
+			std::tuple<CommandBuffer*, T...>& tuple = *new (dst) std::tuple<CommandBuffer*, T...>;
+			std::get<0>(tuple) = cb;
+			X(0)
+			X(1)
+			X(2)
+			X(3)
+			X(4)
+			X(5)
+			X(6)
+			X(7)
+			X(8)
+			X(9)
+			X(10)
+			X(11)
+			X(12)
+			X(13)
+			X(14)
+			X(15)
+			static_assert(sizeof...(T) <= 16);
 #undef X
+
+		} else {
+#define X(n)                                                                                                                                                   \
+	if constexpr ((sizeof...(T)) > n) {                                                                                                                          \
+		auto& elem = std::get<n>(tuple);                                                                                                                           \
+		elem.ptr = reinterpret_cast<decltype(elem.ptr)>(src[n]);                                                                                                   \
+		elem.def = *reinterpret_cast<Ref*>(meta[n]);                                                                                                               \
+	}
+			std::tuple<T...>& tuple = *new (dst) std::tuple<T...>;
+			X(0)
+			X(1)
+			X(2)
+			X(3)
+			X(4)
+			X(5)
+			X(6)
+			X(7)
+			X(8)
+			X(9)
+			X(10)
+			X(11)
+			X(12)
+			X(13)
+			X(14)
+			X(15)
+			static_assert(sizeof...(T) <= 16);
+#undef X
+		}
 	}; // namespace vuk
 
 	template<typename... T>

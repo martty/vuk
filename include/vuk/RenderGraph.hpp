@@ -114,29 +114,37 @@ namespace vuk {
 		using type = Arg<T, Access::eNone, int>;
 	};
 
-	template<typename... T>
-	struct TupleMap<std::tuple<T...>> {
+	template<bool UseCbuf, typename... T>
+	struct TupleMap<UseCbuf, std::tuple<T...>> {
 		using ret_tuple = std::tuple<Value<typename UnwrapArg<T>::type>...>;
 
 		template<class Ret, class F>
 		static auto make_lam(Name name, F&& body, SchedulingInfo scheduling_info, VUK_CALLSTACK) {
 			size_t hash_code = typeid(body).hash_code();
 
-			auto callback = [typed_cb = std::move(body)](CommandBuffer& cb, std::span<void*> args, std::span<void*> meta, std::span<void*> rets) mutable {
+			auto callback = [typed_cb = std::move(body)](CommandBuffer* cb, std::span<void*> args, std::span<void*> meta, std::span<void*> rets) mutable {
+				using TupleType = std::conditional_t<UseCbuf, std::tuple<CommandBuffer&, typename AsArg<T>::type...>, std::tuple<typename AsArg<T>::type...>>;
+				if constexpr (UseCbuf) {
+					assert(cb);
+				}
 				// we do type recovery here -> convert untyped args to typed ones
-				alignas(alignof(std::tuple<CommandBuffer&, typename AsArg<T>::type...>)) char storage[sizeof(std::tuple<CommandBuffer&, typename AsArg<T>::type...>)];
+				alignas(alignof(TupleType)) char storage[sizeof(TupleType)];
 				pack_typed_tuple<typename AsArg<T>::type...>(args, meta, cb, storage);
-				if constexpr (!std::is_same_v<void,
-				                              decltype(std::apply(typed_cb, *reinterpret_cast<std::tuple<CommandBuffer&, typename AsArg<T>::type...>*>(storage)))>) {
-					auto typed_ret = std::apply(typed_cb, *reinterpret_cast<std::tuple<CommandBuffer&, typename AsArg<T>::type...>*>(storage));
+				if constexpr (!std::is_same_v<void, decltype(std::apply(typed_cb, *reinterpret_cast<TupleType*>(storage)))>) {
+					auto typed_ret = std::apply(typed_cb, *reinterpret_cast<TupleType*>(storage));
 					// now we erase these types
 					if constexpr (!is_tuple<Ret>::value) {
-						rets[0] = typed_ret.ptr;
+						using Unwrapped_T = typename UnwrapArg<Ret>::type;
+						if constexpr (Unsynchronized<Unwrapped_T>) {
+							*(Ret*)rets[0] = typed_ret;
+						} else {
+							rets[0] = typed_ret.ptr;
+						}
 					} else {
 						unpack_typed_tuple(typed_ret, rets);
 					}
 				} else {
-					std::apply(typed_cb, *reinterpret_cast<std::tuple<CommandBuffer&, typename AsArg<T>::type...>*>(storage));
+					std::apply(typed_cb, *reinterpret_cast<TupleType*>(storage));
 				}
 			};
 
@@ -162,19 +170,28 @@ namespace vuk {
 						auto [idxs, ret_tuple] = intersect_tuples<std::tuple<typename AsArg<T>::type...>, Ret>(arg_tuple_as_a);
 						fill_ret_ty(idxs, ret_tuple, ret_types);
 					} else if constexpr (!std::is_same_v<Ret, void>) {
-						auto [idxs, ret_tuple] = intersect_tuples<std::tuple<typename AsArg<T>::type...>, std::tuple<Ret>>(arg_tuple_as_a);
-						fill_ret_ty(idxs, ret_tuple, ret_types);
+						using Unwrapped_T = typename UnwrapArg<Ret>::type;
+						if constexpr (Unsynchronized<Unwrapped_T>) {
+							ret_types.push_back(to_IR_type<Ret>());
+						} else {
+							auto [idxs, ret_tuple] = intersect_tuples<std::tuple<typename AsArg<T>::type...>, std::tuple<Ret>>(arg_tuple_as_a);
+							fill_ret_ty(idxs, ret_tuple, ret_types);
+						}
 					}
 
 					std::array<bool, arg_count> existing_maps = {};
 					fixed_vector<size_t, arg_count> maps_to_add;
 					for (auto& ret_t : ret_types) {
-						assert(ret_t->kind == Type::ALIASED_TY);
-						existing_maps[ret_t->aliased.ref_idx - 1] = true;
+						if (ret_t->kind == Type::ALIASED_TY) {
+							existing_maps[ret_t->aliased.ref_idx - 1] = true;
+						}
 					}
 
 					auto old_ret_cnt = ret_types.size();
 					for (size_t i = 0; i < arg_types.size(); i++) {
+						if (!arg_types[i]->is_synchronized()) {
+							continue;
+						}
 						if (!existing_maps[i]) {
 							maps_to_add.push_back(i);
 							ret_types.push_back(current_module->types.make_aliased_ty(Type::stripped(arg_types[i]), i + 1));
@@ -182,7 +199,7 @@ namespace vuk {
 					}
 
 					if (maps_to_add.size() > 0) {
-						auto wrapped_cb = [cb = std::move(untyped_cb), old_ret_cnt, maps_to_add](CommandBuffer& cbuf,
+						auto wrapped_cb = [cb = std::move(untyped_cb), old_ret_cnt, maps_to_add](CommandBuffer* cbuf,
 						                                                                         std::span<void*> opaque_args,
 						                                                                         std::span<void*> opaque_meta,
 						                                                                         std::span<void*> opaque_rets) mutable -> void {
@@ -192,10 +209,10 @@ namespace vuk {
 							}
 						};
 						opaque_fn_ty =
-						    current_module->types.make_opaque_fn_ty(arg_types, ret_types, vuk::DomainFlagBits::eAny, hash_code, std::move(wrapped_cb), name.c_str());
+						    current_module->types.make_opaque_fn_ty(arg_types, ret_types, scheduling_info.required_domains, hash_code, std::move(wrapped_cb), name.c_str());
 					} else {
 						opaque_fn_ty =
-						    current_module->types.make_opaque_fn_ty(arg_types, ret_types, vuk::DomainFlagBits::eAny, hash_code, std::move(untyped_cb), name.c_str());
+						    current_module->types.make_opaque_fn_ty(arg_types, ret_types, scheduling_info.required_domains, hash_code, std::move(untyped_cb), name.c_str());
 					}
 				}
 				auto opaque_fn = current_module->make_declare_fn(opaque_fn_ty);
@@ -226,12 +243,17 @@ namespace vuk {
 
 				current_module->set_source_location(extnode->get_node(), inner_scope);
 
-				if constexpr (is_tuple<Ret>::value) {
+				if constexpr (is_tuple<Ret>::value) { // tuple return
 					auto [idxs, ret_tuple] = intersect_tuples<std::tuple<typename AsArg<T>::type...>, Ret>(arg_tuple_as_a);
 					return make_ret(std::move(extnode), ret_tuple);
-				} else if constexpr (!std::is_same_v<Ret, void>) {
-					auto [idxs, ret_tuple] = intersect_tuples<std::tuple<typename AsArg<T>::type...>, std::tuple<Ret>>(arg_tuple_as_a);
-					return std::get<0>(make_ret(std::move(extnode), ret_tuple));
+				} else if constexpr (!std::is_same_v<Ret, void>) { // non-void
+					using Unwrapped_T = typename UnwrapArg<Ret>::type;
+					if constexpr (Unsynchronized<Unwrapped_T>) {
+						return Value<Unwrapped_T>{ ExtRef{ extnode, Ref{ extnode->get_node(), 0 } } };
+					} else {
+						auto [idxs, ret_tuple] = intersect_tuples<std::tuple<AsArg<T>::type...>, std::tuple<Ret>>(arg_tuple_as_a);
+						return std::get<0>(make_ret(std::move(extnode), ret_tuple));
+					}
 				}
 			};
 		}
@@ -245,9 +267,14 @@ namespace vuk {
 	template<class F>
 	[[nodiscard]] auto make_pass(Name name, F&& body, SchedulingInfo scheduling_info = SchedulingInfo(DomainFlagBits::eAny), VUK_CALLSTACK) {
 		using traits = closure_traits<decltype(&F::operator())>;
-		static_assert(std::is_same_v<std::tuple_element_t<0, typename traits::types>, CommandBuffer&>, "First argument to pass MUST be CommandBuffer&");
-		return TupleMap<drop_t<1, typename traits::types>>::template make_lam<typename traits::result_type, F>(
-		    name, std::forward<F>(body), scheduling_info, VUK_CALL);
+		// static_assert(std::is_same_v<std::tuple_element_t<0, typename traits::types>, CommandBuffer&>, "First argument to pass MUST be CommandBuffer&");
+		if constexpr (std::is_same_v<std::tuple_element_t<0, typename traits::types>, CommandBuffer&>) {
+			return TupleMap<true, drop_t<1, typename traits::types>>::template make_lam<typename traits::result_type, F>(
+			    name, std::forward<F>(body), scheduling_info, VUK_CALL);
+		} else {
+			return TupleMap<false, typename traits::types>::template make_lam<typename traits::result_type, F>(
+			    name, std::forward<F>(body), scheduling_info, VUK_CALL);
+		}
 	}
 
 	/// @brief Turn a compute pipeline create info into a callable compute pass
