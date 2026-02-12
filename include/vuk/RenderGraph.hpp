@@ -358,10 +358,6 @@ namespace vuk {
 		};
 	}
 
-	inline ExtRef make_ext_ref(Ref ref, std::vector<std::shared_ptr<ExtNode>> deps = {}) {
-		return ExtRef(std::make_shared<ExtNode>(ref.node, std::move(deps)), ref);
-	}
-
 	[[nodiscard]] inline Value<PipelineBaseInfo*> compile_pipeline(Value<PipelineBaseCreateInfo> pbci, VUK_CALLSTACK) {
 		Ref ref = current_module->make_compile_pipeline(pbci.get_head());
 		current_module->set_source_location(ref.node, VUK_CALL);

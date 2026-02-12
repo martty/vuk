@@ -22,6 +22,10 @@ namespace vuk {
 	template<class T>
 	struct is_value : std::false_type {};
 
+	inline ExtRef make_ext_ref(Ref ref, std::vector<std::shared_ptr<ExtNode>> deps = {}) {
+		return ExtRef(std::make_shared<ExtNode>(ref.node, std::move(deps)), ref);
+	}
+
 	/// @brief Base class for typed Value, provides execution methods
 	class UntypedValue {
 	public:
@@ -432,7 +436,7 @@ namespace vuk {
 
 		Value<ImageView<f>>() = default;
 
-		Value<ImageView<f>>(Ref ref) : ValueBase<ImageView<f>>(ref) {
+		Value<ImageView<f>>(ExtRef extref) : ValueBase<ImageView<f>>(std::move(extref)) {
 			auto ivci = current_module->make_get_ci(this->get_head());
 			base_level = Value<uint16_t>(current_module->make_extract(ivci, 0));
 			level_count = Value<uint16_t>(current_module->make_extract(ivci, 1));
@@ -444,8 +448,6 @@ namespace vuk {
 			extent = Value<Extent3D>(current_module->make_extract(ici, 4));
 			sample_count = Value<SampleCountFlagBits>(current_module->make_extract(ici, 6));
 		}
-
-		Value<ImageView<f>>(ExtRef extref) : Value<ImageView<f>>(Ref(extref.node->get_node(), extref.index)) {}
 
 		Value<ImageViewEntry> get_ci() {
 			return Value<IVCI>(current_module->make_get_ci(this->get_head()));

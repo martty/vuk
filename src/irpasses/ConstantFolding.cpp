@@ -42,9 +42,9 @@ namespace vuk {
 						    if (arg.type()->kind == Type::ALIASED_TY) {
 							    auto ridx = arg.type()->aliased.ref_idx;
 							    if (arg.node->generic_node.arg_count == (uint8_t)~0u) {
-								    r.replace(arg, arg.node->variable_node.args[ridx]);
+								    arg = arg.node->variable_node.args[ridx];
 							    } else {
-								    r.replace(arg, arg.node->fixed_node.args[ridx]);
+								    arg = arg.node->fixed_node.args[ridx];
 							    }
 						    }
 					    },
@@ -130,7 +130,7 @@ namespace vuk {
 						    node->compute_class = input_class;
 					    }
 					    // fold away logical copies
-					    if (arg.node->kind == Node::LOGICAL_COPY) {
+					    if (arg.node->kind == Node::LOGICAL_COPY && !arg.node->held) {
 						    arg = arg.node->logical_copy.src;
 					    } else if (arg.node->compute_class == DomainFlagBits::eConstant && arg.node->kind != Node::CONSTANT &&
 					               arg.node->kind != Node::PLACEHOLDER) { // do constant folding here
