@@ -54,15 +54,6 @@ namespace std {
 	};
 
 	template<>
-	struct hash<vuk::Extent3D> {
-		size_t operator()(vuk::Extent3D const& x) const noexcept {
-			size_t h = 0;
-			hash_combine(h, x.width, x.height, x.depth);
-			return h;
-		}
-	};
-
-	template<>
 	struct hash<vuk::Offset2D> {
 		size_t operator()(vuk::Offset2D const& x) const noexcept {
 			size_t h = 0;

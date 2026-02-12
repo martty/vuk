@@ -134,6 +134,19 @@ namespace vuk {
 					sliced = sliced.mip_range(start, count);
 				} else if (axis == Node::NamedAxis::LAYER) {
 					sliced = sliced.layer_range(start, count);
+				} else if (axis == Node::NamedAxis::X || axis == Node::NamedAxis::Y || axis == Node::NamedAxis::Z) {
+					// X, Y, Z axes: modify offset and extent
+					auto& ve = sliced.get_meta();
+					if (axis == Node::NamedAxis::X) {
+						ve.offset.x += start;
+						ve.extent.width = count;
+					} else if (axis == Node::NamedAxis::Y) {
+						ve.offset.y += start;
+						ve.extent.height = count;
+					} else if (axis == Node::NamedAxis::Z) {
+						ve.offset.z += start;
+						ve.extent.depth = count;
+					}
 				} else {
 					assert(0);
 				}
@@ -390,7 +403,11 @@ namespace vuk {
 				auto fn_type = ref.node->call.args[0].type();
 				if (t->kind != Type::ALIASED_TY && fn_type->kind == Type::OPAQUE_FN_TY && fn_type->opaque_fn.execute_on == DomainFlagBits::eConstant) {
 					auto results = execute_user_callback(ref.node->call.args, nullptr);
-					return { expected_value, results[ref.index] };
+					if (results.holds_value()) {
+						return { expected_value, (*results)[ref.index] };
+					} else {
+						return { expected_control, CannotBeConstantEvaluated{ ref } };
+					}
 				} else {
 					return { expected_control, CannotBeConstantEvaluated{ ref } };
 				}
@@ -535,7 +552,7 @@ namespace vuk {
 			return { expected_control, CannotBeConstantEvaluated{ ref } };
 		}
 
-		std::vector<void*, temporary_alloc<void*>> execute_user_callback(std::span<Ref> call_args, CommandBuffer* cobuf) {
+		Result<std::vector<void*, temporary_alloc<void*>>> execute_user_callback(std::span<Ref> call_args, CommandBuffer* cobuf) {
 			auto fn_type = call_args[0].type();
 			size_t first_parm = fn_type->kind == Type::OPAQUE_FN_TY ? 1 : 4;
 			std::vector<void*, temporary_alloc<void*>> opaque_rets(temporary_alloc<void*>(*this));
@@ -545,7 +562,11 @@ namespace vuk {
 				std::vector<void*, temporary_alloc<void*>> opaque_meta(temporary_alloc<void*>(*this));
 				for (size_t i = first_parm; i < call_args.size(); i++) {
 					auto& parm = call_args[i];
-					opaque_args.push_back(get_value(parm));
+					auto parm_ = eval(parm);
+					if (!parm_) {
+						return parm_;
+					}
+					opaque_args.push_back(*parm_);
 					opaque_meta.push_back(&parm);
 				}
 				opaque_rets.resize(fn_type->opaque_fn.return_types.size());
@@ -613,7 +634,7 @@ namespace vuk {
 				assert(0);
 			}
 
-			return opaque_rets;
+			return { expected_value, opaque_rets };
 		}
 	};
 
@@ -879,6 +900,32 @@ namespace vuk {
 					new_nodes.clear();
 				}
 			}
+
+			// Handle held nodes by mutating them to LOGICAL_COPY
+			// Remove those replaces since we've handled them via mutation
+			auto replaces_end = std::remove_if(replaces.begin(), replaces.end(), [](const Replace& r) {
+				if (r.needle.node->held) {
+					// Mutate the held node to be a logical copy of the replacement value
+					Node* held_node = r.needle.node;
+
+					// Clean up existing node data
+					if (held_node->generic_node.arg_count == (uint8_t)~0u) {
+						delete[] held_node->variable_node.args.data();
+					}
+
+					// Convert to LOGICAL_COPY
+					held_node->kind = Node::LOGICAL_COPY;
+					held_node->fixed_node.arg_count = 1;
+					held_node->logical_copy.src = r.value;
+
+					// Return true to remove this replace from the list
+					// (we've handled it by mutation, don't need to replace uses)
+					return true;
+				}
+				return false;
+			});
+
+			replaces.erase(replaces_end, replaces.end());
 
 			/* fmt::print("[");
 			    for (auto& r : replaces) {

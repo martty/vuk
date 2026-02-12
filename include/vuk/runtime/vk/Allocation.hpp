@@ -197,6 +197,24 @@ namespace vuk {
 				return normalized / 12.92f;
 			return std::pow((normalized + 0.055f) / 1.055f, 2.4f);
 		}
+
+		// Generic value conversion based on ComponentDataType
+		template<ComponentDataType cdt, typename component_type, typename T>
+		constexpr component_type convert_to_component(T value) noexcept {
+			if constexpr (cdt == ComponentDataType::eSrgb8 && std::is_floating_point_v<T>) {
+				return linear_to_srgb8(value);
+			} else if constexpr (cdt == ComponentDataType::eUnorm8 && std::is_floating_point_v<T>) {
+				return static_cast<uint8_t>(value * 255.0f + 0.5f);
+			} else if constexpr (cdt == ComponentDataType::eSnorm8 && std::is_floating_point_v<T>) {
+				return static_cast<int8_t>(value * 127.0f);
+			} else if constexpr (cdt == ComponentDataType::eUnorm16 && std::is_floating_point_v<T>) {
+				return static_cast<uint16_t>(value * 65535.0f + 0.5f);
+			} else if constexpr (cdt == ComponentDataType::eSnorm16 && std::is_floating_point_v<T>) {
+				return static_cast<int16_t>(value * 32767.0f);
+			} else {
+				return static_cast<component_type>(value);
+			}
+		}
 	} // namespace detail
 
 	template<Format format = Format::eUndefined>
@@ -213,63 +231,44 @@ namespace vuk {
 		// Constructors
 		constexpr ImageLike() : data{} {}
 
+		constexpr bool operator==(const ImageLike& other) const noexcept = default;
+
 		// Constructor for single component
 		template<typename T = component_type>
 		  requires(component_count == 1)
 		constexpr ImageLike(T value) {
-			// For sRGB formats with float input, convert from linear to sRGB
-			if constexpr (cdt == ComponentDataType::eSrgb8 && std::is_floating_point_v<T>) {
-				data[0] = detail::linear_to_srgb8(value);
-			} else {
-				data[0] = static_cast<component_type>(value);
-			}
+			data[0] = detail::convert_to_component<cdt, component_type>(value);
 		}
 
 		// Constructor for 2 components
 		template<typename T = component_type>
 		  requires(component_count == 2)
 		constexpr ImageLike(T r, T g) {
-			// For sRGB formats with float input, convert from linear to sRGB
-			if constexpr (cdt == ComponentDataType::eSrgb8 && std::is_floating_point_v<T>) {
-				data[0] = detail::linear_to_srgb8(r);
-				data[1] = detail::linear_to_srgb8(g);
-			} else {
-				data[0] = static_cast<component_type>(r);
-				data[1] = static_cast<component_type>(g);
-			}
+			data[0] = detail::convert_to_component<cdt, component_type>(r);
+			data[1] = detail::convert_to_component<cdt, component_type>(g);
 		}
 
 		// Constructor for 3 components
 		template<typename T = component_type>
 		  requires(component_count == 3)
 		constexpr ImageLike(T r, T g, T b) {
-			// For sRGB formats with float input, convert from linear to sRGB
-			if constexpr (cdt == ComponentDataType::eSrgb8 && std::is_floating_point_v<T>) {
-				data[0] = detail::linear_to_srgb8(r);
-				data[1] = detail::linear_to_srgb8(g);
-				data[2] = detail::linear_to_srgb8(b);
-			} else {
-				data[0] = static_cast<component_type>(r);
-				data[1] = static_cast<component_type>(g);
-				data[2] = static_cast<component_type>(b);
-			}
+			data[0] = detail::convert_to_component<cdt, component_type>(r);
+			data[1] = detail::convert_to_component<cdt, component_type>(g);
+			data[2] = detail::convert_to_component<cdt, component_type>(b);
 		}
 
 		// Constructor for 4 components
 		template<typename T = component_type>
 		  requires(component_count == 4)
 		constexpr ImageLike(T r, T g, T b, T a) {
-			// For sRGB formats with float input, convert from linear to sRGB
+			data[0] = detail::convert_to_component<cdt, component_type>(r);
+			data[1] = detail::convert_to_component<cdt, component_type>(g);
+			data[2] = detail::convert_to_component<cdt, component_type>(b);
+			// For sRGB, alpha is always linear (not gamma corrected)
 			if constexpr (cdt == ComponentDataType::eSrgb8 && std::is_floating_point_v<T>) {
-				data[0] = detail::linear_to_srgb8(r);
-				data[1] = detail::linear_to_srgb8(g);
-				data[2] = detail::linear_to_srgb8(b);
-				data[3] = static_cast<component_type>(a * 255.0f + 0.5f); // Alpha is always linear
+				data[3] = static_cast<component_type>(a * 255.0f + 0.5f);
 			} else {
-				data[0] = static_cast<component_type>(r);
-				data[1] = static_cast<component_type>(g);
-				data[2] = static_cast<component_type>(b);
-				data[3] = static_cast<component_type>(a);
+				data[3] = detail::convert_to_component<cdt, component_type>(a);
 			}
 		}
 
@@ -322,19 +321,7 @@ namespace vuk {
 		constexpr void r(auto value) noexcept
 		  requires(component_count >= 1)
 		{
-			if constexpr (cdt == ComponentDataType::eUnorm8) {
-				data[0] = static_cast<uint8_t>(value * 255.0f + 0.5f);
-			} else if constexpr (cdt == ComponentDataType::eSnorm8) {
-				data[0] = static_cast<int8_t>(value * 127.0f);
-			} else if constexpr (cdt == ComponentDataType::eSrgb8) {
-				data[0] = detail::linear_to_srgb8(value);
-			} else if constexpr (cdt == ComponentDataType::eUnorm16) {
-				data[0] = static_cast<uint16_t>(value * 65535.0f + 0.5f);
-			} else if constexpr (cdt == ComponentDataType::eSnorm16) {
-				data[0] = static_cast<int16_t>(value * 32767.0f);
-			} else {
-				data[0] = static_cast<component_type>(value);
-			}
+			data[0] = detail::convert_to_component<cdt, component_type>(value);
 		}
 
 		constexpr auto g() const noexcept
@@ -358,19 +345,7 @@ namespace vuk {
 		constexpr void g(auto value) noexcept
 		  requires(component_count >= 2)
 		{
-			if constexpr (cdt == ComponentDataType::eUnorm8) {
-				data[1] = static_cast<uint8_t>(value * 255.0f + 0.5f);
-			} else if constexpr (cdt == ComponentDataType::eSnorm8) {
-				data[1] = static_cast<int8_t>(value * 127.0f);
-			} else if constexpr (cdt == ComponentDataType::eSrgb8) {
-				data[1] = detail::linear_to_srgb8(value);
-			} else if constexpr (cdt == ComponentDataType::eUnorm16) {
-				data[1] = static_cast<uint16_t>(value * 65535.0f + 0.5f);
-			} else if constexpr (cdt == ComponentDataType::eSnorm16) {
-				data[1] = static_cast<int16_t>(value * 32767.0f);
-			} else {
-				data[1] = static_cast<component_type>(value);
-			}
+			data[1] = detail::convert_to_component<cdt, component_type>(value);
 		}
 
 		constexpr auto b() const noexcept
@@ -394,19 +369,7 @@ namespace vuk {
 		constexpr void b(auto value) noexcept
 		  requires(component_count >= 3)
 		{
-			if constexpr (cdt == ComponentDataType::eUnorm8) {
-				data[2] = static_cast<uint8_t>(value * 255.0f + 0.5f);
-			} else if constexpr (cdt == ComponentDataType::eSnorm8) {
-				data[2] = static_cast<int8_t>(value * 127.0f);
-			} else if constexpr (cdt == ComponentDataType::eSrgb8) {
-				data[2] = detail::linear_to_srgb8(value);
-			} else if constexpr (cdt == ComponentDataType::eUnorm16) {
-				data[2] = static_cast<uint16_t>(value * 65535.0f + 0.5f);
-			} else if constexpr (cdt == ComponentDataType::eSnorm16) {
-				data[2] = static_cast<int16_t>(value * 32767.0f);
-			} else {
-				data[2] = static_cast<component_type>(value);
-			}
+			data[2] = detail::convert_to_component<cdt, component_type>(value);
 		}
 
 		constexpr auto a() const noexcept
@@ -431,19 +394,11 @@ namespace vuk {
 		constexpr void a(auto value) noexcept
 		  requires(component_count >= 4)
 		{
-			if constexpr (cdt == ComponentDataType::eUnorm8) {
+			// For sRGB, alpha is always linear (not gamma corrected)
+			if constexpr (cdt == ComponentDataType::eSrgb8) {
 				data[3] = static_cast<uint8_t>(value * 255.0f + 0.5f);
-			} else if constexpr (cdt == ComponentDataType::eSnorm8) {
-				data[3] = static_cast<int8_t>(value * 127.0f);
-			} else if constexpr (cdt == ComponentDataType::eSrgb8) {
-				// Alpha is always linear in sRGB formats
-				data[3] = static_cast<uint8_t>(value * 255.0f + 0.5f);
-			} else if constexpr (cdt == ComponentDataType::eUnorm16) {
-				data[3] = static_cast<uint16_t>(value * 65535.0f + 0.5f);
-			} else if constexpr (cdt == ComponentDataType::eSnorm16) {
-				data[3] = static_cast<int16_t>(value * 32767.0f);
 			} else {
-				data[3] = static_cast<component_type>(value);
+				data[3] = detail::convert_to_component<cdt, component_type>(value);
 			}
 		}
 	};
@@ -813,7 +768,9 @@ namespace vuk {
 		uint16_t layer_count = 0xffff;
 		VkImageUsageFlags view_usage : 10 = 0; // 8 bytes
 		Image<> image = {};                    // 16 bytes
-		Format format = Format::eUndefined;    // 32 bytes in total
+		Format format = Format::eUndefined;    // 32 bytes
+		Offset3D offset = {};                  // 44 bytes (+12)
+		Extent3D extent = {};                  // 56 bytes in total (+12)
 
 		static IVCI from(ImageViewCreateInfo ivci) {
 			assert(ivci.pNext == nullptr && "Compression does not support pNextended IVCIs");
@@ -1033,13 +990,27 @@ namespace vuk {
 	struct ImageViewEntry : IVCI {
 		VkImageView api_view;
 		size_t id;
-		Extent3D extent;
 		SampleCountFlagBits sample_count;
 		ImageLayout layout;
 		size_t hash;
 	};
 
 	std::string format_as(const ImageViewEntry& entry);
+
+	template<>
+	struct member_placeholder<&Offset3D::x> {
+		static constexpr int32_t value = -1;
+	};
+
+	template<>
+	struct member_placeholder<&Offset3D::y> {
+		static constexpr int32_t value = -1;
+	};
+
+	template<>
+	struct member_placeholder<&Offset3D::z> {
+		static constexpr int32_t value = -1;
+	};
 
 	template<Format f>
 	struct view<ImageLike<f>, dynamic_extent> {
@@ -1100,6 +1071,35 @@ namespace vuk {
 			a.layer_count = layer_count;
 			a.api_view = VK_NULL_HANDLE;
 			return view<ImageLike<f>, dynamic_extent>{ Resolver::per_thread->add_image_view(a) };
+		}
+
+		view<ImageLike<f>, dynamic_extent> subregion(Offset3D offset, Extent3D extent) const noexcept {
+			auto a = get_meta();
+			a.offset = offset;
+			a.extent = extent;
+			a.api_view = VK_NULL_HANDLE;
+			return view<ImageLike<f>, dynamic_extent>{ Resolver::per_thread->add_image_view(a) };
+		}
+
+		/// @brief Check if this view fully spans the entire image region
+		/// @return true if the view covers the entire image with no offset or subregion
+		bool is_spanning() const noexcept {
+			auto& ve = get_meta();
+
+			// Get the underlying image
+			auto& ie = Resolver::per_thread->resolve_image(ve.image);
+
+			// Check if offset is at origin
+			if (ve.offset.x != 0 || ve.offset.y != 0 || ve.offset.z != 0) {
+				return false;
+			}
+
+			// Check if extent matches image extent
+			if (ve.extent.width != ie.extent.width || ve.extent.height != ie.extent.height || ve.extent.depth != ie.extent.depth) {
+				return false;
+			}
+
+			return true;
 		}
 
 		Extent3D base_mip_extent() const noexcept {
@@ -1190,10 +1190,29 @@ namespace std {
 	};
 
 	template<>
+	struct hash<vuk::Offset3D> {
+		size_t operator()(vuk::Offset3D const& x) const noexcept {
+			size_t h = 0;
+			hash_combine(h, x.x, x.y, x.z);
+			return h;
+		}
+	};
+
+	template<>
+	struct hash<vuk::Extent3D> {
+		size_t operator()(vuk::Extent3D const& x) const noexcept {
+			size_t h = 0;
+			hash_combine(h, x.width, x.height, x.depth);
+			return h;
+		}
+	};
+
+	template<>
 	struct hash<vuk::ImageViewEntry> {
 		size_t operator()(vuk::ImageViewEntry const& x) const noexcept {
 			size_t h = 0;
-			hash_combine(h, x.image.device_address, x.format, x.view_type, x.base_level, x.level_count, x.base_layer, x.layer_count, x.view_usage);
+			hash_combine(
+			    h, x.image.device_address, x.format, x.view_type, x.base_level, x.level_count, x.base_layer, x.layer_count, x.view_usage, x.offset, x.extent);
 			return h;
 		}
 	};

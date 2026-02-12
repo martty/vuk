@@ -507,6 +507,9 @@ namespace vuk {
 			MIP = 253,
 			LAYER = 252,
 			COMPONENT = 251,
+			X = 250,
+			Y = 249,
+			Z = 248,
 		};
 
 		union {
@@ -1586,6 +1589,29 @@ namespace vuk {
 			assert(0);
 			return nullptr;
 		}
+	}
+
+	inline size_t get_value_as_size_t(Ref ref) {
+		assert(ref.node->kind == Node::ACQUIRE || ref.node->kind == Node::CONSTANT);
+
+		auto base_ty = Type::stripped(ref.type());
+		if (base_ty->kind == Type::INTEGER_TY) {
+			switch (base_ty->scalar.width) {
+			case 8:
+				return static_cast<size_t>(*get_value<uint8_t>(ref));
+			case 16:
+				return static_cast<size_t>(*get_value<uint16_t>(ref));
+			case 32:
+				return static_cast<size_t>(*get_value<uint32_t>(ref));
+			case 64:
+				return static_cast<size_t>(*get_value<uint64_t>(ref));
+			default:
+				assert(0 && "Unsupported integer width");
+				return 0;
+			}
+		}
+		assert(0 && "Expected integer type");
+		return 0;
 	}
 
 	inline std::span<void*> get_values(Node* node) {

@@ -242,8 +242,8 @@ namespace vuk {
 		case Node::SLICE: {
 			auto axis = node->slice.axis;
 			// these must have run by now, so we can just eval
-			auto start = *get_value<uint64_t>(node->slice.start);
-			auto count = *get_value<uint64_t>(node->slice.count);
+			auto start = get_value_as_size_t(node->slice.start);
+			auto count = get_value_as_size_t(node->slice.count);
 
 			print_args_to_string(std::span{ &node->slice.src, 1 }, line);
 			if (start > 0 || count != Range::REMAINING) {

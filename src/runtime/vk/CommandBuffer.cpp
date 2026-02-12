@@ -787,6 +787,10 @@ namespace vuk {
 		auto& ie = allocator->get_context().resolve_image(ve.image);
 
 		if (!ongoing_render_pass) {
+			// vkCmdClearColorImage and vkCmdClearDepthStencilImage only support clearing entire mip levels/array layers
+			// For subregion clears, use clear_image inside a render pass
+			assert(src.is_full_view() && "Subregion clears are only supported inside a render pass. Use a spanning image view or clear within a render pass.");
+
 			VkImageSubresourceRange isr = {};
 			isr.aspectMask = (VkImageAspectFlags)aspect;
 			isr.baseArrayLayer = ve.base_layer;
@@ -811,7 +815,8 @@ namespace vuk {
 			VkClearRect rect = {};
 			rect.baseArrayLayer = ve.base_layer;
 			rect.layerCount = ve.layer_count;
-			rect.rect = { { (int32_t)0, (int32_t)0 }, { ve.extent.width, ve.extent.height } };
+			// Use the offset and extent from the view to support subregion clears
+			rect.rect = { { ve.offset.x, ve.offset.y }, { ve.extent.width, ve.extent.height } };
 			ctx.vkCmdClearAttachments(command_buffer, 1, &clr, 1, &rect);
 		}
 

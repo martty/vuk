@@ -983,7 +983,6 @@ namespace vuk {
 		}
 
 		// Store the extent and sample count from the parent image
-		ive.extent = image_entry.extent;
 		ive.sample_count = image_entry.sample_count;
 
 		// check if we already have this image view

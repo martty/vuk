@@ -831,27 +831,6 @@ namespace vuk {
 			return arena.ensure_space(size);
 		}
 
-		size_t get_value_as_size_t(Ref ref) {
-			auto base_ty = Type::stripped(ref.type());
-			if (base_ty->kind == Type::INTEGER_TY) {
-				switch (base_ty->scalar.width) {
-				case 8:
-					return static_cast<size_t>(*get_value<uint8_t>(ref));
-				case 16:
-					return static_cast<size_t>(*get_value<uint16_t>(ref));
-				case 32:
-					return static_cast<size_t>(*get_value<uint32_t>(ref));
-				case 64:
-					return static_cast<size_t>(*get_value<uint64_t>(ref));
-				default:
-					assert(0 && "Unsupported integer width");
-					return 0;
-				}
-			}
-			assert(0 && "Expected integer type");
-			return 0;
-		}
-
 		void node_to_acq(Node* node, std::span<void*> values) {
 			assert(node->execution_info);
 			node->execution_info->kind = node->kind;
@@ -1181,6 +1160,7 @@ namespace vuk {
 							new_value = arena.emplace(buf);
 						} else { // imageview types
 							if (node->allocate.src.type()->kind == Type::IMAGE_TY) {
+								assert(false); // we have already expanded
 								auto image = *get_value<Image<>>(node->allocate.src);
 								new_value = arena.emplace(image.default_view());
 							} else {
@@ -1316,11 +1296,13 @@ namespace vuk {
 
 					// Execute user callback
 					auto opaque_rets = execute_user_callback(node->call.args, &cobuf);
-
+					if (!opaque_rets) {
+						return opaque_rets;
+					}
 					// Teardown callback execution
 					teardown_callback_execution(vk_rec, fn_type, cobuf, rpass_profile_data);
 
-					done(node, dst_stream, std::span(opaque_rets));
+					done(node, dst_stream, std::span(*opaque_rets));
 
 					break;
 				}
@@ -1440,11 +1422,11 @@ namespace vuk {
 
 					if (!(node->debug_info && node->debug_info->result_names.size() > 0 && !node->debug_info->result_names[0].empty())) {
 						/*std::string name = fmt::format("{}_{}[{}->{}:{}]",
-						                               Node::kind_to_sv(node->slice.src.node->execution_info->kind),
-						                               node->slice.src.node->execution_info->naming_index,
-						                               node->slice.axis,
-						                               start,
-						                               start + count - 1);
+						                 Node::kind_to_sv(node->slice.src.node->execution_info->kind),
+						                 node->slice.src.node->execution_info->naming_index,
+						                 node->slice.axis,
+						                 start,
+						                 start + count - 1);
 						current_module->name_output(first(node), name);*/
 					}
 					std::vector<void*, short_alloc<void*>> rets(3, *impl->arena_);

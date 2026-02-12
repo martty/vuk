@@ -175,11 +175,11 @@ namespace vuk {
 		int32_t y = {};
 		int32_t z = {};
 
-		bool operator==(Offset3D const& rhs) const noexcept {
+		constexpr bool operator==(Offset3D const& rhs) const noexcept {
 			return (x == rhs.x) && (y == rhs.y) && (z == rhs.z);
 		}
 
-		bool operator!=(Offset3D const& rhs) const noexcept {
+		constexpr bool operator!=(Offset3D const& rhs) const noexcept {
 			return !operator==(rhs);
 		}
 

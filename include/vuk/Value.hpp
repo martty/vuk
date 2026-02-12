@@ -17,6 +17,9 @@ namespace vuk {
 	struct SyncHelper;
 
 	template<>
+	class erased_tuple_adaptor<Offset3D>;
+
+	template<>
 	class erased_tuple_adaptor<Extent3D>;
 
 	template<class T>
@@ -140,48 +143,43 @@ namespace vuk {
 			return *reinterpret_cast<Value<U>*>(this); // TODO: not cool
 		}
 
-		/// @brief Access the underlying resource
-		/// @return Pointer to the resource
-		T* operator->() noexcept {
-			auto result = wait();
-			return get_value<T>(get_head());
-		}
-
+		template<class U = T>
 		auto operator->() noexcept
-		  requires(erased_tuple_adaptor<T>::value)
+		  requires(erased_tuple_adaptor<U>::value)
 		{
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunused-value"
 			return std::apply(
 			    [head = get_head(), this](auto... a) {
 				    size_t i = 0;
-				    return typename erased_tuple_adaptor<T>::proxy{ [&, this](auto a, auto i) {
+				    return typename erased_tuple_adaptor<U>::proxy{ [&, this](auto a, auto i) {
 					    Ref ref = current_module->make_extract(head, i);
 					    ExtRef exref = make_ext_ref(ref);
 					    node->deps.push_back(exref.node);
 					    return exref;
 					  }((a, head), i++)... };
 			    },
-			    erased_tuple_adaptor<T>::member_types);
+			    erased_tuple_adaptor<U>::member_types);
 #pragma clang diagnostic pop
 		}
 
+		template<class U = T>
 		const auto operator->() const noexcept
-		  requires(erased_tuple_adaptor<T>::value)
+		  requires(erased_tuple_adaptor<U>::value)
 		{
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunused-value"
 			return std::apply(
 			    [head = get_head(), this](auto... a) {
 				    size_t i = 0;
-				    return typename erased_tuple_adaptor<T>::proxy{ [&, this](auto a, auto i) {
+				    return typename erased_tuple_adaptor<U>::proxy{ [&, this](auto a, auto i) {
 					    Ref ref = current_module->make_extract(head, i);
 					    ExtRef exref = make_ext_ref(ref);
 					    node->deps.push_back(exref.node);
 					    return exref;
 					  }((a, head), i++)... };
 			    },
-			    erased_tuple_adaptor<T>::member_types);
+			    erased_tuple_adaptor<U>::member_types);
 #pragma clang diagnostic pop
 		}
 
@@ -431,6 +429,7 @@ namespace vuk {
 		Value<uint16_t> layer_count;
 
 		Value<Format> format = f;
+		Value<Offset3D> offset;
 		Value<Extent3D> extent;
 		Value<SampleCountFlagBits> sample_count;
 
@@ -445,7 +444,8 @@ namespace vuk {
 			auto image = current_module->make_extract(ivci, 4);
 			auto ici = current_module->make_get_ci(image);
 			format = Value<Format>(current_module->make_extract(ivci, 5));
-			extent = Value<Extent3D>(current_module->make_extract(ici, 4));
+			offset = Value<Offset3D>(current_module->make_extract(ivci, 6));
+			extent = Value<Extent3D>(current_module->make_extract(ivci, 7));
 			sample_count = Value<SampleCountFlagBits>(current_module->make_extract(ici, 6));
 		}
 
@@ -456,6 +456,8 @@ namespace vuk {
 		// Image inferences
 		void same_extent_as(const Value<ImageView<f>>& src) {
 			this->node->deps.push_back(src.node);
+			static_assert(erased_tuple_adaptor<Extent3D>::value);
+
 			current_module->set_value(extent->width.get_head(), src.extent->width.get_head());
 			current_module->set_value(extent->height.get_head(), src.extent->height.get_head());
 			current_module->set_value(extent->depth.get_head(), src.extent->depth.get_head());
@@ -504,13 +506,43 @@ namespace vuk {
 		Value<ImageView<f>> mip(uint32_t mip) {
 			Ref item = current_module->make_slice(
 			    this->get_head(), Node::NamedAxis::MIP, current_module->make_constant<uint64_t>(mip), current_module->make_constant<uint64_t>(1u));
-			return Value(item);
+			return Value(make_ext_ref(item));
 		}
 
 		Value<ImageView<f>> layer(uint32_t layer) {
 			Ref item = current_module->make_slice(
 			    this->get_head(), Node::NamedAxis::LAYER, current_module->make_constant<uint64_t>(layer), current_module->make_constant<uint64_t>(1u));
-			return Value(item);
+			return Value(make_ext_ref(item));
+		}
+
+		/// @brief Create a view of a subregion with custom offset and extent
+		/// @param new_offset Offset into the image resource (x, y, z)
+		/// @param new_extent Extent of the view (width, height, depth)
+		/// @return New ImageView with specified offset and extent
+		Value<ImageView<f>> subregion(Value<Offset3D> new_offset, Value<Extent3D> new_extent) {
+			// Extract offset components
+			auto offset_x = new_offset->x;
+			auto offset_y = new_offset->y;
+			auto offset_z = new_offset->z;
+
+			// Extract extent components
+			auto extent_width = new_extent->width;
+			auto extent_height = new_extent->height;
+			auto extent_depth = new_extent->depth;
+
+			// Create slices for each axis: X, Y, Z
+			Ref current = this->get_head();
+
+			// Slice along X axis
+			current = current_module->make_slice(current, Node::NamedAxis::X, offset_x.get_head(), extent_width.get_head());
+
+			// Slice along Y axis
+			current = current_module->make_slice(current, Node::NamedAxis::Y, offset_y.get_head(), extent_height.get_head());
+
+			// Slice along Z axis
+			current = current_module->make_slice(current, Node::NamedAxis::Z, offset_z.get_head(), extent_depth.get_head());
+
+			return Value(make_ext_ref(current));
 		}
 	};
 

@@ -43,10 +43,11 @@ namespace vuk {
 namespace vuk {
 	ADAPT_TEMPLATED_STRUCT_FOR_IR(class, Buffer, ptr, sz_bytes);
 	ADAPT_STRUCT_FOR_IR(BufferCreateInfo, memory_usage, size, alignment);
+	ADAPT_STRUCT_FOR_IR(Offset3D, x, y, z);
 	ADAPT_STRUCT_FOR_IR(Extent3D, width, height, depth);
 	static_assert(erased_tuple_adaptor<Extent3D>::value);
-	ADAPT_STRUCT_FOR_IR(IVCI, base_level, level_count, base_layer, layer_count, image, format);
-	ADAPT_STRUCT_FOR_IR(ImageViewEntry, base_level, level_count, base_layer, layer_count, format, extent, sample_count, layout);
+	ADAPT_STRUCT_FOR_IR(IVCI, base_level, level_count, base_layer, layer_count, image, format, offset, extent);
+	ADAPT_STRUCT_FOR_IR(ImageViewEntry, base_level, level_count, base_layer, layer_count, format, offset, extent, sample_count, layout);
 	ADAPT_TEMPLATED_STRUCT_FOR_IR(class, Flags, m_mask);
 	ADAPT_STRUCT_FOR_IR(ICI, image_flags, image_type, tiling, usage, extent, format, sample_count, level_count, layer_count);
 	static_assert(erased_tuple_adaptor<view<BufferLike<float>>>::value);

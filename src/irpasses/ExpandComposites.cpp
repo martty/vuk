@@ -43,7 +43,7 @@ namespace vuk {
 					add_node(ici_ref.node);
 
 					// Construct IVCI from ICI
-					// IVCI fields: base_level, level_count, base_layer, layer_count, image, format
+					// IVCI fields: base_level, level_count, base_layer, layer_count, image, format, offset, extent
 					// ICI fields: image_flags, image_type, tiling, usage, extent, format, sample_count, level_count, layer_count
 
 					// Extract format from ICI (index 5)
@@ -57,6 +57,8 @@ namespace vuk {
 					// layer_count = VK_REMAINING_ARRAY_LAYERS (0xFFFF)
 					// image = the image pointer
 					// format = from ICI
+					// offset = {0, 0, 0}
+					// extent = from ICI
 
 					auto base_level = current_module->make_constant<uint16_t>(0);
 					auto level_count = current_module->make_extract(ici_ref, 7);
@@ -64,7 +66,14 @@ namespace vuk {
 					auto layer_count = current_module->make_extract(ici_ref, 8);
 
 					// Construct IVCI
-					std::array<Ref, 6> ivci_args = { base_level, level_count, base_layer, layer_count, node->allocate.src, format_ref };
+					std::array<Ref, 8> ivci_args = { base_level,
+						                               level_count,
+						                               base_layer,
+						                               layer_count,
+						                               node->allocate.src,
+						                               format_ref,
+						                               current_module->make_constant<Offset3D>({}),
+						                               current_module->make_extract(ici_ref, 4) };
 
 					auto ivci_ref = current_module->make_construct(to_IR_type<IVCI>(), nullptr, std::span(ivci_args));
 					add_node(ivci_ref.node);

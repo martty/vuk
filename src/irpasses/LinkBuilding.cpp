@@ -37,10 +37,12 @@ namespace vuk {
 			if (link->undef.node->kind == Node::SLICE) {
 				auto& slice_node = link->undef.node;
 				auto type_kind = nth(slice_node, 2).type()->kind;
-				bool forbid_elision = type_kind == Type::UNION_TY;
+				bool is_subregion_slice =
+				    slice_node->slice.axis == Node::NamedAxis::X || slice_node->slice.axis == Node::NamedAxis::Y || slice_node->slice.axis == Node::NamedAxis::Z;
+				bool forbid_elision = type_kind == Type::UNION_TY || is_subregion_slice;
 				if (node->kind == Node::SLICE && !forbid_elision) {
-					auto scope_S = Cut{ slice_node->slice.axis, *eval<uint64_t>(slice_node->slice.start), *eval<uint64_t>(slice_node->slice.count) };
-					auto scope_Sp = Cut{ node->slice.axis, *eval<uint64_t>(node->slice.start), *eval<uint64_t>(node->slice.count) };
+					auto scope_S = Cut{ slice_node->slice.axis, *eval_as_size_t(slice_node->slice.start), *eval_as_size_t(slice_node->slice.count) };
+					auto scope_Sp = Cut{ node->slice.axis, *eval_as_size_t(node->slice.start), *eval_as_size_t(node->slice.count) };
 
 					if (scope_Sp.shrinks(scope_S)) { // cases 1 and 2, we can elide the convergence
 #ifdef VUK_DUMP_SSA
