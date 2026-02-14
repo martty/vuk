@@ -129,18 +129,8 @@ FetchContent_Declare(
   GIT_REPOSITORY https://github.com/KhronosGroup/SPIRV-Cross.git
   GIT_TAG 2c32b6bf86f3c4a5539aa1f0bacbd59fe61759cf
 )
-
-FetchContent_Declare(
-  vuk-binary-dist
-  GIT_REPOSITORY https://github.com/martty/vuk-binary-dist.git
-  GIT_TAG 517d0bf43963725208794a43530341e65524edf1
-)
-
-# for vuk-binary-dist, we want to populate but not add to the build
-FetchContent_GetProperties(vuk-binary-dist)
-if(NOT vuk-binary-dist_POPULATED)
-  FetchContent_Populate(vuk-binary-dist)
-endif()
+add_custom_target(vuk_shader_binaries)
+add_subdirectory(src/runtime/shaders)
 
 FetchContent_MakeAvailable(
   robin-hood-hashing
@@ -367,10 +357,6 @@ endif()
 
 if(VUK_EXTRA_INIT)
 	add_subdirectory(src/extra/init)
-endif()
-
-if(VUK_EXTRA)
-	target_dist_spv(vuk SHADERS spd.cs.hlsl.spv)
 endif()
 
 target_include_directories(vuk PUBLIC include)
