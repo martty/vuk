@@ -1,0 +1,166 @@
+#version 460
+#pragma shader_stage(compute)
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+// All formats aliased at binding 0
+// Float formats
+layout(set = 0, binding = 0, rgba32f) uniform writeonly image2D img_rgba32f;
+layout(set = 0, binding = 0, rgba16f) uniform writeonly image2D img_rgba16f;
+layout(set = 0, binding = 0, rg32f) uniform writeonly image2D img_rg32f;
+layout(set = 0, binding = 0, rg16f) uniform writeonly image2D img_rg16f;
+layout(set = 0, binding = 0, r32f) uniform writeonly image2D img_r32f;
+layout(set = 0, binding = 0, r16f) uniform writeonly image2D img_r16f;
+
+// Unsigned int formats
+layout(set = 0, binding = 0, rgba32ui) uniform writeonly uimage2D img_rgba32ui;
+layout(set = 0, binding = 0, rgba16ui) uniform writeonly uimage2D img_rgba16ui;
+layout(set = 0, binding = 0, rgba8ui) uniform writeonly uimage2D img_rgba8ui;
+layout(set = 0, binding = 0, rg32ui) uniform writeonly uimage2D img_rg32ui;
+layout(set = 0, binding = 0, rg16ui) uniform writeonly uimage2D img_rg16ui;
+layout(set = 0, binding = 0, rg8ui) uniform writeonly uimage2D img_rg8ui;
+layout(set = 0, binding = 0, r32ui) uniform writeonly uimage2D img_r32ui;
+layout(set = 0, binding = 0, r16ui) uniform writeonly uimage2D img_r16ui;
+layout(set = 0, binding = 0, r8ui) uniform writeonly uimage2D img_r8ui;
+
+// Signed int formats
+layout(set = 0, binding = 0, rgba32i) uniform writeonly iimage2D img_rgba32i;
+layout(set = 0, binding = 0, rgba16i) uniform writeonly iimage2D img_rgba16i;
+layout(set = 0, binding = 0, rgba8i) uniform writeonly iimage2D img_rgba8i;
+layout(set = 0, binding = 0, rg32i) uniform writeonly iimage2D img_rg32i;
+layout(set = 0, binding = 0, rg16i) uniform writeonly iimage2D img_rg16i;
+layout(set = 0, binding = 0, rg8i) uniform writeonly iimage2D img_rg8i;
+layout(set = 0, binding = 0, r32i) uniform writeonly iimage2D img_r32i;
+layout(set = 0, binding = 0, r16i) uniform writeonly iimage2D img_r16i;
+layout(set = 0, binding = 0, r8i) uniform writeonly iimage2D img_r8i;
+
+// Normalized formats (unorm/snorm)
+layout(set = 0, binding = 0, rgba8) uniform writeonly image2D img_rgba8;
+layout(set = 0, binding = 0, rgba16) uniform writeonly image2D img_rgba16;
+layout(set = 0, binding = 0, rg8) uniform writeonly image2D img_rg8;
+layout(set = 0, binding = 0, rg16) uniform writeonly image2D img_rg16;
+layout(set = 0, binding = 0, r8) uniform writeonly image2D img_r8;
+layout(set = 0, binding = 0, r16) uniform writeonly image2D img_r16;
+
+// VkFormat enum values (from vulkan_core.h)
+const uint VK_FORMAT_R32G32B32A32_SFLOAT = 109;
+const uint VK_FORMAT_R16G16B16A16_SFLOAT = 97;
+const uint VK_FORMAT_R32G32_SFLOAT = 103;
+const uint VK_FORMAT_R16G16_SFLOAT = 91;
+const uint VK_FORMAT_R32_SFLOAT = 100;
+const uint VK_FORMAT_R16_SFLOAT = 76;
+
+const uint VK_FORMAT_R32G32B32A32_UINT = 107;
+const uint VK_FORMAT_R16G16B16A16_UINT = 95;
+const uint VK_FORMAT_R8G8B8A8_UINT = 41;
+const uint VK_FORMAT_R32G32_UINT = 101;
+const uint VK_FORMAT_R16G16_UINT = 89;
+const uint VK_FORMAT_R8G8_UINT = 20;
+const uint VK_FORMAT_R32_UINT = 98;
+const uint VK_FORMAT_R16_UINT = 74;
+const uint VK_FORMAT_R8_UINT = 13;
+
+const uint VK_FORMAT_R32G32B32A32_SINT = 108;
+const uint VK_FORMAT_R16G16B16A16_SINT = 96;
+const uint VK_FORMAT_R8G8B8A8_SINT = 42;
+const uint VK_FORMAT_R32G32_SINT = 102;
+const uint VK_FORMAT_R16G16_SINT = 90;
+const uint VK_FORMAT_R8G8_SINT = 21;
+const uint VK_FORMAT_R32_SINT = 99;
+const uint VK_FORMAT_R16_SINT = 75;
+const uint VK_FORMAT_R8_SINT = 14;
+
+const uint VK_FORMAT_R8G8B8A8_UNORM = 37;
+const uint VK_FORMAT_R8G8B8A8_SRGB = 43;
+const uint VK_FORMAT_R16G16B16A16_UNORM = 91;
+const uint VK_FORMAT_R8G8_UNORM = 16;
+const uint VK_FORMAT_R16G16_UNORM = 77;
+const uint VK_FORMAT_R8_UNORM = 9;
+const uint VK_FORMAT_R16_UNORM = 70;
+
+layout(push_constant) uniform ClearData {
+	vec4 clear_color;
+	ivec3 offset;
+	ivec3 extent;
+	uint format; // VkFormat enum value
+} clear_data;
+
+void main() {
+	ivec3 global_id = ivec3(gl_GlobalInvocationID);
+	ivec3 pixel_coord = clear_data.offset + global_id;
+
+	// Check if we're within the clear region bounds
+	if (all(lessThan(global_id, clear_data.extent))) {
+		ivec2 coord = pixel_coord.xy;
+
+		// Select format based on VkFormat enum value
+		// Float formats
+		if (clear_data.format == VK_FORMAT_R32G32B32A32_SFLOAT) {
+			imageStore(img_rgba32f, coord, clear_data.clear_color);
+		} else if (clear_data.format == VK_FORMAT_R16G16B16A16_SFLOAT) {
+			imageStore(img_rgba16f, coord, clear_data.clear_color);
+		} else if (clear_data.format == VK_FORMAT_R32G32_SFLOAT) {
+			imageStore(img_rg32f, coord, clear_data.clear_color);
+		} else if (clear_data.format == VK_FORMAT_R16G16_SFLOAT) {
+			imageStore(img_rg16f, coord, clear_data.clear_color);
+		} else if (clear_data.format == VK_FORMAT_R32_SFLOAT) {
+			imageStore(img_r32f, coord, clear_data.clear_color);
+		} else if (clear_data.format == VK_FORMAT_R16_SFLOAT) {
+			imageStore(img_r16f, coord, clear_data.clear_color);
+		}
+		// Unsigned int formats - reinterpret float bits as uint
+		else if (clear_data.format == VK_FORMAT_R32G32B32A32_UINT) {
+			imageStore(img_rgba32ui, coord, floatBitsToUint(clear_data.clear_color));
+		} else if (clear_data.format == VK_FORMAT_R16G16B16A16_UINT) {
+			imageStore(img_rgba16ui, coord, floatBitsToUint(clear_data.clear_color));
+		} else if (clear_data.format == VK_FORMAT_R8G8B8A8_UINT) {
+			imageStore(img_rgba8ui, coord, floatBitsToUint(clear_data.clear_color));
+		} else if (clear_data.format == VK_FORMAT_R32G32_UINT) {
+			imageStore(img_rg32ui, coord, floatBitsToUint(clear_data.clear_color));
+		} else if (clear_data.format == VK_FORMAT_R16G16_UINT) {
+			imageStore(img_rg16ui, coord, floatBitsToUint(clear_data.clear_color));
+		} else if (clear_data.format == VK_FORMAT_R8G8_UINT) {
+			imageStore(img_rg8ui, coord, floatBitsToUint(clear_data.clear_color));
+		} else if (clear_data.format == VK_FORMAT_R32_UINT) {
+			imageStore(img_r32ui, coord, floatBitsToUint(clear_data.clear_color));
+		} else if (clear_data.format == VK_FORMAT_R16_UINT) {
+			imageStore(img_r16ui, coord, floatBitsToUint(clear_data.clear_color));
+		} else if (clear_data.format == VK_FORMAT_R8_UINT) {
+			imageStore(img_r8ui, coord, floatBitsToUint(clear_data.clear_color));
+		}
+		// Signed int formats - reinterpret float bits as int
+		else if (clear_data.format == VK_FORMAT_R32G32B32A32_SINT) {
+			imageStore(img_rgba32i, coord, floatBitsToInt(clear_data.clear_color));
+		} else if (clear_data.format == VK_FORMAT_R16G16B16A16_SINT) {
+			imageStore(img_rgba16i, coord, floatBitsToInt(clear_data.clear_color));
+		} else if (clear_data.format == VK_FORMAT_R8G8B8A8_SINT) {
+			imageStore(img_rgba8i, coord, floatBitsToInt(clear_data.clear_color));
+		} else if (clear_data.format == VK_FORMAT_R32G32_SINT) {
+			imageStore(img_rg32i, coord, floatBitsToInt(clear_data.clear_color));
+		} else if (clear_data.format == VK_FORMAT_R16G16_SINT) {
+			imageStore(img_rg16i, coord, floatBitsToInt(clear_data.clear_color));
+		} else if (clear_data.format == VK_FORMAT_R8G8_SINT) {
+			imageStore(img_rg8i, coord, floatBitsToInt(clear_data.clear_color));
+		} else if (clear_data.format == VK_FORMAT_R32_SINT) {
+			imageStore(img_r32i, coord, floatBitsToInt(clear_data.clear_color));
+		} else if (clear_data.format == VK_FORMAT_R16_SINT) {
+			imageStore(img_r16i, coord, floatBitsToInt(clear_data.clear_color));
+		} else if (clear_data.format == VK_FORMAT_R8_SINT) {
+			imageStore(img_r8i, coord, floatBitsToInt(clear_data.clear_color));
+		}
+		// Normalized formats
+		else if (clear_data.format == VK_FORMAT_R8G8B8A8_UNORM || clear_data.format == VK_FORMAT_R8G8B8A8_SRGB) {
+			imageStore(img_rgba8, coord, clear_data.clear_color);
+		} else if (clear_data.format == VK_FORMAT_R16G16B16A16_UNORM) {
+			imageStore(img_rgba16, coord, clear_data.clear_color);
+		} else if (clear_data.format == VK_FORMAT_R8G8_UNORM) {
+			imageStore(img_rg8, coord, clear_data.clear_color);
+		} else if (clear_data.format == VK_FORMAT_R16G16_UNORM) {
+			imageStore(img_rg16, coord, clear_data.clear_color);
+		} else if (clear_data.format == VK_FORMAT_R8_UNORM) {
+			imageStore(img_r8, coord, clear_data.clear_color);
+		} else if (clear_data.format == VK_FORMAT_R16_UNORM) {
+			imageStore(img_r16, coord, clear_data.clear_color);
+		}
+	}
+}

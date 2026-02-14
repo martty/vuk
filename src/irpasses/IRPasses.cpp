@@ -81,8 +81,8 @@ namespace vuk {
 				if (!linear_result) {
 					// we also failed at linearization, so we are going to dump the graph and bail out
 					// TODO: dump graph
-					return result;
 				}
+				return result;
 			}
 			(void)result;
 			bool rebuild_nodes = pass->node_set_modified() || new_nodes.size() > 0;

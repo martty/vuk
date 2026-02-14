@@ -29,6 +29,7 @@ namespace vuk {
 		VkDevice device;
 		VkPhysicalDevice physical_device;
 		VkQueue graphics_queue;
+		VkQueue compute_queue;
 		VkQueue transfer_queue;
 		std::optional<Runtime> runtime;
 		vkb::Instance vkbinstance;
@@ -122,6 +123,8 @@ namespace vuk {
 			vkbdevice = dev_ret.value();
 			graphics_queue = vkbdevice.get_queue(vkb::QueueType::graphics).value();
 			auto graphics_queue_family_index = vkbdevice.get_queue_index(vkb::QueueType::graphics).value();
+			compute_queue = vkbdevice.get_queue(vkb::QueueType::compute).value();
+			auto compute_queue_family_index = vkbdevice.get_queue_index(vkb::QueueType::compute).value();
 			transfer_queue = vkbdevice.get_queue(vkb::QueueType::transfer).value();
 			auto transfer_queue_family_index = vkbdevice.get_queue_index(vkb::QueueType::transfer).value();
 			device = vkbdevice.device;
@@ -130,6 +133,7 @@ namespace vuk {
 			fps.load_pfns(instance, device, true);
 
 			executors.push_back(vuk::create_vkqueue_executor(fps, device, graphics_queue, graphics_queue_family_index, DomainFlagBits::eGraphicsQueue));
+			executors.push_back(vuk::create_vkqueue_executor(fps, device, compute_queue, compute_queue_family_index, DomainFlagBits::eComputeQueue));
 			executors.push_back(vuk::create_vkqueue_executor(fps, device, transfer_queue, transfer_queue_family_index, DomainFlagBits::eTransferQueue));
 			executors.push_back(std::make_unique<ThisThreadExecutor>());
 

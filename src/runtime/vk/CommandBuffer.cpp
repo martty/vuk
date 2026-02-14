@@ -410,7 +410,7 @@ namespace vuk {
 	}
 
 	CommandBuffer& CommandBuffer::bind_image(unsigned set, unsigned binding, ImageView<> image_view) {
-		return bind_image(set, binding, image_view, ImageLayout::eReadOnlyOptimalKHR);
+		return bind_image(set, binding, image_view, image_view.get_meta().layout);
 	}
 
 	CommandBuffer& CommandBuffer::bind_image(unsigned set, unsigned binding, ImageView<> image_view, ImageLayout layout) {

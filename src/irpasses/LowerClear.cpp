@@ -2,31 +2,9 @@
 #include "vuk/RenderGraph.hpp"
 #include "vuk/SyncLowering.hpp"
 
+#include "compute_clear_comp_spv_shader.h"
+
 namespace vuk {
-	constexpr const char* compute_clear_shader = R"(
-#version 460
-
-layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
-
-layout(set = 0, binding = 0, rgba32f) uniform writeonly image2D target_image;
-
-layout(push_constant) uniform ClearData {
-	vec4 clear_color;
-	ivec3 offset;
-	ivec3 extent;
-} clear_data;
-
-void main() {
-	ivec3 global_id = ivec3(gl_GlobalInvocationID);
-	ivec3 pixel_coord = clear_data.offset + global_id;
-
-	// Check if we're within the clear region bounds
-	if (all(lessThan(global_id, clear_data.extent))) {
-		imageStore(target_image, pixel_coord.xy, clear_data.clear_color);
-	}
-}
-)";
-
 	std::pair<ImageViewEntry, ImageEntry> lower_clear::evaluate_imageview_from_ir(Ref imageview_ref) {
 		ImageViewEntry ve{};
 		ImageEntry ie{};
@@ -236,9 +214,18 @@ void main() {
 				auto& iv = *reinterpret_cast<ImageView<>*>(in[0]);
 				out[0] = in[0];
 
-				auto scheduled_domain = cbuf->get_scheduled_domain();
-
+				DomainFlags scheduled_domain = cbuf->get_scheduled_domain();
 				assert((effective_domain & DomainFlagBits::eQueueMask) == scheduled_domain);
+				if (!(scheduled_domain & DomainFlagBits::eOpMask)) {
+					// No operation set, infer from queue
+					if (scheduled_domain & DomainFlagBits::eGraphicsQueue) {
+						scheduled_domain |= DomainFlagBits::eGraphicsOperation;
+					} else if (scheduled_domain & DomainFlagBits::eComputeQueue) {
+						scheduled_domain |= DomainFlagBits::eComputeOperation;
+					} else if (scheduled_domain & DomainFlagBits::eTransferQueue) {
+						scheduled_domain |= DomainFlagBits::eTransferOperation;
+					}
+				}
 
 				// Domain-specific validation and clearing based on operation type
 				if (scheduled_domain & DomainFlagBits::eGraphicsOperation) {
@@ -254,15 +241,16 @@ void main() {
 					static std::once_flag once;
 					std::call_once(once, [&runtime]() {
 						PipelineBaseCreateInfo pbci;
-						pbci.add_glsl(compute_clear_shader, "vuk_internal/compute_clear.comp");
-						runtime.create_named_pipeline("vuk_compute_clear", pbci);
+						pbci.add_static_spirv((uint32_t*)compute_clear_comp_spv_shader, sizeof(compute_clear_comp_spv_shader) / 4, "compute_clear.comp");
+						runtime.create_named_pipeline("_vuk_compute_clear", pbci);
 					});
 
 					// Set up push constants for the clear
 					struct ClearPushConstants {
 						float clear_color[4];
-						int32_t offset[3];
+						int32_t offset[4];
 						int32_t extent[3];
+						uint32_t format_index;
 					} pc;
 
 					pc.clear_color[0] = clear_value.c.color.float32[0];
@@ -275,6 +263,7 @@ void main() {
 					pc.extent[0] = ve.extent.width;
 					pc.extent[1] = ve.extent.height;
 					pc.extent[2] = ve.extent.depth;
+					pc.format_index = uint32_t(ve.format);
 
 					// Calculate dispatch size (8x8x1 local size)
 					uint32_t num_workgroups_x = (ve.extent.width + 7) / 8;
@@ -282,7 +271,7 @@ void main() {
 					uint32_t num_workgroups_z = (ve.extent.depth + 0) / 1;
 
 					// Bind the pipeline and image, then dispatch
-					cbuf->bind_compute_pipeline("vuk_compute_clear")
+					cbuf->bind_compute_pipeline("_vuk_compute_clear")
 					    .bind_image(0, 0, iv)
 					    .push_constants(ShaderStageFlagBits::eCompute, 0, pc)
 					    .dispatch(num_workgroups_x, num_workgroups_y, num_workgroups_z);

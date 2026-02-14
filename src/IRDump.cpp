@@ -183,7 +183,6 @@ namespace vuk {
 		case Node::PLACEHOLDER:
 		case Node::CONSTANT:
 		case Node::IMPORT:
-		case Node::CLEAR:
 		case Node::SET:
 		case Node::CAST:
 		case Node::MATH_BINARY: {
@@ -289,6 +288,9 @@ namespace vuk {
 		} break;
 		case Node::GET_CI: {
 			print_args_to_string({ &node->get_ci.src, 1 }, line);
+		} break;
+		case Node::CLEAR: {
+			print_args_to_string({ &node->clear.dst, 1 }, line);
 		} break;
 		}
 	}
