@@ -18,13 +18,16 @@ function(target_shaders target)
         add_custom_target("vuk_shader_binaries_${shader_file}")
         # invoke shader compiler
         add_custom_command(TARGET "vuk_shader_binaries_${shader_file}"
-                           MAIN_DEPENDENCY "${shader_file}"
+                           POST_BUILD
                            VERBATIM
                            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
                            COMMAND "${target_shaders_COMPILER}"
                            ARGS ${target_shaders_ARGS} "${output_file}" "${shader_file}"
         )
         add_dependencies(vuk_shader_binaries "vuk_shader_binaries_${shader_file}")
+        if(NOT EXISTS "${output_file}")
+            continue()
+        endif()
         cmake_path(GET output_file FILENAME fname)
         string(REPLACE "." "_" fname_us ${fname})
         vtk_encode_string(INPUT ${output_file} NAME "${fname_us}_shader" SOURCE_OUTPUT ofile HEADER_OUTPUT hfile BINARY)
