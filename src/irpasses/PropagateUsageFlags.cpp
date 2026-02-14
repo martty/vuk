@@ -11,6 +11,13 @@ namespace vuk {
 		for (auto [ref, usage_flags] : impl.image_usage_flags) {
 			Ref current = to_def(ref);
 
+			while (current.node->kind == Node::SLICE)
+				if (current.node->slice.axis >= Node::NamedAxis::Z) { // usage flags are for the image, so we can skip image cutting slices
+					current = to_def(current.node->slice.src);
+				} else {
+					assert(false && "NYI");
+				}
+
 			// First, find the ImageView allocation
 			if (current.node->kind == Node::ALLOCATE && Type::stripped(current.node->type[0])->is_imageview()) {
 				auto ivci_ref = to_def(current.node->allocate.src);

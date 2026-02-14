@@ -1,6 +1,7 @@
 #pragma once
 
 #include "vuk/runtime/vk/Image.hpp"
+#include <algorithm>
 #include <array>
 #include <span>
 
@@ -204,13 +205,21 @@ namespace vuk {
 			if constexpr (cdt == ComponentDataType::eSrgb8 && std::is_floating_point_v<T>) {
 				return linear_to_srgb8(value);
 			} else if constexpr (cdt == ComponentDataType::eUnorm8 && std::is_floating_point_v<T>) {
-				return static_cast<uint8_t>(value * 255.0f + 0.5f);
+				// Vulkan spec: c = round(clamp(f, 0, 1) * 255)
+				float clamped = std::clamp(static_cast<float>(value), 0.0f, 1.0f);
+				return static_cast<uint8_t>(clamped * 255.0f + 0.5f);
 			} else if constexpr (cdt == ComponentDataType::eSnorm8 && std::is_floating_point_v<T>) {
-				return static_cast<int8_t>(value * 127.0f);
+				// Vulkan spec: c = round(clamp(f, -1, 1) * 127)
+				float clamped = std::clamp(static_cast<float>(value), -1.0f, 1.0f);
+				return static_cast<int8_t>(clamped * 127.0f + (clamped >= 0 ? 0.5f : -0.5f));
 			} else if constexpr (cdt == ComponentDataType::eUnorm16 && std::is_floating_point_v<T>) {
-				return static_cast<uint16_t>(value * 65535.0f + 0.5f);
+				// Vulkan spec: c = round(clamp(f, 0, 1) * 65535)
+				float clamped = std::clamp(static_cast<float>(value), 0.0f, 1.0f);
+				return static_cast<uint16_t>(clamped * 65535.0f + 0.5f);
 			} else if constexpr (cdt == ComponentDataType::eSnorm16 && std::is_floating_point_v<T>) {
-				return static_cast<int16_t>(value * 32767.0f);
+				// Vulkan spec: c = round(clamp(f, -1, 1) * 32767)
+				float clamped = std::clamp(static_cast<float>(value), -1.0f, 1.0f);
+				return static_cast<int16_t>(clamped * 32767.0f + (clamped >= 0 ? 0.5f : -0.5f));
 			} else {
 				return static_cast<component_type>(value);
 			}
@@ -740,6 +749,10 @@ namespace vuk {
 			return view<ImageLike<f>, dynamic_extent>{ ie.image_view_indices[0] };
 		}
 
+		ImageEntry& get_meta() const noexcept {
+			return Resolver::per_thread->resolve_image(*this);
+		}
+
 		ICI& get_ci() const noexcept {
 			return Resolver::per_thread->resolve_image(*this);
 		}
@@ -898,6 +911,10 @@ namespace vuk {
 		eGeneric2D = static_cast<uint32_t>(UsagePreset::eUpload | UsagePreset::eDownload | UsagePreset::eSampled | UsagePreset::eRender | UsagePreset::eStore) |
 		             static_cast<uint32_t>(DimensionalityPreset::e2D) |
 		             static_cast<uint32_t>(MipPreset::eFullMips), // 2D image with upload, download, sampling, rendering and storing. Full mip chain. No arraying.
+		eGeneric2DUnmipped =
+		    static_cast<uint32_t>(UsagePreset::eUpload | UsagePreset::eDownload | UsagePreset::eSampled | UsagePreset::eRender | UsagePreset::eStore) |
+		    static_cast<uint32_t>(DimensionalityPreset::e2D) |
+		    static_cast<uint32_t>(MipPreset::eNoMips), // 2D image with upload, download, sampling, rendering and storing. No mip chain. No arraying.
 	};
 
 	// Utility functions for decomposing Preset
@@ -1075,7 +1092,7 @@ namespace vuk {
 
 		view<ImageLike<f>, dynamic_extent> subregion(Offset3D offset, Extent3D extent) const noexcept {
 			auto a = get_meta();
-			a.offset = offset;
+			a.offset = { a.offset.x + offset.x, a.offset.y + offset.y, a.offset.z + offset.z };
 			a.extent = extent;
 			a.api_view = VK_NULL_HANDLE;
 			return view<ImageLike<f>, dynamic_extent>{ Resolver::per_thread->add_image_view(a) };

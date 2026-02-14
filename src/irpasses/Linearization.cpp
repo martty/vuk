@@ -16,7 +16,8 @@ namespace vuk {
 				assert(node);
 				switch (node->kind) {
 				case Node::SLICE:
-				case Node::CALL: {
+				case Node::CALL:
+				case Node::CLEAR: {
 					ScheduledItem item{ .execable = node, .scheduled_domain = vuk::DomainFlagBits::eAny };
 					auto it = impl.scheduled_execables.emplace(item);
 					it->execable->scheduled_item = &*it;
@@ -86,6 +87,9 @@ namespace vuk {
 								assert(0);
 							}
 						}
+					} break;
+					case Node::CLEAR: {
+						impl.schedule_dependency(node->clear.dst, RW::eWrite);
 					} break;
 					case Node::RELEASE: {
 						auto acqrel = node->rel_acq;

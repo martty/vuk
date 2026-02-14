@@ -154,18 +154,6 @@ namespace vuk {
 		return create_image_with_data(allocator, copy_domain, ici, data.data(), VUK_CALL);
 	}
 
-	inline Value<ImageView<>> clear_image(Value<ImageView<>> in, Clear clear_value, VUK_CALLSTACK) {
-		auto clear = make_pass(
-		    "clear image",
-		    [=](CommandBuffer& cbuf, VUK_IA(Access::eClear) dst) {
-			    cbuf.clear_image(dst, clear_value);
-			    return dst;
-		    },
-		    DomainFlagBits::eGraphicsQueue);
-
-		return clear(std::move(in), VUK_CALL);
-	}
-
 	inline Value<ImageView<>> blit_image(Value<ImageView<>> src, Value<ImageView<>> dst, Filter filter, VUK_CALLSTACK) {
 		// source and destination have to have 1 sample and 1 level
 		current_module->set_value(src.sample_count.get_head(), current_module->make_constant(SampleCountFlagBits::e1));
@@ -175,33 +163,41 @@ namespace vuk {
 		// same number of layers in both
 		src.same_layers_as(dst);
 		auto blit = make_pass(
-		    "blit image",
-		    [=](CommandBuffer& cbuf, VUK_IA(Access::eBlitRead) src, VUK_IA(Access::eBlitWrite) dst) {
-			    auto& src_ve = src->get_meta();
-			    auto& dst_ve = dst->get_meta();
+			"blit image",
+			[=](CommandBuffer& cbuf, VUK_IA(Access::eBlitRead) src, VUK_IA(Access::eBlitWrite) dst) {
+				auto& src_ve = src->get_meta();
+				auto& dst_ve = dst->get_meta();
 
-			    ImageBlit region = {};
-			    region.srcOffsets[0] = Offset3D{};
-			    auto src_extent = src->base_mip_extent();
-			    region.srcOffsets[1] = Offset3D{ (int32_t)src_extent.width, (int32_t)src_extent.height, (int32_t)src_extent.depth };
-			    region.dstOffsets[0] = Offset3D{};
-			    auto dst_extent = dst->base_mip_extent();
-			    region.dstOffsets[1] = Offset3D{ (int32_t)dst_extent.width, (int32_t)dst_extent.height, (int32_t)dst_extent.depth };
-			    region.srcSubresource.aspectMask = format_to_aspect(src_ve.format);
-			    region.srcSubresource.baseArrayLayer = src_ve.base_layer;
-			    region.srcSubresource.layerCount = src_ve.layer_count;
-			    region.srcSubresource.mipLevel = src_ve.base_level;
-			    assert(src_ve.level_count == 1);
-			    region.dstSubresource.baseArrayLayer = dst_ve.base_layer;
-			    region.dstSubresource.layerCount = dst_ve.layer_count;
-			    region.dstSubresource.mipLevel = dst_ve.base_level;
-			    assert(dst_ve.level_count == 1);
-			    region.dstSubresource.aspectMask = format_to_aspect(dst_ve.format);
+				ImageBlit region = {};
+				// Source region (with offset)
+				region.srcOffsets[0] = src_ve.offset;
+				region.srcOffsets[1] = Offset3D{ 
+					src_ve.offset.x + (int32_t)src_ve.extent.width, 
+					src_ve.offset.y + (int32_t)src_ve.extent.height, 
+					src_ve.offset.z + (int32_t)src_ve.extent.depth 
+				};
+				// Destination region (with offset)
+				region.dstOffsets[0] = dst_ve.offset;
+				region.dstOffsets[1] = Offset3D{ 
+					dst_ve.offset.x + (int32_t)dst_ve.extent.width, 
+					dst_ve.offset.y + (int32_t)dst_ve.extent.height, 
+					dst_ve.offset.z + (int32_t)dst_ve.extent.depth 
+				};
+				region.srcSubresource.aspectMask = format_to_aspect(src_ve.format);
+				region.srcSubresource.baseArrayLayer = src_ve.base_layer;
+				region.srcSubresource.layerCount = src_ve.layer_count;
+				region.srcSubresource.mipLevel = src_ve.base_level;
+				assert(src_ve.level_count == 1);
+				region.dstSubresource.baseArrayLayer = dst_ve.base_layer;
+				region.dstSubresource.layerCount = dst_ve.layer_count;
+				region.dstSubresource.mipLevel = dst_ve.base_level;
+				assert(dst_ve.level_count == 1);
+				region.dstSubresource.aspectMask = format_to_aspect(dst_ve.format);
 
-			    cbuf.blit_image(src, dst, region, filter);
-			    return dst;
-		    },
-		    DomainFlagBits::eGraphicsQueue);
+				cbuf.blit_image(src, dst, region, filter);
+				return dst;
+			},
+			DomainFlagBits::eGraphicsQueue);
 
 		return blit(std::move(src), std::move(dst), VUK_CALL);
 	}
@@ -213,10 +209,10 @@ namespace vuk {
 			auto& src_ve = src->get_meta();
 
 			BufferImageCopy bc;
-			bc.imageOffset = { 0, 0, 0 };
+			bc.imageOffset = src_ve.offset;
 			bc.bufferRowLength = 0;
 			bc.bufferImageHeight = 0;
-			bc.imageExtent = src->base_mip_extent();
+			bc.imageExtent = src_ve.extent;
 			bc.imageSubresource.aspectMask = format_to_aspect(src_ve.format);
 			bc.imageSubresource.mipLevel = src_ve.base_level;
 			bc.imageSubresource.baseArrayLayer = src_ve.base_layer;
@@ -261,10 +257,10 @@ namespace vuk {
 			auto& dst_ve = dst->get_meta();
 
 			BufferImageCopy bc;
-			bc.imageOffset = { 0, 0, 0 };
+			bc.imageOffset = dst_ve.offset;
 			bc.bufferRowLength = 0;
 			bc.bufferImageHeight = 0;
-			bc.imageExtent = dst->base_mip_extent();
+			bc.imageExtent = dst_ve.extent;
 			bc.imageSubresource.aspectMask = format_to_aspect(dst_ve.format);
 			bc.imageSubresource.mipLevel = dst_ve.base_level;
 			bc.imageSubresource.baseArrayLayer = dst_ve.base_layer;
@@ -286,14 +282,12 @@ namespace vuk {
 			auto& dst_ve = dst->get_meta();
 
 			assert(src_ve.level_count == dst_ve.level_count);
+			assert(src_ve.extent == dst_ve.extent && "Source and destination extents must match for image-to-image copy");
 
 			ImageCopy bc;
-			bc.imageExtent = dst->base_mip_extent();
-			bc.srcOffsets = {};
 			bc.srcSubresource.aspectMask = format_to_aspect(src_ve.format);
 			bc.srcSubresource.baseArrayLayer = src_ve.base_layer;
 			bc.srcSubresource.layerCount = src_ve.layer_count;
-			bc.dstOffsets = {};
 			bc.dstSubresource.aspectMask = format_to_aspect(dst_ve.format);
 			bc.dstSubresource.baseArrayLayer = dst_ve.base_layer;
 			bc.dstSubresource.layerCount = dst_ve.layer_count;
@@ -301,6 +295,25 @@ namespace vuk {
 			for (uint32_t i = 0; i < src_ve.level_count; i++) {
 				bc.srcSubresource.mipLevel = src_ve.base_level + i;
 				bc.dstSubresource.mipLevel = dst_ve.base_level + i;
+
+				// Scale offset and extent for each mip level
+				uint32_t divisor = 1u << i;
+				bc.srcOffsets = Offset3D{ 
+					src_ve.offset.x / (int32_t)divisor, 
+					src_ve.offset.y / (int32_t)divisor, 
+					src_ve.offset.z / (int32_t)divisor 
+				};
+				bc.dstOffsets = Offset3D{ 
+					dst_ve.offset.x / (int32_t)divisor, 
+					dst_ve.offset.y / (int32_t)divisor, 
+					dst_ve.offset.z / (int32_t)divisor 
+				};
+				bc.imageExtent = Extent3D{
+					std::max(1u, src_ve.extent.width / divisor),
+					std::max(1u, src_ve.extent.height / divisor),
+					std::max(1u, src_ve.extent.depth / divisor)
+				};
+
 				cbuf.copy_image(src, dst, bc);
 			}
 

@@ -866,7 +866,6 @@ namespace vuk {
 		impl->ir_passes = { { make_ir_pass<expand_composites>(),
 			                    make_ir_pass<reify_inference>(),
 			                    make_ir_pass<constant_folding>(),
-			                    make_ir_pass<propagate_usage_flags>(),
 			                    make_ir_pass<constant_folding>(),
 			                    make_ir_pass<validate_duplicated_resource_ref>() } };
 		RGCImpl::PassRunOptions run_opts = RGCImpl::PassRunOptions::eNone;
@@ -898,7 +897,8 @@ namespace vuk {
 			VUK_ICE(node);
 			switch (node->kind) {
 			case Node::SLICE:
-			case Node::CALL: {
+			case Node::CALL:
+			case Node::CLEAR: {
 				ScheduledItem item{ .execable = node, .scheduled_domain = vuk::DomainFlagBits::eAny };
 				auto it = impl->scheduled_execables.emplace(item);
 				it->execable->scheduled_item = &*it;
@@ -911,6 +911,10 @@ namespace vuk {
 
 		queue_inference();
 		pass_partitioning();
+
+		// Lower CLEAR nodes to CALL nodes after queue inference has assigned domains
+		impl->ir_passes = { make_ir_pass<lower_clear>(), make_ir_pass<propagate_usage_flags>() };
+		impl->run_passes(alloc.get_context(), allocator, run_opts);
 
 		VUK_DO_OR_RETURN(impl->build_sync());
 

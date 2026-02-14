@@ -80,8 +80,14 @@ namespace vuk {
 #ifdef VUK_DUMP_SSA
 				fmt::println("convergence - replicating slice");
 #endif
-				last_write =
-				    current_module->make_slice(parm.node->type[0], first(link->undef.node), parm.node->slice.axis, parm.node->slice.start, parm.node->slice.count);
+				auto slice_source_link = &parm.link();
+				while (slice_source_link->prev) {
+					slice_source_link = slice_source_link->prev;
+				}
+				auto slice_source = slice_source_link->def;
+				assert(slice_source.node->kind == Node::SLICE);
+				last_write = current_module->make_slice(
+				    slice_source.node->type[0], first(link->undef.node), slice_source.node->slice.axis, slice_source.node->slice.start, slice_source.node->slice.count);
 				last_write.node->index = node->index;
 				add_node(last_write.node);
 			} else if (link->undef.node->kind == Node::CONSTRUCT && first(link->undef.node).type()->kind == Type::UNION_TY) {
@@ -387,6 +393,10 @@ namespace vuk {
 		case Node::ALLOCATE:
 			add_read(node, node->allocate.src, 0);
 			add_breaking_result(node, 0);
+			break;
+		case Node::CLEAR:
+			add_write(node, node->clear.dst, 0);
+			add_result(node, 0, node->clear.dst);
 			break;
 		default:
 			assert(0);

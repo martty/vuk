@@ -558,6 +558,16 @@ namespace vuk {
 		return std::move(in).as_released<void>(Access::ePresent, DomainFlagBits::ePE);
 	}
 
+	/// @brief Clear an image with a clear value
+	/// @param in Input ImageView to clear
+	/// @param clear_value Clear value (color or depth/stencil)
+	/// @return The cleared ImageView
+	inline Value<ImageView<>> clear_image(Value<ImageView<>> in, Clear clear_value, VUK_CALLSTACK) {
+		Ref ref = current_module->make_clear_image(in.get_head(), clear_value);
+		current_module->set_source_location(ref.node, VUK_CALL);
+		return std::move(in).transmute<ImageView<>>(ref);
+	}
+
 	struct Compiler {
 		Compiler();
 		~Compiler();

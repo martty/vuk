@@ -539,7 +539,7 @@ namespace vuk {
 				std::span<Ref> args;
 			} call;
 			struct : Fixed<1> {
-				const Ref dst;
+				Ref dst;
 				Clear* cv;
 			} clear;
 			struct : Variable {

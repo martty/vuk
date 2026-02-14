@@ -25,13 +25,15 @@ namespace vuk {
 		FramebufferCreateInfo fbci;
 		VkRenderPass handle = {};
 		VkFramebuffer framebuffer;
+		Offset2D offset = {};
+		Extent2D render_area_extent = {};
 	};
 
 	void begin_render_pass(Runtime& ctx, RenderPassInfo& rpass, VkCommandBuffer& cbuf, bool use_secondary_command_buffers) {
 		VkRenderPassBeginInfo rbi{ .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO };
 		rbi.renderPass = rpass.handle;
 		rbi.framebuffer = rpass.framebuffer;
-		rbi.renderArea = VkRect2D{ Offset2D{}, Extent2D{ rpass.fbci.width, rpass.fbci.height } };
+		rbi.renderArea = VkRect2D{ rpass.offset, rpass.render_area_extent };
 		rbi.clearValueCount = 0;
 
 		ctx.vkCmdBeginRenderPass(cbuf, &rbi, use_secondary_command_buffers ? VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS : VK_SUBPASS_CONTENTS_INLINE);
@@ -361,10 +363,31 @@ namespace vuk {
 			auto& ve = img_att.get_meta();
 			auto& ie = alloc.get_context().resolve_image(ve.image);
 
+			assert(ve.api_view != VK_NULL_HANDLE &&
+			       "Cannot attach image to framebuffer if it doesn't support API views - usage (eg. sampling, colorattachment) missing");
+
 			auto aspect = format_to_aspect(ve.format);
 			VkAttachmentReference attref{};
 
 			attref.attachment = (uint32_t)rp.rpci.attachments.size();
+
+			// Validate that all attachments share the same offset and extent
+			if (rp.rpci.attachments.size() == 0) {
+				// First attachment - set the offset, render area extent, and framebuffer extent
+				rp.offset = { ve.offset.x, ve.offset.y };
+				rp.render_area_extent = { ve.extent.width, ve.extent.height };
+				// Framebuffer uses the full image extent
+				rp.fbci.width = ie.extent.width;
+				rp.fbci.height = ie.extent.height;
+				rp.fbci.layers = ve.layer_count;
+			} else {
+				// Subsequent attachments - validate they match
+				assert(rp.offset.x == ve.offset.x && rp.offset.y == ve.offset.y && "All render pass attachments must share the same offset");
+				assert(rp.render_area_extent.width == ve.extent.width && rp.render_area_extent.height == ve.extent.height &&
+				       "All render pass attachments must share the same render area extent");
+				assert(rp.fbci.width == ie.extent.width && rp.fbci.height == ie.extent.height && "All render pass attachments must share the same image extent");
+				assert(rp.fbci.layers == ve.layer_count && "All render pass attachments must share the same layer count");
+			}
 
 			auto& descr = rp.rpci.attachments.emplace_back();
 			// no layout changed by RPs currently
@@ -385,9 +408,6 @@ namespace vuk {
 			}
 
 			rp.framebuffer_ivs.push_back(ve.api_view);
-			rp.fbci.width = ve.extent.width;
-			rp.fbci.height = ve.extent.height;
-			rp.fbci.layers = ve.layer_count;
 			assert(ve.level_count == 1);
 			rp.fbci.sample_count = ve.sample_count;
 			rp.fbci.attachments.push_back(img_att);

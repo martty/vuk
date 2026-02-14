@@ -138,14 +138,11 @@ namespace vuk {
 					// X, Y, Z axes: modify offset and extent
 					auto& ve = sliced.get_meta();
 					if (axis == Node::NamedAxis::X) {
-						ve.offset.x += start;
-						ve.extent.width = count;
+						sliced = sliced.subregion({ (int32_t)start, 0, 0 }, { (uint32_t)count, ve.extent.height, ve.extent.depth });
 					} else if (axis == Node::NamedAxis::Y) {
-						ve.offset.y += start;
-						ve.extent.height = count;
+						sliced = sliced.subregion({ 0, (int32_t)start, 0 }, { ve.extent.width, (uint32_t)count, ve.extent.depth });
 					} else if (axis == Node::NamedAxis::Z) {
-						ve.offset.z += start;
-						ve.extent.depth = count;
+						sliced = sliced.subregion({ 0, 0, (int32_t)start }, { ve.extent.width, ve.extent.height, (uint32_t)count });
 					}
 				} else {
 					assert(0);

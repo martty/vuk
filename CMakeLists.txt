@@ -361,6 +361,7 @@ target_sources(vuk PRIVATE
 	src/irpasses/DuplicatedResourceRef.cpp
 	src/irpasses/ForcedConvergence.cpp
 	src/irpasses/Linearization.cpp
+	src/irpasses/LowerClear.cpp
 	src/irpasses/IRPasses.cpp
 	src/GraphDumper.cpp
 	src/GraphSnapshots.cpp

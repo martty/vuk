@@ -65,6 +65,8 @@ namespace vuk {
 					auto base_layer = current_module->make_constant<uint16_t>(0);
 					auto layer_count = current_module->make_extract(ici_ref, 8);
 
+					Offset3D zero_offset{};
+
 					// Construct IVCI
 					std::array<Ref, 8> ivci_args = { base_level,
 						                               level_count,
@@ -72,7 +74,7 @@ namespace vuk {
 						                               layer_count,
 						                               node->allocate.src,
 						                               format_ref,
-						                               current_module->make_constant<Offset3D>({}),
+						                               current_module->make_constant(to_IR_type<Offset3D>(), &zero_offset),
 						                               current_module->make_extract(ici_ref, 4) };
 
 					auto ivci_ref = current_module->make_construct(to_IR_type<IVCI>(), nullptr, std::span(ivci_args));

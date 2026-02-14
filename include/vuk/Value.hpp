@@ -53,6 +53,14 @@ namespace vuk {
 			node = std::make_shared<ExtNode>(Ref{ node->get_node(), index }, node, access, domain); // previous extnode is a dep
 		}
 
+		void schedule_on(DomainFlagBits domain) {
+			if (!node->get_node()->scheduling_info) {
+				node->get_node()->scheduling_info = new SchedulingInfo(domain);
+			} else {
+				node->get_node()->scheduling_info->required_domains = domain;
+			}
+		}
+
 		/// @brief Submit the render graph for execution without waiting using the global allocator and compiler
 		/// @param options Optional compilation options
 		/// @return Result indicating success or error

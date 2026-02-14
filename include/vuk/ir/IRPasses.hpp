@@ -60,4 +60,13 @@ namespace vuk {
 
 		Result<void> operator()() override;
 	};
+
+	struct lower_clear : IRPass {
+		using IRPass::IRPass;
+
+		Result<void> operator()() override;
+
+	private:
+		std::pair<ImageViewEntry, ImageEntry> evaluate_imageview_from_ir(Ref imageview_ref);
+	};
 } // namespace vuk
