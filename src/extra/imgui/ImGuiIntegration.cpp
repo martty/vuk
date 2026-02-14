@@ -9,8 +9,8 @@
 #include "vuk/runtime/vk/VkRuntime.hpp"
 #include "vuk/vsl/Core.hpp"
 
-#include "imgui_vert_shader.h"
-#include "imgui_frag_shader.h"
+#include "imgui_frag_spv_shader.h"
+#include "imgui_vert_spv_shader.h"
 
 namespace vuk::extra {
 	ImTextureID ImGuiData::add_sampled_image(Value<SampledImage> sampled_image) {
@@ -52,8 +52,8 @@ namespace vuk::extra {
 		data.font_sci = sci;
 		{
 			PipelineBaseCreateInfo pci;
-			pci.add_static_spirv((uint32_t*)imgui_vert_shader, sizeof(imgui_vert_shader) / 4, "imgui.vert");
-			pci.add_static_spirv((uint32_t*)imgui_frag_shader, sizeof(imgui_frag_shader) / 4, "imgui.frag");
+			pci.add_static_spirv((uint32_t*)imgui_vert_spv_shader, sizeof(imgui_vert_spv_shader) / 4, "imgui.vert");
+			pci.add_static_spirv((uint32_t*)imgui_frag_spv_shader, sizeof(imgui_frag_spv_shader) / 4, "imgui.frag");
 			ctx.create_named_pipeline("imgui", pci);
 		}
 		return data;
