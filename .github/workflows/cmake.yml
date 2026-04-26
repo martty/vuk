@@ -25,6 +25,8 @@ jobs:
             cxx: clang++-18
           - cc: clang-19
             cxx: clang++-19
+          - cc: clang-22
+            cxx: clang++-22
 
     steps:
     - uses: actions/checkout@v4
