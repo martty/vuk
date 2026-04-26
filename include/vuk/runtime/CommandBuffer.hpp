@@ -358,9 +358,7 @@ namespace vuk {
 		DomainFlagBits get_scheduled_domain() const;
 
 		/// @brief Gets the allocator associated with this object.
-		Allocator get_allocator() {
-			return *allocator;
-		}
+		Allocator get_allocator();
 
 		// command buffer state setting
 		// when a state is set it is persistent for a pass (similar to Vulkan dynamic state) - see documentation

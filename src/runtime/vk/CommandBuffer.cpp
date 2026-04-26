@@ -72,6 +72,10 @@ namespace vuk {
 		return stream->domain;
 	}
 
+	Allocator CommandBuffer::get_allocator() {
+		return *allocator;
+	}
+
 	CommandBuffer& CommandBuffer::set_descriptor_set_strategy(DescriptorSetStrategyFlags ds_strategy_flags) {
 		this->ds_strategy_flags = ds_strategy_flags;
 		return *this;
