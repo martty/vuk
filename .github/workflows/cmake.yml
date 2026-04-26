@@ -34,15 +34,10 @@ jobs:
         submodules: recursive
 
     - run: |
-        sudo apt-get update
-        sudo apt-get install -y xorg-dev ${{matrix.config.cc}}
-
-    - name: Install LLVM 22
-      run: |
         wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc
         sudo add-apt-repository "deb http://apt.llvm.org/$(lsb_release -cs)/ llvm-toolchain-$(lsb_release -cs)-22 main"
         sudo apt-get update
-        sudo apt-get install -y llvm-22 clang-22 libclang-22-dev
+        sudo apt-get install -y xorg-dev ${{matrix.config.cc}}
 
     - name: Setup Vulkan SDK
       uses: kociap/setup-vulkan-sdk@v1.0
