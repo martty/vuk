@@ -19,6 +19,7 @@
 #include <string_view>
 #include <type_traits>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #if false // seems like clang still has issues with this - lets keep it safe
@@ -277,16 +278,16 @@ public:
 	template<typename... T>
 	struct is_tuple<std::tuple<T...>> : std::true_type {};
 
+	template<typename... T, size_t... Is>
+	static auto make_ret_indexed(std::shared_ptr<ExtNode> extnode, std::index_sequence<Is...>) {
+		Node* node = extnode->get_node();
+		return std::tuple{ Value<typename T::type>{ ExtRef{ extnode, Ref{ node, Is } } }... };
+	}
+
 	template<typename... T>
 	static auto make_ret(std::shared_ptr<ExtNode> extnode, const std::tuple<T...>& us) {
 		if constexpr (sizeof...(T) > 0) {
-			size_t i = 0;
-			// FIXME: I think this is well defined but seems like compilers don't agree on the result
-#if VUK_COMPILER_MSVC
-			return std::tuple{ Value<typename T::type>{ ExtRef{ extnode, Ref{ extnode->get_node(), sizeof...(T) - (++i) } } }... };
-#else
-			return std::tuple{ Value<typename T::type>{ ExtRef{ extnode, Ref{ extnode->get_node(), i++ } } }... };
-#endif
+			return make_ret_indexed<T...>(std::move(extnode), std::index_sequence_for<T...>{});
 		}
 	}
 
