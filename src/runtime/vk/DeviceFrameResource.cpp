@@ -278,7 +278,9 @@ namespace vuk {
 	void DeviceFrameResource::deallocate_framebuffers(std::span<const VkFramebuffer> src) {} // noop
 
 	Result<void, AllocateException> DeviceFrameResource::allocate_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc) {
-		VUK_DO_OR_RETURN(static_cast<DeviceSuperFrameResource*>(upstream)->allocate_cached_images(dst, cis, loc));
+		auto& sfr = *static_cast<DeviceSuperFrameResource*>(upstream);
+		auto pool_index = static_cast<uint32_t>(construction_frame % sfr.frames_in_flight);
+		VUK_DO_OR_RETURN(sfr.allocate_cached_images(dst, cis, pool_index, loc));
 		return { expected_value };
 	}
 
@@ -569,7 +571,9 @@ namespace vuk {
 
 	Result<void, AllocateException>
 	DeviceMultiFrameResource::allocate_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc) {
-		VUK_DO_OR_RETURN(static_cast<DeviceSuperFrameResource*>(upstream)->allocate_cached_images(dst, cis, loc));
+		auto& sfr = *static_cast<DeviceSuperFrameResource*>(upstream);
+		auto pool_index = static_cast<uint32_t>(sfr.frames_in_flight) + multiframe_id;
+		VUK_DO_OR_RETURN(sfr.allocate_cached_images(dst, cis, pool_index, loc));
 		return { expected_value };
 	}
 
@@ -658,13 +662,16 @@ namespace vuk {
 	}
 
 	Result<void, AllocateException>
-	DeviceSuperFrameResource::allocate_cached_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc) {
+	DeviceSuperFrameResource::allocate_cached_images(std::span<Image> dst,
+	                                                std::span<const ImageCreateInfo> cis,
+	                                                uint32_t pool_index,
+	                                                SourceLocationAtFrame loc) {
 		std::unique_lock _(impl->images_mutex);
 		assert(dst.size() == cis.size());
 		for (uint64_t i = 0; i < dst.size(); i++) {
 			auto& ci = cis[i];
 			auto index = impl->image_identity[ci]++;
-			CachedImageIdentifier iici = { ci, index, 0 };
+			CachedImageIdentifier iici = { ci, index, pool_index };
 			dst[i] = impl->image_cache.acquire(iici, impl->frame_counter).image;
 		}
 		return { expected_value };

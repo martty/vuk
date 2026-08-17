@@ -193,7 +193,9 @@ namespace vuk {
 
 		void deallocate_images(std::span<const Image> src) override;
 
-		Result<void, AllocateException> allocate_cached_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, SourceLocationAtFrame loc);
+		/// @brief Allocate images from the cross-frame image cache
+		Result<void, AllocateException>
+		allocate_cached_images(std::span<Image> dst, std::span<const ImageCreateInfo> cis, uint32_t pool_index, SourceLocationAtFrame loc);
 
 		Result<void, AllocateException> allocate_cached_image_views(std::span<ImageView> dst, std::span<const ImageViewCreateInfo> cis, SourceLocationAtFrame loc);
 
