@@ -13,8 +13,10 @@ namespace vuk {
 		                              BufferUsageFlagBits::eIndexBuffer | BufferUsageFlagBits::eVertexBuffer | BufferUsageFlagBits::eIndirectBuffer |
 		                              BufferUsageFlagBits::eShaderDeviceAddress;
 		if (runtime.vkCmdBuildAccelerationStructuresKHR) {
-			all_buffer_usage_flags |= BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR | BufferUsageFlagBits::eAccelerationStructureStorageKHR |
-			                          BufferUsageFlagBits::eShaderBindingTableKHR;
+			all_buffer_usage_flags |= BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR | BufferUsageFlagBits::eAccelerationStructureStorageKHR;
+		}
+		if (runtime.vkCmdTraceRaysKHR) {
+			all_buffer_usage_flags |= BufferUsageFlagBits::eShaderBindingTableKHR;
 		}
 		return all_buffer_usage_flags;
 	}
